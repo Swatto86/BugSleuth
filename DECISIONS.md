@@ -310,3 +310,104 @@ tool found it.
 measure the tool. Leaving a defect that the fixture's own author missed is a
 more honest test, and it is direct evidence for the cross-vendor premise —
 Claude swept the same file and did not report it.
+
+### 2.16 The judge is arithmetic, not another model
+
+**Decided:** merging duplicate findings is done by comparing anchors and wording
+in plain code. No model is asked to adjudicate.
+
+**Why:** the brief suggested a model judge on a BYOD API key. Before spending
+quota on that, the cheap version had to be beaten. Deterministic clustering is
+free, instant, reproducible, and — crucially — *testable against real data*,
+which a model judge is not. On hand-labelled real cross-vendor output it merges
+the same defect described by two vendors and keeps genuinely different defects
+on adjacent lines apart.
+
+A model judge may still be worth adding for the harder cases. If it is, it
+should be **measured against this baseline**, not assumed to be better. That is
+the whole reason to build the cheap one first.
+
+**Reverse:** add a model adjudication step after clustering, for pairs that
+score near the threshold. The current code is what tells you whether that is
+worth it.
+
+### 2.17 The merge threshold was measured, not chosen
+
+**Decided:** two findings merge at a wording overlap of 0.20 or above.
+
+**Why:** the first attempt used a guessed 0.25 and silently reported the same
+defect twice, because `average_price` and "the average price" shared no words
+and "remove_stock underflows" did not match "Removing more stock ... underflows".
+Both were fixed by measuring: splitting identifiers into their parts, and crude
+suffix stripping so grammar does not hide a match.
+
+Against hand-labelled real output, same-defect pairs then scored 0.24 to 0.32
+and different-defect pairs on adjacent lines scored 0.07 to 0.08. 0.20 sits in
+that gap.
+
+**The direction of error is deliberate.** Erring toward *not* merging leaves a
+duplicate in the report, which is an annoyance. Erring the other way silently
+collapses two distinct defects into one, and the reader never learns the second
+exists. For a tool whose reader cannot check the code, those are not
+symmetrical.
+
+**Reverse:** one constant, and the integration test that pins it says what
+moving it will break.
+
+### 2.18 Kilo sweeps run in a throwaway worktree; the other two do not
+
+**Decided:** a Kilo sweep is given a disposable git worktree and never the
+repository under review. Claude and Codex are pointed at the repository directly.
+
+**Why:** this is not a preference, it is a difference in what each CLI can be
+made to guarantee. Codex takes `--sandbox read-only`, where the operating system
+refuses the write. Claude takes a tool allowlist, so the write tools are simply
+absent. **Kilo has neither.** Its permissions come from the user's own global
+config, and on this machine both candidate agents were configured to allow
+everything, with no per-invocation override.
+
+So the only way to guarantee a Kilo review cannot modify the code it is
+reviewing is to hand it a copy. The adapter enforces this rather than trusting
+the caller: its input type is a `worktree`, not a `repo`, so the unsafe call
+does not compile.
+
+**Cost:** a Kilo sweep needs the target to be a git repository, and fails with a
+clear message when it is not. That is the right failure — the alternative is
+running a review with write access to your working tree.
+
+**Reverse:** if Kilo gains a read-only flag, drop the isolation for it too.
+
+### 2.19 Kilo gets the schema in its prompt, which is weaker and is labelled so
+
+**Decided:** the brief text differs by vendor. Claude and Codex are handed a JSON
+Schema the CLI enforces; Kilo, which has no such flag, gets the schema written
+into the prompt instead.
+
+**Why:** there is no alternative — but the difference is real and should not be
+hidden. A schema is a constraint; a prompt is a request. Expect a higher rate of
+unusable replies from Kilo, and read a Kilo failure as "malformed output" before
+concluding "found nothing".
+
+The first real Kilo sweep failed exactly this way, though for a different reason
+(see 2.20).
+
+### 2.20 Two defects only running the tools could have found
+
+Recorded because they argue for a working practice, not just because they were
+bugs.
+
+**Kilo repeats itself.** Each `text` event carries the *complete* text of its
+message, not an incremental piece, and the same message is emitted more than
+once. Concatenating them — the obvious reading, and what Eir's parser does —
+produced two valid JSON objects run together into one invalid document.
+
+**Worktrees survived their own cleanup.** Once `cargo test` has run inside one,
+its `target/` paths exceed the Windows path limit, `git worktree remove` gives up
+with "Filename too long", and the directory stays. The consequence was not
+cosmetic: leftovers made the *reviewed repository* dirty, which is precisely what
+BugSleuth promises not to do, and would have broken the clean-baseline check the
+next proof attempt depends on.
+
+Neither was visible by reading the code, and neither would have been caught by a
+test written from the documentation. Both came from running the thing and then
+checking what it left behind. **Check the repository afterwards, every time.**
