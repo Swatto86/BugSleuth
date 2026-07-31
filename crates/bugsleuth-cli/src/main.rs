@@ -3,6 +3,8 @@
 
 mod brief;
 mod merge;
+mod orchestrate;
+mod plan;
 mod prove;
 mod report;
 mod sweep;
@@ -32,10 +34,35 @@ enum Command {
     /// Ask a model to demonstrate a defect with a failing test, then check the
     /// attempt by running the tests independently.
     Prove(ProveArgs),
+    /// Run every configured (model x lane) pair and produce one merged report.
+    Run(RunArgs),
     /// Merge several sweep reports into one ranked list of distinct defects.
     Judge(JudgeArgs),
     /// Check that a configured provider CLI can be found and run.
     Preflight,
+}
+
+#[derive(Parser)]
+struct RunArgs {
+    /// Repository to review.
+    #[arg(long)]
+    repo: PathBuf,
+    /// JSON file assigning lanes to models.
+    #[arg(long)]
+    config: PathBuf,
+    /// Limit the review to these paths.
+    #[arg(long)]
+    scope: Option<String>,
+    #[arg(long, default_value_t = 40)]
+    max_turns: u32,
+    #[arg(long, default_value_t = 1500)]
+    timeout_secs: u64,
+    /// Directory for each individual sweep's JSON, so a run that dies part way
+    /// through does not discard the sweeps already paid for.
+    #[arg(long)]
+    out_dir: Option<PathBuf>,
+    #[arg(long)]
+    use_api_key: bool,
 }
 
 #[derive(Parser)]
@@ -120,9 +147,36 @@ async fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Sweep(args) => run_sweep(args).await,
         Command::Prove(args) => run_prove(args).await,
+        Command::Run(args) => run_all(args).await,
         Command::Judge(args) => run_judge(args),
         Command::Preflight => sweep::preflight().await,
     }
+}
+
+async fn run_all(args: RunArgs) -> Result<()> {
+    let repo = real_path(&args.repo)?;
+    let plan = plan::load(&args.config)?;
+
+    let report = orchestrate::run(
+        &plan,
+        orchestrate::RunOptions {
+            repo: &repo,
+            scope: args.scope.as_deref(),
+            max_turns: args.max_turns,
+            timeout: Duration::from_secs(args.timeout_secs),
+            api_key: api_key(args.use_api_key)?.as_deref(),
+            out_dir: args.out_dir.as_deref(),
+        },
+    )
+    .await?;
+
+    print!("{}", report.to_text());
+
+    // A run with a hole in it must not look like a clean pass to a script.
+    if !report.gaps.is_empty() {
+        std::process::exit(2);
+    }
+    Ok(())
 }
 
 fn run_judge(args: JudgeArgs) -> Result<()> {
