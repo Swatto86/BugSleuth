@@ -99,6 +99,13 @@ async fn run_sweep(args: SweepArgs) -> Result<()> {
 
     if let Some(path) = args.json_out {
         let json = serde_json::to_string_pretty(&report)?;
+        // Create the parent directory rather than failing after the sweep has
+        // already been paid for: losing a completed run's output to a missing
+        // folder wastes real quota.
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| anyhow::anyhow!("cannot create {}: {e}", parent.display()))?;
+        }
         std::fs::write(&path, json)
             .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", path.display()))?;
         eprintln!("\nwrote {}", path.display());
