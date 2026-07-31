@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Tray mark. A deliberately simpler cousin of app-icon.svg, not the same art.
+
+    A tray icon renders at 16-24px next to the clock. At that size the app
+    icon's legs, antennae and highlight collapse into noise, so this drops all
+    of them and keeps only what still reads: a heavy ring, a fat diagonal
+    handle, and a solid body with one bright split down it.
+
+    Everything is thicker than looks right at full size. That is the point -
+    strokes under about 24 units here disappear entirely once downscaled.
+  -->
+  <defs>
+    <linearGradient id="trayRim" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#0284c7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Handle: longer and fatter than the app icon's, because at tray size this
+       is the only thing distinguishing the mark from a plain filled circle. -->
+  <g transform="rotate(45 216 200)">
+    <rect x="176" y="292" width="80" height="196" rx="40" fill="#64748b"/>
+  </g>
+
+  <!-- Opaque glass, so the body always has contrast whatever the taskbar colour. -->
+  <circle cx="216" cy="200" r="176" fill="#e6f4fb"/>
+
+  <!-- Body only: no legs, no antennae. Large enough to survive to 16px. -->
+  <ellipse cx="216" cy="200" rx="104" ry="128" fill="#0b1220"/>
+  <circle cx="216" cy="90" r="42" fill="#0b1220"/>
+  <path d="M216 96 L216 316" stroke="#22d3ee" stroke-width="22" stroke-linecap="round"/>
+
+  <circle cx="216" cy="200" r="176" fill="none" stroke="url(#trayRim)" stroke-width="52"/>
+</svg>

@@ -1,0 +1,41 @@
+{
+  "lane": "Correctness",
+  "model": "claude:sonnet",
+  "status": {
+    "state": "swept",
+    "turns": 16
+  },
+  "findings": [
+    {
+      "id": "correctness-0",
+      "lane": "correctness",
+      "model": "claude:sonnet",
+      "title": "attachments() never selects @odata.type but filters on it, so real file attachments are silently dropped",
+      "severity": "high",
+      "anchor": {
+        "file": "crates/infrastructure/src/graph/mod.rs",
+        "line": 1018,
+        "claimed_line": 1018,
+        "snippet": "        url.set_query(Some(\"$select=id,name,contentType,size,isInline&$top=50\"));\n\n        let items: Vec<GraphAttachment> = self.get_all_pages(url.as_str()).await?;\n\n        Ok(items\n            .into_iter()\n            .filter(|a| {\n                !a.is_inline.unwrap_or(false)"
+      },
+      "explanation": "GraphAttachment.odata_type is populated only from the `@odata.type` JSON key, but this method's `$select` never requests it, so it deserializes to None for every row (Option<T> fields default to None when the key is absent). The filter then requires `odata_type == Some(\"#microsoft.graph.fileAttachment\")`, which is never true, so every attachment is excluded regardless of whether it is a real file attachment. The sibling method `has_unforwardable_attachments` (line 1071, same file) explicitly adds `@odata.type` to its `$select` for the exact same field on the same endpoint — the asymmetry shows the author knows this field needs to be explicitly requested, but omitted it here.",
+      "failure_scenario": "A user opens any message that has one or more ordinary file attachments (PDF, image, etc.). `attachments()` fetches the attachment collection, but because `odata_type` is never populated, the filter's `Some(\"#microsoft.graph.fileAttachment\")` comparison fails for every item, so the method returns an empty Vec. The UI's attachment list/download panel shows no attachments even though the message clearly has them."
+    },
+    {
+      "id": "correctness-1",
+      "lane": "correctness",
+      "model": "claude:sonnet",
+      "title": "All-day event midnight-snap misclassifies forward timezone shifts of 12h+ as backward shifts, landing on the wrong day",
+      "severity": "medium",
+      "anchor": {
+        "file": "crates/infrastructure/src/graph/calendar.rs",
+        "line": 416,
+        "claimed_line": 416,
+        "snippet": "fn snap_all_day_to_midnight(dt: &str) -> String {\n    let Some((date, time)) = dt.split_once('T') else {\n        return dt.to_string();\n    };\n    let hour: u32 = time.get(0..2).and_then(|h| h.parse().ok()).unwrap_or(0);\n    if hour >= 12 {\n        format!(\"{}T00:00:00\", next_calendar_day(date))\n    } else {\n        format!(\"{date}T00:00:00\")\n    }\n}"
+      },
+      "explanation": "The function's own doc comment concedes the assumption: the zone-conversion shift is claimed to always be '< 12 h', and any resulting hour >= 12 is assumed to mean the wall clock slid backward across midnight from the next day (so it rolls forward a day to compensate). But real IANA/Windows zone offsets range from UTC-12 to UTC+14, so the offset difference between the event's creation zone and the viewing zone can exceed 12 hours in the forward direction too (e.g. Auckland +13 vs. Los Angeles -7 is a 20h difference, Auckland vs. Hawaii -10 is 23h). A forward shift of, say, 20h from midnight lands at 20:00 the *same* calendar day (no date rollover happened at all), but the hour>=12 heuristic can't distinguish that from a backward shift and incorrectly rolls the date forward by one day.",
+      "failure_scenario": "A user in Auckland creates an all-day event for July 10. A colleague viewing the agenda from Los Angeles (offset difference 20h) fetches calendarView with Prefer: outlook.timezone=\"America/Los_Angeles\"; Graph returns the same UTC instant as local wall-clock 2026-07-10T20:00:00 (still July 10, just shifted forward within the day). `snap_all_day_to_midnight` sees hour=20>=12 and rolls the date forward to July 11, so the colleague's agenda shows the all-day event one day later than it actually is."
+    }
+  ],
+  "rejected": []
+}

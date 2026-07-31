@@ -1,0 +1,41 @@
+{
+  "lane": "Correctness",
+  "model": "codex:",
+  "status": {
+    "state": "swept",
+    "turns": null
+  },
+  "findings": [
+    {
+      "id": "correctness-0",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Partial refresh-token writes corrupt the previously stored token",
+      "severity": "medium",
+      "anchor": {
+        "file": "crates/infrastructure/src/auth/token_store.rs",
+        "line": 89,
+        "claimed_line": 89,
+        "snippet": "        for (i, chunk) in chunks.iter().enumerate() {\n            self.chunk_entry(i)?.set_password(chunk)?;\n        }"
+      },
+      "explanation": "The new token chunks overwrite the currently committed chunk keys before the metadata commit. If writing any later chunk fails, the old metadata still points to those keys but some now contain new-token data, so `load_refresh_token` assembles a corrupt mixture. This defeats the stated session-loss atomicity and can force reauthentication after a transient keyring write failure.",
+      "failure_scenario": "An existing refresh token occupies three chunks. A rotated three-chunk token successfully overwrites chunk 0, but writing chunk 1 fails. The metadata remains `3`, and the next load combines new chunk 0 with old chunks 1 and 2, producing an invalid refresh token."
+    },
+    {
+      "id": "correctness-1",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "All-day events shift one day late in UTC+12 and higher timezones",
+      "severity": "medium",
+      "anchor": {
+        "file": "crates/infrastructure/src/graph/calendar.rs",
+        "line": 421,
+        "claimed_line": 421,
+        "snippet": "    if hour >= 12 {\n        format!(\"{}T00:00:00\", next_calendar_day(date))\n    } else {\n        format!(\"{date}T00:00:00\")\n    }"
+      },
+      "explanation": "The function infers the direction of a timezone conversion solely from whether the resulting hour is before or after noon, assuming offsets are under 12 hours. Real timezones reach UTC+12 through UTC+14, so a forward conversion can produce an hour of 12 or later and is incorrectly treated as a backward conversion across midnight.",
+      "failure_scenario": "An all-day midnight value converted forward by 12 hours for a UTC+12 timezone becomes `2026-07-10T12:00:00`. This branch advances it to `2026-07-11T00:00:00`, displaying and bucketing the event one day late."
+    }
+  ],
+  "rejected": []
+}

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    BugSleuth mark: a beetle seen through a magnifier.
+
+    Designed at 32px first, then scaled up. The tray icon is the size that
+    actually matters and it is unforgiving: an earlier version had thin legs
+    reaching the rim, which at 32px read as a sun or an asterisk rather than a
+    bug, and a slim handle that disappeared entirely.
+
+    So: the body is large relative to the lens, the legs are short and kept well
+    clear of the rim, and the handle is thick enough to survive. Detail that
+    cannot survive downscaling has been removed rather than left to turn to mush.
+  -->
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="grip" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#94a3b8"/>
+      <stop offset="1" stop-color="#334155"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="0.34" cy="0.28" r="0.8">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#e0f2fe"/>
+      <stop offset="1" stop-color="#bae6fd"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Handle first, so the rim overlaps its top end. Thick and long: at tray
+       size this is what says "magnifier" rather than "circle". -->
+  <g transform="rotate(45 224 208)">
+    <rect x="192" y="300" width="64" height="188" rx="32" fill="url(#grip)"/>
+  </g>
+
+  <!-- Lens glass, opaque so the bug always sits on a light field regardless of
+       what is behind the icon. -->
+  <circle cx="224" cy="208" r="170" fill="url(#glass)"/>
+
+  <g fill="#0b1220" stroke="#0b1220" stroke-linecap="round">
+    <!-- Legs: short, angled, and stopping well inside the rim. -->
+    <g stroke-width="26" fill="none">
+      <path d="M150 158 L106 122"/>
+      <path d="M142 214 L96 210"/>
+      <path d="M150 270 L106 300"/>
+      <path d="M298 158 L342 122"/>
+      <path d="M306 214 L352 210"/>
+      <path d="M298 270 L342 300"/>
+    </g>
+    <!-- Antennae. -->
+    <g stroke-width="22" fill="none">
+      <path d="M198 106 L174 62"/>
+      <path d="M250 106 L274 62"/>
+    </g>
+    <!-- Head, then shell. Body is deliberately large: at 32px this blob is the
+         bug, and everything else is seasoning. -->
+    <circle cx="224" cy="124" r="42" stroke="none"/>
+    <ellipse cx="224" cy="240" rx="96" ry="116" stroke="none"/>
+  </g>
+
+  <!-- Wing-case split: the single detail that turns the blob into a beetle. -->
+  <path d="M224 136 L224 348" stroke="#22d3ee" stroke-width="16" stroke-linecap="round"/>
+
+  <!-- Rim last, above glass and bug. -->
+  <circle cx="224" cy="208" r="170" fill="none" stroke="url(#rim)" stroke-width="44"/>
+</svg>

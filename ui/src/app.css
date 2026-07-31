@@ -1,0 +1,399 @@
+/* Layout and components. Colours all come from theme.css. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* A desktop app, not a document: text selection only where it is useful. */
+  user-select: none;
+}
+
+#app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+}
+
+/* ── Title bar ───────────────────────────────────────────────────────────── */
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+header .mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+
+header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.2px;
+}
+
+header .spacer {
+  flex: 1;
+}
+
+/* ── Main area ───────────────────────────────────────────────────────────── */
+
+main {
+  overflow-y: auto;
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+section.panel {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+
+section.panel > h2 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+section.panel > p.hint {
+  margin: 0 0 14px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.row + .row {
+  margin-top: 10px;
+}
+
+label.field {
+  display: grid;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+
+label.field > span {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+
+input[type="text"],
+input[type="number"],
+input[type="search"],
+select {
+  background: var(--bg-sunken);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font: inherit;
+  min-width: 0;
+  user-select: text;
+}
+
+input[type="text"]:focus-visible,
+input[type="number"]:focus-visible,
+input[type="search"]:focus-visible,
+select:focus-visible,
+button:focus-visible,
+[role="switch"]:focus-visible,
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button {
+  background: var(--bg-sunken);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+/* ── Lane matrix ─────────────────────────────────────────────────────────── */
+
+table.matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+table.matrix th,
+table.matrix td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+table.matrix th {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+table.matrix td.lane-cell,
+table.matrix th.lane-cell {
+  text-align: center;
+  width: 92px;
+}
+
+/*
+  The warning marker must not be allowed to wrap. "CONTRACT ⚠" is just wide
+  enough to break onto a second line, which lifts that one heading above the
+  others and makes the row look crooked.
+*/
+table.matrix th.lane-cell {
+  white-space: nowrap;
+}
+
+table.matrix tr:last-child td {
+  border-bottom: none;
+}
+
+table.matrix input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+td.model-id {
+  font-family: "Cascadia Mono", ui-monospace, "Consolas", monospace;
+  user-select: text;
+}
+
+table.matrix td.effort-cell {
+  width: 110px;
+}
+
+/* A vendor that takes no effort setting shows the control greyed, not missing,
+   so its absence reads as a fact about the vendor rather than a layout slip. */
+table.matrix select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* A lane nobody covers is the one thing the UI must never let pass quietly. */
+th.lane-cell.uncovered {
+  color: var(--warn);
+}
+
+/*
+  The marker's space is reserved whether or not it is showing, so ticking the
+  last box in a lane changes a colour rather than reflowing the whole header.
+*/
+th.lane-cell::after {
+  content: " ⚠";
+  visibility: hidden;
+}
+
+th.lane-cell.uncovered::after {
+  visibility: visible;
+}
+
+.warning-banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+/* ── Vendor status pills ─────────────────────────────────────────────────── */
+
+.vendors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-sunken);
+  font-size: 12.5px;
+}
+
+.pill .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: none;
+}
+
+.pill.ok .dot {
+  background: var(--good);
+}
+
+.pill.bad .dot {
+  background: var(--critical);
+}
+
+.pill .detail {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+/* ── Output ──────────────────────────────────────────────────────────────── */
+
+pre.output {
+  margin: 0;
+  padding: 14px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: "Cascadia Mono", ui-monospace, "Consolas", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 420px;
+  overflow-y: auto;
+  user-select: text;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+footer .status.running {
+  color: var(--accent);
+}
+
+footer .status.error {
+  color: var(--critical);
+}
+
+.spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Respect the system's motion preference — a spinner is decoration. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-top-color: var(--border-strong);
+  }
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Skip-to-content for keyboard users; visible only when focused. */
+.visually-hidden:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/*
+  The model picker is one control: a text box that suggests.
+
+  Kilo offers 638 models, which is past what a menu presents usefully, so the
+  search is the dropdown rather than a filter sitting above one. A datalist
+  cannot draw group headings, so each suggestion carries its billing route as
+  its own label instead — which is where it belonged, since the route describes
+  that one model rather than a section of the list.
+*/
+.model-picker {
+  max-width: 320px;
+}
+
+.model-picker input.model-text,
+td.model-id input.model-text {
+  width: 100%;
+  max-width: 320px;
+  font-family: inherit;
+}

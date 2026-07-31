@@ -1,0 +1,109 @@
+/*
+  Theming.
+
+  Contrast is enforced, not eyeballed: `theme.test.ts` parses this file and
+  fails if any foreground/background pair drops below WCAG AA. The palettes were
+  originally set by eye and several pairs missed it — light hint text at 3.4:1,
+  dark hint text at 3.58:1, the light primary button's own label at 3.68:1, and
+  control borders at 1.6:1 and 2.15:1 against the 3:1 a component boundary
+  needs. All were legible enough that nobody would have filed a bug, which is
+  exactly why a measurement beats an opinion here.
+
+  Every colour is a custom property on :root, and dark is the default because
+  the window is configured with a dark background to avoid a startup flash —
+  if the two disagreed you would see the wrong colour for one frame.
+
+  `[data-theme]` on <html> wins over the media query in both directions, so an
+  explicit choice always beats the system setting rather than only overriding
+  it one way.
+*/
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0b1220;
+  --bg-raised: #111c30;
+  --bg-sunken: #070d18;
+  --border: #1e2d45;
+  --border-strong: #67809f;
+
+  --text: #e6edf7;
+  --text-dim: #93a4bd;
+  --text-faint: #94a5bd;
+
+  --accent: #22d3ee;
+  --accent-strong: #06b6d4;
+  --on-accent: #04222b;
+
+  --critical: #f87171;
+  --high: #fb923c;
+  --medium: #fbbf24;
+  --low: #94a3b8;
+  --good: #4ade80;
+  --warn: #fbbf24;
+
+  --shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --bg: #eef2f9;
+    --bg-raised: #ffffff;
+    --bg-sunken: #e2e8f2;
+    --border: #c8d3e4;
+    --border-strong: #79839a;
+
+    --text: #0f1b2d;
+    --text-dim: #3b4a61;
+    --text-faint: #5a6880;
+
+    --accent: #0e7490;
+    --accent-strong: #155e75;
+    --on-accent: #ffffff;
+
+    --critical: #dc2626;
+    --high: #ea580c;
+    --medium: #b45309;
+    --low: #52607a;
+    --good: #15803d;
+    --warn: #b45309;
+
+    --shadow: 0 8px 24px rgb(15 27 45 / 12%);
+  }
+}
+
+/* An explicit choice beats the system setting, whichever way round. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #eef2f9;
+  --bg-raised: #ffffff;
+  --bg-sunken: #e2e8f2;
+  --border: #c8d3e4;
+  --border-strong: #79839a;
+
+  --text: #0f1b2d;
+  --text-dim: #3b4a61;
+  --text-faint: #5a6880;
+
+  --accent: #0e7490;
+  --accent-strong: #155e75;
+  --on-accent: #ffffff;
+
+  --critical: #dc2626;
+  --high: #ea580c;
+  --medium: #b45309;
+  --low: #52607a;
+  --good: #15803d;
+  --warn: #b45309;
+
+  --shadow: 0 8px 24px rgb(15 27 45 / 12%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}

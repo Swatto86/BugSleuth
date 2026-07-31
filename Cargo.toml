@@ -1,0 +1,43 @@
+[workspace]
+members = ["crates/*", "src-tauri"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/Swatto86/BugSleuth"
+
+[workspace.dependencies]
+bugsleuth-domain = { path = "crates/bugsleuth-domain" }
+bugsleuth-engine = { path = "crates/bugsleuth-engine" }
+bugsleuth-judge = { path = "crates/bugsleuth-judge" }
+bugsleuth-provider = { path = "crates/bugsleuth-provider" }
+bugsleuth-verify = { path = "crates/bugsleuth-verify" }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["process", "io-util", "macros", "rt-multi-thread", "time", "fs", "sync"] }
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
+
+# Structural discipline: BugSleuth's owner does not read Rust, so "keep files small
+# and functions simple" cannot be enforced by review. These make it a build signal.
+# The hard 400-line file cap is enforced separately by scripts/check-file-size.ps1.
+[workspace.lints.rust]
+# No crate here needs raw pointers or FFI. Forbidding it outright means a future
+# one cannot quietly introduce it; a crate with a genuine need must opt out
+# explicitly and say why.
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+module_inception = "warn"
+unwrap_used = "warn"
+expect_used = "warn"

@@ -1,0 +1,18 @@
+[package]
+name = "bugsleuth-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bugsleuth-domain = { workspace = true }
+bugsleuth-judge = { workspace = true }
+bugsleuth-provider = { workspace = true }
+bugsleuth-verify = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

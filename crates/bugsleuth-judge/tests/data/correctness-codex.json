@@ -1,0 +1,146 @@
+{
+  "lane": "Correctness",
+  "model": "codex:",
+  "status": {
+    "state": "swept",
+    "turns": null
+  },
+  "findings": [
+    {
+      "id": "correctness-1",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Removing more stock than available underflows the quantity",
+      "severity": "high",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 36,
+        "claimed_line": 36,
+        "snippet": "        item.quantity -= count;"
+      },
+      "explanation": "The function subtracts without checking that enough stock exists. Unsigned subtraction panics in debug builds and wraps to a huge quantity in release builds.",
+      "failure_scenario": "If SKU A has quantity 3, calling remove_stock(\"A\", 4) either panics or changes its quantity to 4,294,967,295."
+    },
+    {
+      "id": "correctness-7",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Average price accumulation can overflow",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 42,
+        "claimed_line": 42,
+        "snippet": "        let total: u64 = self.items.values().map(|item| item.unit_price_pence).sum();"
+      },
+      "explanation": "Summing prices into u64 is unchecked. When the total exceeds u64::MAX, averaging either panics or uses a wrapped total.",
+      "failure_scenario": "An inventory containing two items each priced at u64::MAX causes average_price() to panic in debug builds and return an incorrect wrapped average in release builds."
+    },
+    {
+      "id": "correctness-2",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Calculating the average price of an empty inventory panics",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 43,
+        "claimed_line": 43,
+        "snippet": "        total / self.items.len() as u64"
+      },
+      "explanation": "An empty inventory has length zero, so this integer division panics instead of producing a usable result or explicitly reporting that no average exists.",
+      "failure_scenario": "Calling Inventory::new().average_price() panics with an attempt to divide by zero."
+    },
+    {
+      "id": "correctness-8",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Top-value ranking overflows when calculating line values",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 49,
+        "claimed_line": 49,
+        "snippet": "        items.sort_by_key(|item| std::cmp::Reverse(item.unit_price_pence * item.quantity as u64));"
+      },
+      "explanation": "The sort key multiplies price by quantity without overflow handling. Overflow either panics or wraps, and wrapping can place the most valuable line below cheaper lines.",
+      "failure_scenario": "An item priced at u64::MAX with quantity 2 causes top_by_value(1) to panic in debug builds; in release its wrapped key can make the method return a less valuable item."
+    },
+    {
+      "id": "correctness-3",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Requesting more top items than exist panics",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 50,
+        "claimed_line": 50,
+        "snippet": "        items[..n].to_vec()"
+      },
+      "explanation": "The slice operation assumes n is no greater than the number of items, but the public method performs no such check.",
+      "failure_scenario": "With one inventory item, top_by_value(2) panics because the slice endpoint exceeds the vector length."
+    },
+    {
+      "id": "correctness-5",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Discount percentages above 100 underflow the result",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 5,
+        "claimed_line": 5,
+        "snippet": "    let discount = price_pence * percent_off as u64 / 100;\n    price_pence - discount"
+      },
+      "explanation": "No range check limits percent_off to 100, so the computed discount can exceed the original price and the unsigned subtraction underflows.",
+      "failure_scenario": "apply_discount(100, 101) panics in debug builds and wraps to u64::MAX in release builds rather than returning a meaningful discounted price."
+    },
+    {
+      "id": "correctness-6",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Basket total overflows for large valid prices and quantities",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 13,
+        "claimed_line": 13,
+        "snippet": "    let gross = unit_price_pence * quantity as u64;"
+      },
+      "explanation": "The gross total is computed with unchecked u64 multiplication. Large but type-valid inputs panic with overflow checks enabled and silently wrap otherwise.",
+      "failure_scenario": "basket_total(u64::MAX, 2) panics in debug builds; in release it wraps the gross to u64::MAX - 1 and calculates a nonsensical total."
+    },
+    {
+      "id": "correctness-0",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Bulk discounts are not applied at their documented thresholds",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 14,
+        "claimed_line": 14,
+        "snippet": "    let percent = if quantity > 50 {\n        10\n    } else if quantity > 10 {"
+      },
+      "explanation": "The documented discount starts at 10 or 50 items, but strict comparisons exclude those exact boundary quantities.",
+      "failure_scenario": "A basket of 10 items receives 0% instead of 5%, and a basket of 50 items receives 5% instead of 10%."
+    },
+    {
+      "id": "correctness-4",
+      "lane": "correctness",
+      "model": "codex:",
+      "title": "Price parsing panics on invalid input and misinterprets one-digit fractions",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 26,
+        "claimed_line": 26,
+        "snippet": "    let (pounds, pence) = input.split_once('.').unwrap();\n    pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()"
+      },
+      "explanation": "The parser unwraps both the decimal separator and integer conversions, making ordinary malformed input a process panic. It also treats the fractional portion as raw pence rather than two decimal digits.",
+      "failure_scenario": "parse_price(\"12\") or parse_price(\"12.xx\") panics; parse_price(\"12.3\") returns 1203 pence instead of £12.30 (1230 pence)."
+    }
+  ],
+  "rejected": []
+}

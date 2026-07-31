@@ -1,0 +1,116 @@
+{
+  "lane": "Correctness",
+  "model": "claude:sonnet",
+  "status": {
+    "state": "swept",
+    "turns": 9
+  },
+  "findings": [
+    {
+      "id": "correctness-0",
+      "lane": "correctness",
+      "model": "claude:sonnet",
+      "title": "remove_stock underflows quantity when count exceeds current stock",
+      "severity": "critical",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 36,
+        "claimed_line": 36,
+        "snippet": "        item.quantity -= count;"
+      },
+      "explanation": "remove_stock validates that the SKU exists but never checks that `count <= item.quantity` before subtracting. `quantity` is a u32, so subtracting more than is in stock underflows.",
+      "failure_scenario": "With an item at quantity 10, calling `inventory.remove_stock(\"A\", 11)` panics with 'attempt to subtract with overflow' in a debug build, or in a release build silently wraps to 4294967290, so the function returns `Ok(4294967290)` as if that were a legitimate remaining stock count — corrupting the inventory with no error surfaced, even though the function already returns a `Result` that could report this cleanly."
+    },
+    {
+      "id": "correctness-1",
+      "lane": "correctness",
+      "model": "claude:sonnet",
+      "title": "average_price divides by zero on an empty inventory",
+      "severity": "high",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 43,
+        "claimed_line": 43,
+        "snippet": "        total / self.items.len() as u64"
+      },
+      "explanation": "The denominator is the item count with no guard for the empty case, so an empty (or emptied) inventory triggers integer division by zero.",
+      "failure_scenario": "`Inventory::new().average_price()` panics with 'attempt to divide by zero'; any caller that computes an average before adding items, or after all items are removed, crashes."
+    },
+    {
+      "id": "correctness-2",
+      "lane": "correctness",
+      "model": "claude:sonnet",
+      "title": "top_by_value panics when n exceeds the number of items",
+      "severity": "high",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 50,
+        "claimed_line": 50,
+        "snippet": "        items[..n].to_vec()"
+      },
+      "explanation": "The slice `items[..n]` is never clamped to `items.len()`, so requesting more top items than exist indexes past the end of the vector.",
+      "failure_scenario": "On an inventory with 2 items, `inventory.top_by_value(5)` panics with 'range end index 5 out of range for slice of length 2' instead of returning the 2 items that exist."
+    },
+    {
+      "id": "correctness-3",
+      "lane": "correctness",
+      "model": "claude:sonnet",
+      "title": "parse_price panics on any malformed price string",
+      "severity": "high",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 26,
+        "claimed_line": 26,
+        "snippet": "    let (pounds, pence) = input.split_once('.').unwrap();\n    pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()"
+      },
+      "explanation": "Every step uses `.unwrap()` with no validation: a missing '.' makes `split_once` return `None`, and non-numeric pound/pence segments make `parse::<u64>()` return `Err`; both panic instead of returning an error from this parsing function.",
+      "failure_scenario": "`parse_price(\"free\")` panics because there is no '.' to split on; `parse_price(\"abc.12\")` panics on the pounds parse. Any externally supplied, imperfectly-formatted price string crashes the caller instead of yielding a recoverable error."
+    },
+    {
+      "id": "correctness-4",
+      "lane": "correctness",
+      "model": "claude:sonnet",
+      "title": "basket_total discount tiers are off by one versus their documented thresholds",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 14,
+        "claimed_line": 14,
+        "snippet": "    let percent = if quantity > 50 {\n        10\n    } else if quantity > 10 {"
+      },
+      "explanation": "The doc comment states baskets of '10 or more' get 5% off and '50 or more' get 10% off, but the code uses strict `>`, so exactly 10 items get 0% off and exactly 50 items get only 5% off — the boundary quantities silently receive one tier lower than documented.",
+      "failure_scenario": "`basket_total(1000, 10)` returns 10000 (no discount) even though the documented behavior for '10 or more items' promises 5% off (9500); `basket_total(1000, 50)` returns 9500 (5% off) instead of the documented 10% off (9000)."
+    },
+    {
+      "id": "correctness-5",
+      "lane": "correctness",
+      "model": "claude:sonnet",
+      "title": "parse_price mishandles pence fractions that aren't exactly two digits",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 27,
+        "claimed_line": 27,
+        "snippet": "    pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()"
+      },
+      "explanation": "The pence segment is parsed as a raw integer and added directly rather than being interpreted as a two-digit fractional part, so its value depends on how many digits follow the decimal point instead of representing hundredths of a pound.",
+      "failure_scenario": "`parse_price(\"12.5\")` (intended as £12.50) returns 1205 pence (£12.05) instead of 1250; `parse_price(\"12.345\")` returns 1545 pence, a value with no sensible relationship to the input."
+    },
+    {
+      "id": "correctness-6",
+      "lane": "correctness",
+      "model": "claude:sonnet",
+      "title": "apply_discount underflows for a percent_off greater than 100",
+      "severity": "low",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 6,
+        "claimed_line": 6,
+        "snippet": "    price_pence - discount"
+      },
+      "explanation": "Nothing constrains `percent_off` to 0..=100, so a caller-supplied value above 100 makes `discount` exceed `price_pence`, and the subsequent subtraction underflows the u64.",
+      "failure_scenario": "`apply_discount(100, 150)` computes `discount = 150`, then `100 - 150` panics with 'attempt to subtract with overflow' in a debug build, or wraps to a near-u64::MAX value in a release build."
+    }
+  ],
+  "rejected": []
+}

@@ -1,0 +1,26 @@
+# Windows gives the main thread a 1 MB stack by default. That is not enough for
+# a Tauri app built with LTO: the generated context initialiser embeds the whole
+# frontend bundle, and with cross-crate inlining it becomes one very deep frame.
+#
+# This is not theoretical - the release build overflowed the stack on startup
+# and exited before showing a window, while the un-optimised debug build was
+# fine. 8 MB matches the default thread stack Rust uses elsewhere.
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-C", "link-arg=/STACK:8388608",
+    # Link the MSVC C++ runtime statically.
+    #
+    # Without this the binary imports VCRUNTIME140.dll and VCRUNTIME140_1.dll,
+    # which come from the Visual C++ Redistributable and are NOT part of a clean
+    # Windows install. They are pulled in by the msvc target's default dynamic
+    # linkage: they carry the exception-handling and stack-unwinding machinery
+    # (__CxxFrameHandler4 lives in VCRUNTIME140_1) that Rust's panic path uses,
+    # plus compiler intrinsics and the stack-cookie check.
+    #
+    # The api-ms-win-crt-* imports alongside them are the Universal CRT, which
+    # *is* part of Windows 10/11, so those need no action.
+    #
+    # A portable executable that dies on a missing DLL with a system dialog
+    # rather than a message from us is not a self-contained binary.
+    "-C", "target-feature=+crt-static",
+]
