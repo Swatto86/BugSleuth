@@ -10,5 +10,9 @@
 //! modes that produce the most convincing false positives.
 
 mod anchor;
+mod testrun;
+mod worktree;
 
 pub use anchor::{Rejection, verify_anchor};
+pub use testrun::{Outcome, TestError, TestRun, counts, run as run_tests};
+pub use worktree::{Worktree, WorktreeError};

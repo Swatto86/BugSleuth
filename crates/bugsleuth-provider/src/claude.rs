@@ -1,9 +1,9 @@
 //! Claude Code CLI adapter.
 //!
-//! Runs `claude --print` non-interactively against a repository and returns the
-//! raw findings it reports. Nothing here trusts the model: the result is
-//! `RawFindings`, which cannot reach a report without going through anchor
-//! verification first.
+//! Runs `claude --print` non-interactively against a repository. Nothing here
+//! trusts the model: a sweep returns `RawFindings`, which cannot reach a report
+//! without anchor verification, and a proof attempt returns the model's own
+//! account of what it did, which is checked by re-running the tests.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -15,8 +15,16 @@ use serde_json::Value;
 use crate::process::{self, Invocation, ProcessError, preview};
 
 mod envelope;
+mod prove;
 
 pub use envelope::Usage;
+pub use prove::{ProveRequest, ProveResult, prove};
+
+/// Tools a read-only review may use. An explicit allowlist rather than
+/// `--dangerously-skip-permissions`: a sweep that *cannot* write is a far
+/// stronger guarantee than one merely asked not to.
+const READ_ONLY_TOOLS: &str = "Read,Glob,Grep";
+const READ_ONLY_DENIED: &str = "Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClaudeError {
@@ -36,7 +44,7 @@ pub enum ClaudeError {
     Empty,
     #[error("could not read the claude CLI's response envelope: {0}")]
     Envelope(String),
-    #[error("the model's reply was not valid findings JSON: {0}")]
+    #[error("the model's reply did not match the required structure: {0}")]
     Schema(String),
 }
 
@@ -74,14 +82,55 @@ pub struct SweepResult {
 
 /// Run one lane sweep.
 pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ClaudeError> {
-    let binary = match spec.binary {
+    let _ = spec.lane;
+    let outcome = invoke(Run {
+        repo: spec.repo,
+        model: spec.model,
+        prompt: spec.brief,
+        schema: finding_schema(),
+        allowed: READ_ONLY_TOOLS,
+        denied: READ_ONLY_DENIED,
+        max_turns: spec.max_turns,
+        timeout: spec.timeout,
+        binary: spec.binary,
+        api_key: spec.api_key,
+    })
+    .await?;
+
+    let findings = envelope::structured(&outcome.result)?;
+    Ok(SweepResult {
+        findings,
+        usage: outcome.usage,
+        session_id: outcome.session_id,
+        turns: outcome.num_turns,
+    })
+}
+
+/// Everything one CLI invocation needs, independent of what it is being asked
+/// to do. Shared by sweeps and proof attempts, which differ only in prompt,
+/// output schema and tool policy.
+pub(crate) struct Run<'a> {
+    pub(crate) repo: &'a Path,
+    pub(crate) model: &'a str,
+    pub(crate) prompt: &'a str,
+    pub(crate) schema: Value,
+    pub(crate) allowed: &'a str,
+    pub(crate) denied: &'a str,
+    pub(crate) max_turns: u32,
+    pub(crate) timeout: Duration,
+    pub(crate) binary: Option<&'a str>,
+    pub(crate) api_key: Option<&'a str>,
+}
+
+pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ClaudeError> {
+    let binary = match run.binary {
         Some(path) => PathBuf::from(path),
         None => resolve_binary().ok_or(ClaudeError::NotFound)?,
     };
     let binary = binary.to_string_lossy().into_owned();
 
-    let args = build_args(&spec);
-    let env: Vec<(String, String)> = spec
+    let args = build_args(&run);
+    let env: Vec<(String, String)> = run
         .api_key
         .map(|key| vec![("ANTHROPIC_API_KEY".to_string(), key.to_string())])
         .unwrap_or_default();
@@ -89,10 +138,10 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ClaudeError> {
     let output = process::run(Invocation {
         binary: &binary,
         args: &args,
-        cwd: spec.repo,
-        stdin: Some(spec.brief.as_bytes()),
+        cwd: run.repo,
+        stdin: Some(run.prompt.as_bytes()),
         env: &env,
-        timeout: spec.timeout,
+        timeout: run.timeout,
         what: "claude CLI",
     })
     .await?;
@@ -111,15 +160,7 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ClaudeError> {
     if stdout.is_empty() {
         return Err(ClaudeError::Empty);
     }
-
-    let envelope = envelope::parse(stdout)?;
-    let findings = envelope::findings_from_result(&envelope.result)?;
-    Ok(SweepResult {
-        findings,
-        usage: envelope.usage,
-        session_id: envelope.session_id,
-        turns: envelope.num_turns,
-    })
+    envelope::parse(stdout)
 }
 
 /// Check that the CLI exists and can run, returning its version.
@@ -155,38 +196,33 @@ pub async fn probe() -> Result<String, ClaudeError> {
 
 /// Build the non-interactive argv.
 ///
-/// Two choices worth spelling out:
-///
 /// `--safe-mode` disables every customization the machine or the repository
 /// under review would otherwise inject — CLAUDE.md, hooks, skills, MCP servers,
 /// custom agents. Without it, reviewing a repository would execute that
 /// repository's hooks, and the review's behaviour would silently depend on
 /// whatever is in the developer's global config. Authentication is unaffected,
 /// so the signed-in subscription session still applies.
-///
-/// `--allowedTools` is an explicit allowlist rather than
-/// `--dangerously-skip-permissions`. A read-only sweep genuinely cannot write.
-fn build_args(spec: &ClaudeSweep<'_>) -> Vec<String> {
-    let schema = finding_schema().to_string();
+fn build_args(run: &Run<'_>) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--print".into(),
         "--safe-mode".into(),
         "--output-format".into(),
         "json".into(),
         "--json-schema".into(),
-        schema,
+        run.schema.to_string(),
         "--max-turns".into(),
-        spec.max_turns.to_string(),
+        run.max_turns.to_string(),
         "--allowedTools".into(),
-        "Read,Glob,Grep".into(),
-        "--disallowedTools".into(),
-        "Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch".into(),
+        run.allowed.into(),
     ];
-    if !spec.model.trim().is_empty() {
-        args.push("--model".into());
-        args.push(spec.model.trim().to_string());
+    if !run.denied.is_empty() {
+        args.push("--disallowedTools".into());
+        args.push(run.denied.into());
     }
-    let _ = spec.lane;
+    if !run.model.trim().is_empty() {
+        args.push("--model".into());
+        args.push(run.model.trim().to_string());
+    }
     args
 }
 
@@ -260,14 +296,16 @@ pub(crate) struct ResultEnvelope {
 mod tests {
     use super::*;
 
-    fn spec<'a>(model: &'a str) -> ClaudeSweep<'a> {
-        ClaudeSweep {
+    fn run<'a>(model: &'a str) -> Run<'a> {
+        Run {
             repo: Path::new("."),
-            lane: Lane::Correctness,
             model,
-            brief: "",
-            timeout: Duration::from_secs(60),
+            prompt: "",
+            schema: finding_schema(),
+            allowed: READ_ONLY_TOOLS,
+            denied: READ_ONLY_DENIED,
             max_turns: 12,
+            timeout: Duration::from_secs(60),
             binary: None,
             api_key: None,
         }
@@ -275,33 +313,30 @@ mod tests {
 
     #[test]
     fn read_only_sweeps_cannot_be_granted_write_tools() {
-        let args = build_args(&spec("sonnet"));
-        let joined = args.join(" ");
-        assert!(joined.contains("--disallowedTools"));
+        let args = build_args(&run("sonnet"));
         let index = args.iter().position(|a| a == "--disallowedTools");
         let denied = index.and_then(|i| args.get(i + 1)).map(String::as_str);
-        assert_eq!(
-            denied,
-            Some("Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch")
-        );
-        assert!(!joined.contains("--dangerously-skip-permissions"));
+        assert_eq!(denied, Some(READ_ONLY_DENIED));
+        assert!(!args.iter().any(|a| a.contains("dangerously-skip")));
     }
 
     #[test]
     fn customizations_are_disabled_so_the_reviewed_repo_cannot_alter_the_review() {
-        let args = build_args(&spec("sonnet"));
-        assert!(args.iter().any(|a| a == "--safe-mode"));
+        assert!(
+            build_args(&run("sonnet"))
+                .iter()
+                .any(|a| a == "--safe-mode")
+        );
     }
 
     #[test]
     fn an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument() {
-        let args = build_args(&spec("   "));
-        assert!(!args.iter().any(|a| a == "--model"));
+        assert!(!build_args(&run("   ")).iter().any(|a| a == "--model"));
     }
 
     #[test]
     fn the_schema_is_passed_as_one_argv_entry_not_shell_text() {
-        let args = build_args(&spec("sonnet"));
+        let args = build_args(&run("sonnet"));
         let index = args.iter().position(|a| a == "--json-schema");
         let schema = index
             .and_then(|i| args.get(i + 1))
@@ -309,5 +344,12 @@ mod tests {
             .unwrap_or("");
         let parsed: Value = serde_json::from_str(schema).unwrap_or(Value::Null);
         assert_eq!(parsed["type"], "object");
+    }
+
+    #[test]
+    fn an_empty_denylist_omits_the_flag_rather_than_passing_an_empty_value() {
+        let mut spec = run("sonnet");
+        spec.denied = "";
+        assert!(!build_args(&spec).iter().any(|a| a == "--disallowedTools"));
     }
 }

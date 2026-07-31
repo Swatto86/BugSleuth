@@ -6,7 +6,6 @@
 //! live. `--output-format json` says nothing about the shape of the inner reply,
 //! so it still has to be parsed and validated against our own schema.
 
-use bugsleuth_domain::RawFindings;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -48,22 +47,22 @@ pub(crate) fn parse(stdout: &str) -> Result<ResultEnvelope, ClaudeError> {
     Ok(envelope)
 }
 
-/// Extract findings from the model's reply.
+/// Extract a schema-shaped value from the model's reply.
 ///
 /// With `--json-schema` the reply should already be a JSON object. It is not
 /// assumed to be: a schema-constrained reply can still arrive as a JSON *string*
 /// containing the object, or wrapped in a code fence, and a run that dies here
-/// wastes the whole sweep. Each fallback is cheap and strictly narrows what
-/// counts as valid — anything that does not deserialize into our own type is
-/// still rejected.
-pub(crate) fn findings_from_result(result: &Value) -> Result<RawFindings, ClaudeError> {
+/// wastes the whole invocation. Each fallback is cheap and strictly narrows what
+/// counts as valid — anything that does not deserialize into the requested type
+/// is still rejected.
+pub(crate) fn structured<T: serde::de::DeserializeOwned>(result: &Value) -> Result<T, ClaudeError> {
     let value = match result {
         Value::Object(_) => result.clone(),
         Value::String(text) => parse_embedded(text)?,
         Value::Null => return Err(ClaudeError::Schema("the reply was empty".into())),
         other => {
             return Err(ClaudeError::Schema(format!(
-                "expected a findings object, got {}",
+                "expected a structured object, got {}",
                 kind(other)
             )));
         }
@@ -131,6 +130,7 @@ fn head(text: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bugsleuth_domain::RawFindings;
     use serde_json::json;
 
     const ONE: &str = r#"{"findings":[{"title":"t","severity":"high","file":"a.rs","line":2,"snippet":"x","explanation":"e","failure_scenario":"f"}]}"#;
@@ -138,21 +138,21 @@ mod tests {
     #[test]
     fn reads_findings_delivered_as_a_json_object() {
         let value: Value = serde_json::from_str(ONE).unwrap_or(Value::Null);
-        let parsed = findings_from_result(&value);
+        let parsed = structured::<RawFindings>(&value);
         assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
     }
 
     #[test]
     fn reads_findings_delivered_as_a_json_string() {
         let value = Value::String(ONE.to_string());
-        let parsed = findings_from_result(&value);
+        let parsed = structured::<RawFindings>(&value);
         assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
     }
 
     #[test]
     fn reads_findings_wrapped_in_a_code_fence() {
         let value = Value::String(format!("```json\n{ONE}\n```"));
-        let parsed = findings_from_result(&value);
+        let parsed = structured::<RawFindings>(&value);
         assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
     }
 
@@ -170,21 +170,21 @@ mod tests {
             }]
         })
         .to_string();
-        let parsed = findings_from_result(&Value::String(with_ticks));
+        let parsed = structured::<RawFindings>(&Value::String(with_ticks));
         assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
     }
 
     #[test]
     fn a_reply_that_is_not_findings_is_rejected_rather_than_silently_empty() {
         let value = Value::String("I could not find any issues.".into());
-        assert!(findings_from_result(&value).is_err());
+        assert!(structured::<RawFindings>(&value).is_err());
     }
 
     #[test]
     fn a_reply_missing_required_fields_is_rejected() {
         let value: Value =
             serde_json::from_str(r#"{"findings":[{"title":"t"}]}"#).unwrap_or(Value::Null);
-        assert!(findings_from_result(&value).is_err());
+        assert!(structured::<RawFindings>(&value).is_err());
     }
 
     #[test]

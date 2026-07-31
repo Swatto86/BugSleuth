@@ -69,9 +69,69 @@ returning an empty list — an empty result is a valid and useful answer.",
     )
 }
 
+/// Build the brief for a proof attempt.
+///
+/// The instruction not to fix the defect is the load-bearing one. Asked to make
+/// a test fail, a coding agent's strongest instinct is to make the code correct
+/// — which produces a passing test that proves nothing, and it will do it
+/// without being asked.
+pub fn proof(defect: &str, test_command: &str) -> String {
+    format!(
+        "\
+You are in a throwaway checkout of a repository that contains a known defect. \
+Your job is to prove that the defect is real by writing a test that FAILS \
+because of it.
+
+# The defect
+
+{defect}
+
+# What to do
+
+1. Read the code and confirm you understand the defect.
+2. Add ONE new test, in the same style as the tests already in this repository, \
+that fails specifically because of this defect.
+3. Run it with `{test_command}` and confirm you see it fail.
+4. Report the test's name.
+
+# What NOT to do
+
+DO NOT FIX THE DEFECT. Do not change any production code at all. Your only \
+change should be the added test. This is checked automatically: if any \
+previously passing test stops passing, your proof is rejected, because a test \
+that fails only because you altered the code proves nothing about the original \
+defect.
+
+Do not weaken, delete or modify any existing test.
+
+Do not write a test that fails for an unrelated reason — it must fail because \
+of THIS defect, and it must pass once this defect is fixed.
+
+# If you cannot
+
+If you cannot write a test that fails because of this defect, say so and \
+explain precisely why, leaving `wrote_failing_test` false. That is a genuinely \
+useful answer: a defect nobody can demonstrate is a defect worth doubting. It \
+is far better than a test that fails for the wrong reason.
+
+# Report
+
+Return the required JSON structure. `test_name` must be the exact filter that \
+selects only your new test — letters, digits, underscores and `::` only.",
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_proof_brief_forbids_fixing_the_defect() {
+        let text = proof("something is wrong", "cargo test");
+        assert!(text.contains("DO NOT FIX THE DEFECT"));
+        assert!(text.contains("cargo test"));
+        assert!(text.contains("something is wrong"));
+    }
 
     #[test]
     fn each_lane_gets_its_own_mandate_and_not_another_lanes() {
