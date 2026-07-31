@@ -20,6 +20,9 @@ use bugsleuth_domain::{ProofClaim, ProofVerdict};
 use bugsleuth_provider::claude::{ProveRequest, prove as run_model};
 use bugsleuth_verify::{Outcome, Worktree, counts, run_tests};
 
+mod judge;
+use judge::judge;
+
 pub struct Attempt<'a> {
     /// Repository containing the defect. A worktree is made from it; it is never
     /// itself modified.
@@ -154,109 +157,6 @@ pub async fn attempt(spec: Attempt<'_>) -> anyhow::Result<AttemptReport> {
     })
 }
 
-fn judge(
-    dir: &Path,
-    spec: &Attempt<'_>,
-    claim: &ProofClaim,
-    baseline_passed: u32,
-) -> anyhow::Result<(ProofVerdict, u32, u32, String)> {
-    if !claim.wrote_failing_test || claim.test_name.trim().is_empty() {
-        let obstacle = if claim.obstacle.trim().is_empty() {
-            "the model reported no test and gave no reason".to_string()
-        } else {
-            claim.obstacle.clone()
-        };
-        return Ok((ProofVerdict::NoTestWritten, 0, 0, obstacle));
-    }
-
-    let full = run_tests(dir, spec.test_command, None, spec.test_timeout)?;
-    let (after_passed, after_failed) = counts(&full.stdout);
-
-    match full.outcome {
-        Outcome::DidNotBuild => {
-            return Ok((
-                ProofVerdict::DidNotBuild,
-                after_passed,
-                after_failed,
-                first_error(&full.stderr),
-            ));
-        }
-        Outcome::TimedOut => {
-            return Ok((
-                ProofVerdict::TimedOut,
-                after_passed,
-                after_failed,
-                "the suite was killed for running too long".to_string(),
-            ));
-        }
-        Outcome::Passed => {
-            return Ok((
-                ProofVerdict::TestDoesNotFail,
-                after_passed,
-                after_failed,
-                format!(
-                    "every test passes, including `{}` — it demonstrates nothing",
-                    claim.test_name
-                ),
-            ));
-        }
-        Outcome::Failed => {}
-    }
-
-    // Something failed. Was it only the new test, or did the model break the code?
-    // A test that fails because production code was sabotaged is not evidence
-    // about the original defect.
-    if after_passed < baseline_passed {
-        return Ok((
-            ProofVerdict::SuiteSabotaged,
-            after_passed,
-            after_failed,
-            format!(
-                "{baseline_passed} tests passed before the attempt and only {after_passed} after, \
-                 so production code was changed rather than a test being added"
-            ),
-        ));
-    }
-
-    // Confirm the failure really is the named test, not some unrelated flake.
-    let single = run_tests(
-        dir,
-        spec.test_command,
-        Some(claim.test_name.trim()),
-        spec.test_timeout,
-    )?;
-    let (single_passed, single_failed) = counts(&single.stdout);
-    if single_passed + single_failed == 0 {
-        return Ok((
-            ProofVerdict::TestNotFound,
-            after_passed,
-            after_failed,
-            format!("no test matches `{}`", claim.test_name),
-        ));
-    }
-    if single_failed == 0 {
-        return Ok((
-            ProofVerdict::TestDoesNotFail,
-            after_passed,
-            after_failed,
-            format!(
-                "`{}` passes on its own; the failure elsewhere is unrelated",
-                claim.test_name
-            ),
-        ));
-    }
-
-    Ok((
-        ProofVerdict::Proved,
-        after_passed,
-        after_failed,
-        format!(
-            "`{}` fails and all {baseline_passed} previously passing tests still pass",
-            claim.test_name
-        ),
-    ))
-}
-
 /// The model's changes as a patch, including files it newly created.
 fn capture_patch(dir: &Path) -> String {
     let add = std::process::Command::new("git")
@@ -275,12 +175,32 @@ fn capture_patch(dir: &Path) -> String {
         .unwrap_or_default()
 }
 
-fn first_error(stderr: &str) -> String {
-    stderr
-        .lines()
-        .find(|line| line.contains("error"))
-        .unwrap_or("the tree does not compile")
-        .chars()
-        .take(300)
-        .collect()
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_non_proved_verdict_reports_as_not_proved() {
+        for verdict in [
+            ProofVerdict::SuiteSabotaged,
+            ProofVerdict::TestDoesNotFail,
+            ProofVerdict::TestNotFound,
+            ProofVerdict::DidNotBuild,
+            ProofVerdict::TimedOut,
+            ProofVerdict::NoTestWritten,
+        ] {
+            let report = AttemptReport {
+                verdict,
+                claim: None,
+                baseline_passed: 50,
+                after_passed: 0,
+                after_failed: 0,
+                changed_files: vec![],
+                turns: None,
+                patch: String::new(),
+                detail: String::new(),
+            };
+            assert!(report.to_text().contains("NOT PROVED"), "{verdict:?}");
+        }
+    }
 }

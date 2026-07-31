@@ -6,7 +6,7 @@ mod prove;
 mod report;
 mod sweep;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -112,10 +112,7 @@ async fn main() -> Result<()> {
 }
 
 async fn run_prove(args: ProveArgs) -> Result<()> {
-    let repo = args
-        .repo
-        .canonicalize()
-        .map_err(|e| anyhow::anyhow!("cannot read repository {}: {e}", args.repo.display()))?;
+    let repo = real_path(&args.repo)?;
 
     let defect = match (&args.defect, &args.defect_file) {
         (Some(text), _) => text.clone(),
@@ -157,6 +154,23 @@ async fn run_prove(args: ProveArgs) -> Result<()> {
     Ok(())
 }
 
+/// Canonicalize a path, then strip Windows' extended-length `\\?\` prefix.
+///
+/// `canonicalize` returns that prefix on Windows and most tools handle it, but
+/// `git` does not: it fails with "could not create leading directories" when
+/// asked to make a worktree under such a path. Stripping it costs nothing on
+/// paths short enough to matter, and every path here is one a user typed.
+fn real_path(path: &Path) -> Result<PathBuf> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| anyhow::anyhow!("cannot read {}: {e}", path.display()))?;
+    let text = canonical.to_string_lossy();
+    Ok(match text.strip_prefix(r"\\?\") {
+        Some(stripped) => PathBuf::from(stripped),
+        None => canonical,
+    })
+}
+
 /// The key is only ever read from the environment. Passing it as an argument
 /// would put it in shell history and in the process list.
 fn api_key(requested: bool) -> Result<Option<String>> {
@@ -169,19 +183,9 @@ fn api_key(requested: bool) -> Result<Option<String>> {
 }
 
 async fn run_sweep(args: SweepArgs) -> Result<()> {
-    let repo = args
-        .repo
-        .canonicalize()
-        .map_err(|e| anyhow::anyhow!("cannot read repository {}: {e}", args.repo.display()))?;
+    let repo = real_path(&args.repo)?;
 
-    let api_key = if args.use_api_key {
-        let key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
-            anyhow::anyhow!("--use-api-key was given but ANTHROPIC_API_KEY is not set")
-        })?;
-        Some(key)
-    } else {
-        None
-    };
+    let api_key = api_key(args.use_api_key)?;
 
     let report = sweep::run(sweep::Request {
         repo: &repo,
