@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use bugsleuth_domain::{ProofClaim, proof_schema};
 
-use super::{ClaudeError, Run, envelope, invoke};
+use super::{ProviderError, Run, invoke};
 
 /// Tools a proof attempt needs. Wider than a sweep's, because writing a test and
 /// running it is the entire task — but still an explicit list, and still no
@@ -41,7 +41,7 @@ pub struct ProveResult {
     pub session_id: Option<String>,
 }
 
-pub async fn prove(request: ProveRequest<'_>) -> Result<ProveResult, ClaudeError> {
+pub async fn prove(request: ProveRequest<'_>) -> Result<ProveResult, ProviderError> {
     let outcome = invoke(Run {
         repo: request.worktree,
         model: request.model,
@@ -56,7 +56,7 @@ pub async fn prove(request: ProveRequest<'_>) -> Result<ProveResult, ClaudeError
     })
     .await?;
 
-    let claim: ProofClaim = envelope::structured(&outcome.result)?;
+    let claim: ProofClaim = crate::json::structured(&outcome.result)?;
     Ok(ProveResult {
         claim,
         turns: outcome.num_turns,

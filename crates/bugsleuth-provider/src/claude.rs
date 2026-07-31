@@ -12,7 +12,8 @@ use bugsleuth_domain::{Lane, RawFindings, finding_schema};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::process::{self, Invocation, ProcessError, preview};
+use crate::error::ProviderError;
+use crate::process::{self, Invocation, preview};
 
 use discover::resolve_binary;
 
@@ -26,30 +27,10 @@ pub use prove::{ProveRequest, ProveResult, prove};
 /// Tools a read-only review may use. An explicit allowlist rather than
 /// `--dangerously-skip-permissions`: a sweep that *cannot* write is a far
 /// stronger guarantee than one merely asked not to.
+pub(crate) const VENDOR: &str = "claude";
+
 const READ_ONLY_TOOLS: &str = "Read,Glob,Grep";
 const READ_ONLY_DENIED: &str = "Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch";
-
-#[derive(Debug, thiserror::Error)]
-pub enum ClaudeError {
-    #[error(
-        "the claude CLI could not be found. Install it (`npm install -g @anthropic-ai/claude-code`) and sign in with `claude`, or set an explicit binary path."
-    )]
-    NotFound,
-    #[error(transparent)]
-    Process(#[from] ProcessError),
-    #[error("claude CLI exited with code {code}: {message}")]
-    Failed { code: i32, message: String },
-    #[error(
-        "claude CLI exited with code {code} and produced no diagnostic output — usually a transient overload or rate limit"
-    )]
-    FailedSilently { code: i32 },
-    #[error("claude CLI produced no output")]
-    Empty,
-    #[error("could not read the claude CLI's response envelope: {0}")]
-    Envelope(String),
-    #[error("the model's reply did not match the required structure: {0}")]
-    Schema(String),
-}
 
 /// One (model x lane x repository) unit of work.
 pub struct ClaudeSweep<'a> {
@@ -84,7 +65,7 @@ pub struct SweepResult {
 }
 
 /// Run one lane sweep.
-pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ClaudeError> {
+pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> {
     let _ = spec.lane;
     let outcome = invoke(Run {
         repo: spec.repo,
@@ -100,7 +81,7 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ClaudeError> {
     })
     .await?;
 
-    let findings = envelope::structured(&outcome.result)?;
+    let findings = crate::json::structured(&outcome.result)?;
     Ok(SweepResult {
         findings,
         usage: outcome.usage,
@@ -125,10 +106,10 @@ pub(crate) struct Run<'a> {
     pub(crate) api_key: Option<&'a str>,
 }
 
-pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ClaudeError> {
+pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
     let binary = match run.binary {
         Some(path) => PathBuf::from(path),
-        None => resolve_binary().ok_or(ClaudeError::NotFound)?,
+        None => resolve_binary().ok_or_else(not_found)?,
     };
     let binary = binary.to_string_lossy().into_owned();
 
@@ -153,15 +134,22 @@ pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ClaudeError> 
         let code = output.code.unwrap_or(-1);
         let message = preview(output.stderr.trim(), 2000);
         return Err(if message.is_empty() {
-            ClaudeError::FailedSilently { code }
+            ProviderError::FailedSilently {
+                vendor: VENDOR,
+                code,
+            }
         } else {
-            ClaudeError::Failed { code, message }
+            ProviderError::Failed {
+                vendor: VENDOR,
+                code,
+                message,
+            }
         });
     }
 
     let stdout = output.stdout.trim();
     if stdout.is_empty() {
-        return Err(ClaudeError::Empty);
+        return Err(ProviderError::Empty(VENDOR));
     }
     envelope::parse(stdout)
 }
@@ -175,8 +163,8 @@ pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ClaudeError> 
 /// Note what this does *not* prove: `--version` succeeds for a CLI that is
 /// installed but not signed in. Authentication is only observable by making a
 /// real call, so a run still has to handle an auth failure at sweep time.
-pub async fn probe() -> Result<String, ClaudeError> {
-    let binary = resolve_binary().ok_or(ClaudeError::NotFound)?;
+pub async fn probe() -> Result<String, ProviderError> {
+    let binary = resolve_binary().ok_or_else(not_found)?;
     let output = process::run(Invocation {
         binary: &binary.to_string_lossy(),
         args: &["--version".to_string()],
@@ -189,12 +177,23 @@ pub async fn probe() -> Result<String, ClaudeError> {
     .await?;
 
     if !output.succeeded() {
-        return Err(ClaudeError::Failed {
+        return Err(ProviderError::Failed {
+            vendor: VENDOR,
             code: output.code.unwrap_or(-1),
             message: preview(output.stderr.trim(), 500),
         });
     }
     Ok(output.stdout.trim().to_string())
+}
+
+/// The CLI is missing. The message names the exact install and sign-in steps,
+/// because "not found" on its own sends the reader hunting.
+fn not_found() -> ProviderError {
+    ProviderError::NotFound {
+        vendor: VENDOR,
+        hint: "Install it with `npm install -g @anthropic-ai/claude-code` and sign in by running                `claude` once, or pass an explicit binary path."
+            .to_string(),
+    }
 }
 
 /// Build the non-interactive argv.

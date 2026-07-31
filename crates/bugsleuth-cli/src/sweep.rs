@@ -6,14 +6,48 @@ use std::time::Duration;
 use anyhow::Result;
 use bugsleuth_domain::{Finding, FindingId, Lane, ModelId, RawFinding};
 use bugsleuth_provider::claude::{self, ClaudeSweep};
+use bugsleuth_provider::codex::{self, CodexSweep};
 use bugsleuth_verify::verify_anchor;
 
 use crate::brief;
 use crate::report::{LaneReport, Rejected, Status, rank};
 
+/// Which CLI to run, and which model within it.
+///
+/// Dispatch is a plain enum rather than a trait with one implementation per
+/// vendor. The set of vendors is closed and small: three CLIs we ship support
+/// for ourselves. A trait would buy extensibility nobody needs while making the
+/// differences between adapters harder to see. Revisit when a fourth vendor
+/// appears and the shape has stopped moving.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Vendor {
+    Claude,
+    Codex,
+}
+
+impl Vendor {
+    /// Read a `vendor:model` spec such as `codex:gpt-5.6-codex`. A bare name
+    /// means Claude, which keeps the common case short.
+    pub fn parse(spec: &str) -> (Vendor, &str) {
+        match spec.split_once(':') {
+            Some(("codex", model)) => (Vendor::Codex, model),
+            Some(("claude", model)) => (Vendor::Claude, model),
+            _ => (Vendor::Claude, spec),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Vendor::Claude => "claude",
+            Vendor::Codex => "codex",
+        }
+    }
+}
+
 pub struct Request<'a> {
     pub repo: &'a Path,
     pub lane: Lane,
+    /// `vendor:model`, or a bare model name for Claude.
     pub model: &'a str,
     pub scope: Option<&'a str>,
     pub max_turns: u32,
@@ -25,23 +59,36 @@ pub struct Request<'a> {
 /// *reported state*, because the one outcome this tool must never produce is a
 /// lane that quietly looks clean when it never ran.
 pub async fn run(request: Request<'_>) -> LaneReport {
-    let model_label = format!("claude:{}", request.model);
+    let (vendor, model) = Vendor::parse(request.model);
+    let model_label = format!("{}:{model}", vendor.label());
     let brief = brief::build(request.lane, request.scope);
 
-    let result = claude::sweep(ClaudeSweep {
-        repo: request.repo,
-        lane: request.lane,
-        model: request.model,
-        brief: &brief,
-        timeout: request.timeout,
-        max_turns: request.max_turns,
-        binary: None,
-        api_key: request.api_key,
-    })
-    .await;
+    let outcome = match vendor {
+        Vendor::Claude => claude::sweep(ClaudeSweep {
+            repo: request.repo,
+            lane: request.lane,
+            model,
+            brief: &brief,
+            timeout: request.timeout,
+            max_turns: request.max_turns,
+            binary: None,
+            api_key: request.api_key,
+        })
+        .await
+        .map(|r| (r.findings.findings, r.turns)),
+        Vendor::Codex => codex::sweep(CodexSweep {
+            repo: request.repo,
+            model,
+            brief: &brief,
+            timeout: request.timeout,
+            binary: None,
+        })
+        .await
+        .map(|r| (r.findings.findings, None)),
+    };
 
-    let result = match result {
-        Ok(result) => result,
+    let (raw, turns) = match outcome {
+        Ok(outcome) => outcome,
         Err(error) => {
             return LaneReport {
                 lane: request.lane.title().to_string(),
@@ -55,19 +102,13 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         }
     };
 
-    let (findings, rejected) = verify_all(
-        request.repo,
-        request.lane,
-        &ModelId::new(&model_label),
-        result.findings.findings,
-    );
+    let (findings, rejected) =
+        verify_all(request.repo, request.lane, &ModelId::new(&model_label), raw);
 
     LaneReport {
         lane: request.lane.title().to_string(),
         model: model_label,
-        status: Status::Swept {
-            turns: result.turns,
-        },
+        status: Status::Swept { turns },
         findings,
         rejected,
     }
@@ -121,15 +162,53 @@ fn verify_all(
 /// real call fails. For a sweep that is worth avoiding, because the failure
 /// would otherwise arrive after the user has waited for several lanes.
 pub async fn preflight() -> Result<()> {
-    let probe = claude::probe().await;
-    match probe {
-        Ok(version) => {
-            println!("claude CLI: OK ({version})");
-            Ok(())
+    let (claude, codex) = tokio::join!(claude::probe(), codex::probe());
+    let mut usable = 0;
+    for (name, probe) in [("claude", claude), ("codex", codex)] {
+        match probe {
+            Ok(version) => {
+                println!("{name}: OK ({version})");
+                usable += 1;
+            }
+            Err(error) => println!("{name}: UNAVAILABLE - {error}"),
         }
-        Err(error) => {
-            println!("claude CLI: UNAVAILABLE — {error}");
-            std::process::exit(2);
-        }
+    }
+    println!(
+        "
+{usable} of 2 provider CLIs can be started."
+    );
+    println!("This does not prove they are signed in; only a real sweep does that.");
+    if usable == 0 {
+        std::process::exit(2);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_bare_model_name_means_claude_so_the_common_case_stays_short() {
+        assert_eq!(Vendor::parse("sonnet"), (Vendor::Claude, "sonnet"));
+    }
+
+    #[test]
+    fn a_vendor_prefix_selects_that_vendor() {
+        assert_eq!(
+            Vendor::parse("codex:gpt-5.6-codex"),
+            (Vendor::Codex, "gpt-5.6-codex")
+        );
+        assert_eq!(Vendor::parse("claude:opus"), (Vendor::Claude, "opus"));
+    }
+
+    #[test]
+    fn an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped() {
+        // Model ids legitimately contain colons, so an unrecognised prefix must
+        // not be swallowed as a vendor.
+        assert_eq!(
+            Vendor::parse("anthropic:claude-opus-5"),
+            (Vendor::Claude, "anthropic:claude-opus-5")
+        );
     }
 }

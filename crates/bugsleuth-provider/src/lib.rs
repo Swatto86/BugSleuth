@@ -13,7 +13,12 @@
 //! brief into raw, still-untrusted findings.
 
 pub mod claude;
+pub mod codex;
+mod error;
+mod find;
+mod json;
 pub mod process;
 
-pub use claude::{ClaudeError, ClaudeSweep, SweepResult, Usage};
+pub use claude::{ClaudeSweep, SweepResult, Usage};
+pub use error::ProviderError;
 pub use process::{CliOutput, Invocation, ProcessError};
