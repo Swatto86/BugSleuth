@@ -253,3 +253,60 @@ the process list, where any other process on the machine can read it.
 
 **Why:** you cannot spot an 900-line file by reading a diff. A rule that cannot
 be verified by reading has to be a rule the build checks.
+
+### 2.12 Vendor dispatch is an enum, not a trait
+
+**Decided:** picking between Claude and Codex is a plain `match` on a two-case
+enum. There is no `Provider` interface.
+
+**Why:** the brief called for a trait, and decision 2.2 deferred it until a
+second adapter existed so it could be designed from evidence rather than from
+one example. The second adapter now exists, and the evidence argues against the
+trait. The set of vendors is closed and small — three CLIs we ship support for
+ourselves — so a trait would buy extensibility nobody needs. It would also hide
+the differences between adapters behind a uniform surface, and those differences
+(schema as a file versus inline, sandbox flag versus tool allowlist) are exactly
+what a reader needs to see.
+
+**Reverse:** introduce the trait when a fourth vendor appears or when the engine
+genuinely needs to hold a heterogeneous list. The compiler enumerates every call
+site.
+
+### 2.13 Codex runs read-only via its sandbox, not a tool allowlist
+
+**Decided:** Codex sweeps pass `--sandbox read-only`; Claude sweeps use an
+explicit tool allowlist. Different mechanisms, same guarantee.
+
+**Why:** each vendor's own mechanism is the stronger one on that vendor. Codex's
+sandbox is enforced below the agent — the operating system refuses the write —
+which is a better guarantee than asking the agent not to try. Claude has no
+equivalent sandbox flag, so the allowlist is its strongest available control.
+Forcing both into one shape would weaken whichever one got the worse fit.
+
+Both also disable the reviewed repository's own configuration: `--safe-mode` for
+Claude, `--ignore-user-config --ignore-rules` for Codex.
+
+### 2.14 One error type for the whole provider crate
+
+**Decided:** a single `ProviderError` with a `vendor` label, rather than one
+error type per adapter.
+
+**Why:** the engine above only needs to know which of a small number of things
+went wrong and whether retrying is worth it. Per-vendor error types would push
+that decision upward and duplicate it. `is_transient` lives here so the retry
+policy is written once — a silent non-zero exit is how these CLIs report an
+overload blip, and that judgement should not be re-derived per adapter.
+
+**Introduced when the second adapter arrived, not before.** Sharing designed
+from one example is a guess.
+
+### 2.15 The seeded fixture keeps a bug the tool found and I missed
+
+**Decided:** `parse_price("12.3")` returns 1203 pence instead of 1230. Codex
+reported it; it was not planted. It stays, and the answer key records that the
+tool found it.
+
+**Why:** a fixture curated to contain exactly what the tool already finds cannot
+measure the tool. Leaving a defect that the fixture's own author missed is a
+more honest test, and it is direct evidence for the cross-vendor premise —
+Claude swept the same file and did not report it.

@@ -3,13 +3,20 @@
 Unattended session, 31 July – 1 August 2026. Written for someone who does not
 read Rust.
 
-**Headline: the experiment that decides the project succeeded, and I have the
+**Two headlines.**
+
+**One: the experiment that decides the project succeeded, and I have the
 evidence to back it.** A model asked to prove a defect with a failing test did
 so on both real defects it was given, and correctly refused on both fabricated
-ones. Details in section 2 — that is the part worth your attention.
+ones. Section 2 — that is the part worth your attention.
 
-Nothing here is production-ready. It is a working harness with a strong
-experimental result.
+**Two: the cross-vendor premise is not just a theory.** On the same code with
+the same instructions, Claude reported 5 defects and Codex reported 9. Codex
+found everything Claude found, plus four more — including a real bug that
+neither Claude nor I had noticed. Section 4.
+
+Nothing here is production-ready. It is a working harness with two strong
+experimental results.
 
 ---
 
@@ -21,7 +28,7 @@ was explicitly out of scope for an unattended night.
 | Piece | What it does |
 |---|---|
 | `domain` | The vocabulary: lanes, findings, proof verdicts. Pure definitions, no behaviour |
-| `provider` | Drives the Claude Code CLI as a subprocess, using your signed-in session |
+| `provider` | Drives the Claude Code and Codex CLIs as subprocesses, using your signed-in sessions |
 | `verify` | Checks findings against reality: does this code exist? Does this test really fail? |
 | `bugsleuth` | The command-line harness that ties them together |
 
@@ -33,6 +40,10 @@ bugsleuth preflight
 
 ```bash
 bugsleuth sweep --repo <path> --lane correctness --model sonnet
+```
+
+```bash
+bugsleuth sweep --repo <path> --lane correctness --model codex:
 ```
 
 ```bash
@@ -168,7 +179,47 @@ One caveat: that fixture is small and its bugs are blatant. It proves the
 plumbing works. It does not tell you what the detection rate is on a real
 codebase, which I did not measure.
 
-## 4. Bugs found in my own work
+## 4. Cross-vendor: the premise, tested
+
+BugSleuth exists because asking one model to review another model's work has
+correlated blind spots. That is a claim, and until tonight it was untested here.
+
+I ran the **same lane, on the same code, with the same instructions**, through
+both vendors.
+
+| Vendor | Findings | Discarded |
+|---|---|---|
+| Claude (sonnet) | 5 | 0 |
+| Codex (default model) | **9** | 0 |
+
+Codex found all five that Claude found, and four more:
+
+- Three overflow paths Claude did not mention at all.
+- A discount function that underflows if given a percentage above 100.
+- **A real bug that was in the fixture by accident.** `parse_price("12.3")`
+  returns 1203 pence when it should return 1230 - it treats the part after the
+  decimal point as a count of pence rather than as decimal digits.
+
+That last one is the interesting one. I wrote that fixture and its answer key
+myself, and I did not notice it. Claude did not report it. Codex did. I then ran
+the function to confirm: it returns 1203.
+
+I have left the bug in the fixture and added it to the answer key, noting that
+the tool found it rather than me. A fixture curated to match what the tool
+already finds is not much of a test.
+
+**What this establishes:** on one lane, on one small repository, two vendors
+produced materially different results, and the difference was real signal rather
+than noise - every extra finding was a genuine defect, and all nine anchored to
+real code.
+
+**What it does not:** one comparison on one small repository. It does not tell
+you Codex is better than Claude in general. The honest reading is narrower and
+more useful: **they differ, and the difference contained real defects that the
+other missed.** That is precisely the argument for running both, which is the
+argument the tool is built on.
+
+## 5. Bugs found in my own work
 
 Worth recording, because they are the kind you could not catch by reading a diff.
 
@@ -187,7 +238,7 @@ Worth recording, because they are the kind you could not catch by reading a diff
    rather than pipes, and killing a suite that outstays its timeout — a model can
    write an infinite loop into a test.
 
-## 5. Notable things learned from Eir
+## 6. Notable things learned from Eir
 
 Full detail is in `DECISIONS.md`. Three that changed what I built:
 
@@ -203,38 +254,43 @@ Full detail is in `DECISIONS.md`. Three that changed what I built:
   system's pipe buffer. BugSleuth does it the correct way from the start, with
   the reasoning preserved. That is a bug I would otherwise have shipped.
 
-## 6. Quota
+## 7. Quota
 
-Cap for the night was about 40 model invocations. **Used: 5.** One M0 sweep and
-four proof attempts. No rate limit was hit.
+Cap for the night was about 40 model invocations. **Used: 7.** One M0 sweep,
+four proof attempts, and two Codex sweeps — the first of which failed instantly
+on a bad model name and cost nothing. No rate limit was hit.
 
-## 7. What I did not do
+## 8. What I did not do
 
 - **No user interface.** Out of scope by instruction.
-- **Only one AI vendor.** Everything runs on Claude. Since the tool's premise is
-  that different vendors have different blind spots, this is the most important
-  gap.
-- **No judge, no multi-model comparison.** That is M2, and it needs a second
-  vendor first.
+- **Kilo, the third vendor, is not wired up.** Two of three are done.
+- **No judge.** With two vendors now producing overlapping findings, merging
+  duplicates and normalising severity is the next real piece of work, and it is
+  the part the M2 kill gate tests. I did not reach it.
+- **No proof step for Codex.** Codex can sweep but cannot yet be asked to prove
+  a finding; only Claude can.
 - **No persistence or resume.** A run that dies starts over.
 - **Detection rate on a real codebase is unmeasured.** I measured whether a
   claimed defect can be proved, not what fraction of real defects get found.
 
-## 8. What I would do next, in order
+## 9. What I would do next, in order
 
-1. **Add the Codex adapter.** Cross-vendor is the core premise and is currently
-   untested. Until a second vendor works, this is Claude reviewing code.
+1. **Build the judge**, and run the M2 kill gate. Two vendors now produce
+   overlapping findings on the same code, which is exactly the input a judge
+   needs. The gate asks whether the merged top-10 beats the best single model's
+   top-10; nothing before this point can answer it.
 2. **Measure detection rate properly.** Revert several real bug-fix commits in
-   Alder and count how many the sweep finds. Cheap and high-information.
+   Alder and count how many each vendor finds. Cheap and high-information,
+   and now it can be done per vendor.
 3. **Try harder proof cases.** Concurrency, I/O, timing. I expect the success
-   rate to drop, and it would be better to know by how much before building on
+   rate to drop, and it is better to know by how much before building further on
    the assumption.
-4. **Then the judge**, and the M2 kill gate.
+4. **Add Kilo**, and the Codex proof path.
 
-## 9. State of the repository
+## 10. State of the repository
 
 Everything is committed and green. `scripts/verify.ps1` runs the full gate:
-formatting, linting with warnings as errors, 55 tests, a release build, and a
+formatting, linting with warnings as errors, 66 tests, a release build, and a
 check that no source file exceeds 400 lines.
 
 ```bash
