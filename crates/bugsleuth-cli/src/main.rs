@@ -2,6 +2,7 @@
 //! every anchor, and print what survived.
 
 mod brief;
+mod merge;
 mod prove;
 mod report;
 mod sweep;
@@ -31,8 +32,20 @@ enum Command {
     /// Ask a model to demonstrate a defect with a failing test, then check the
     /// attempt by running the tests independently.
     Prove(ProveArgs),
+    /// Merge several sweep reports into one ranked list of distinct defects.
+    Judge(JudgeArgs),
     /// Check that a configured provider CLI can be found and run.
     Preflight,
+}
+
+#[derive(Parser)]
+struct JudgeArgs {
+    /// Sweep report JSON files, as written by `sweep --json-out`.
+    #[arg(required = true)]
+    reports: Vec<PathBuf>,
+    /// Write the merged report here as JSON.
+    #[arg(long)]
+    json_out: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -107,8 +120,34 @@ async fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Sweep(args) => run_sweep(args).await,
         Command::Prove(args) => run_prove(args).await,
+        Command::Judge(args) => run_judge(args),
         Command::Preflight => sweep::preflight().await,
     }
+}
+
+fn run_judge(args: JudgeArgs) -> Result<()> {
+    let merged = merge::merge(&args.reports)?;
+    print!("{}", merged.to_text());
+
+    if let Some(path) = args.json_out {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_string_pretty(&merged.ranked)?;
+        std::fs::write(&path, json)
+            .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", path.display()))?;
+        eprintln!(
+            "
+wrote {}",
+            path.display()
+        );
+    }
+
+    // A merge that includes a failed sweep must not look like a clean pass.
+    if !merged.unswept.is_empty() {
+        std::process::exit(2);
+    }
+    Ok(())
 }
 
 async fn run_prove(args: ProveArgs) -> Result<()> {

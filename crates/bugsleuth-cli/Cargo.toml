@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 bugsleuth-domain = { workspace = true }
+bugsleuth-judge = { workspace = true }
 bugsleuth-provider = { workspace = true }
 bugsleuth-verify = { workspace = true }
 anyhow = { workspace = true }

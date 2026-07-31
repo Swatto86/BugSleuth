@@ -10,6 +10,7 @@ repository = "https://github.com/Swatto86/BugSleuth"
 
 [workspace.dependencies]
 bugsleuth-domain = { path = "crates/bugsleuth-domain" }
+bugsleuth-judge = { path = "crates/bugsleuth-judge" }
 bugsleuth-provider = { path = "crates/bugsleuth-provider" }
 bugsleuth-verify = { path = "crates/bugsleuth-verify" }
 anyhow = "1"
