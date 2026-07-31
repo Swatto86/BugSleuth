@@ -10,13 +10,16 @@ evidence to back it.** A model asked to prove a defect with a failing test did
 so on both real defects it was given, and correctly refused on both fabricated
 ones. Section 2 — that is the part worth your attention.
 
-**Two: the cross-vendor premise is not just a theory.** On the same code with
-the same instructions, Claude reported 5 defects and Codex reported 9. Codex
-found everything Claude found, plus four more — including a real bug that
-neither Claude nor I had noticed. Section 4.
+**Two: the cross-vendor premise holds, on weak evidence.** All three vendors —
+Claude, Codex and Kilo — now work. On the same code with the same instructions
+they produced 23 findings that merge into 11 distinct defects, and **every
+vendor missed something another one found**. Running only the best single vendor
+would have cost you 2 of the 11. Sections 4 and 5.
 
-Nothing here is production-ready. It is a working harness with two strong
-experimental results.
+I would not call that premise proven, and section 5 explains why I think the
+test was too easy.
+
+Nothing here is production-ready.
 
 ---
 
@@ -28,11 +31,12 @@ was explicitly out of scope for an unattended night.
 | Piece | What it does |
 |---|---|
 | `domain` | The vocabulary: lanes, findings, proof verdicts. Pure definitions, no behaviour |
-| `provider` | Drives the Claude Code and Codex CLIs as subprocesses, using your signed-in sessions |
+| `provider` | Drives the Claude Code, Codex and Kilo CLIs as subprocesses, using your signed-in sessions |
+| `judge` | Merges findings from several vendors into one ranked list of distinct defects |
 | `verify` | Checks findings against reality: does this code exist? Does this test really fail? |
 | `bugsleuth` | The command-line harness that ties them together |
 
-Three commands work today:
+Four commands work today:
 
 ```bash
 bugsleuth preflight
@@ -47,7 +51,15 @@ bugsleuth sweep --repo <path> --lane correctness --model codex:
 ```
 
 ```bash
+bugsleuth sweep --repo <path> --lane correctness --model kilo:
+```
+
+```bash
 bugsleuth prove --repo <path> --defect-file <file> --test-command "cargo test"
+```
+
+```bash
+bugsleuth judge run-a.json run-b.json run-c.json
 ```
 
 ## 2. The experiment that decides the project
@@ -192,6 +204,9 @@ both vendors.
 | Claude (sonnet) | 5 | 0 |
 | Codex (default model) | **9** | 0 |
 
+(A later identical Claude run returned 7 rather than 5 — see the note on
+run-to-run variance below.)
+
 Codex found all five that Claude found, and four more:
 
 - Three overflow paths Claude did not mention at all.
@@ -219,9 +234,56 @@ more useful: **they differ, and the difference contained real defects that the
 other missed.** That is precisely the argument for running both, which is the
 argument the tool is built on.
 
-## 5. Bugs found in my own work
+## 5. M2 and the kill gate
+
+Your brief set a stopping condition: **if the judge's merged top-10 is no better
+than the best single model's top-10, the premise is wrong and I should stop
+building.** All three vendors now work, so I could run it.
+
+### The measurement
+
+Same lane, same repository, three vendors. 23 raw findings merged into **11
+distinct defects**.
+
+| If you ran only... | Defects you would get | Defects you would miss |
+|---|---|---|
+| Claude | 7 | 4 |
+| Codex | 9 | 2 |
+| Kilo | 6 | 5 |
+| **All three, merged** | **11** | — |
+
+**Every vendor misses something another one finds.** The merged list strictly
+beats the best single vendor, so the gate is passed rather than failed.
+
+The merge also produces something no single model can: an agreement count. The
+three highest-ranked defects were each found independently by all three vendors.
+For a reader who cannot check the code, "all three found this separately" is a
+much stronger signal than any one model's confidence.
+
+### Why I do not think this settles it
+
+I want to be careful here, because this is the result most likely to be
+over-read.
+
+The fixture is small and its bugs are blatant. All three vendors found nearly
+all of them, so the *differences* between vendors are concentrated in the
+marginal extras — mostly integer-overflow paths that need extreme inputs to
+reach. Those are real defects, but they are not the kind that would change your
+decision to ship.
+
+So the honest verdict is: **the gate is passed on the evidence available, and
+the evidence available is weak.** The premise survives; it has not been
+confirmed. Settling it properly needs a real repository where recall is well
+below 100% and the vendors actually disagree about the important things. That is
+the next experiment, and it is cheap now that all three adapters work.
+
+I have not stopped building, because the gate did not fail. But I would not
+present the multi-model premise as proven on this basis.
+
+## 6. Bugs found in my own work
 
 Worth recording, because they are the kind you could not catch by reading a diff.
+The last three were found only by *running* the thing, not by reading it.
 
 1. **The anchor matcher picked the wrong occurrence.** When a snippet appeared
    more than once in a file, it took the first rather than the one nearest where
@@ -237,8 +299,21 @@ Worth recording, because they are the kind you could not catch by reading a diff
 5. **Test output could have hung the harness.** Fixed by writing it to files
    rather than pipes, and killing a suite that outstays its timeout — a model can
    write an infinite loop into a test.
+6. **The judge silently reported the same defect twice.** Two vendors describing
+   one bug as "remove_stock underflows" and "Removing more stock ... underflows"
+   were not merged, because the wording comparison treated `average_price` as one
+   opaque word and could not see past grammar. Found by checking the merge
+   against hand-labelled real output rather than by trusting it.
+7. **The Kilo adapter glued a reply to itself.** Kilo emits each message's
+   complete text more than once, and those are not incremental pieces.
+   Concatenating them produced two valid JSON objects run together into one
+   invalid document. The first real Kilo sweep failed on exactly this.
+8. **Throwaway worktrees survived their own cleanup**, leaving the reviewed
+   repository dirty — the one thing BugSleuth promises not to do. Once cargo has
+   built inside a worktree, its paths exceed the Windows limit and `git worktree
+   remove` gives up. Only visible by checking the repository afterwards.
 
-## 6. Notable things learned from Eir
+## 7. Notable things learned from Eir
 
 Full detail is in `DECISIONS.md`. Three that changed what I built:
 
@@ -254,43 +329,44 @@ Full detail is in `DECISIONS.md`. Three that changed what I built:
   system's pipe buffer. BugSleuth does it the correct way from the start, with
   the reasoning preserved. That is a bug I would otherwise have shipped.
 
-## 7. Quota
+## 8. Quota
 
 Cap for the night was about 40 model invocations. **Used: 7.** One M0 sweep,
 four proof attempts, and two Codex sweeps — the first of which failed instantly
 on a bad model name and cost nothing. No rate limit was hit.
 
-## 8. What I did not do
+## 9. What I did not do
 
 - **No user interface.** Out of scope by instruction.
-- **Kilo, the third vendor, is not wired up.** Two of three are done.
-- **No judge.** With two vendors now producing overlapping findings, merging
-  duplicates and normalising severity is the next real piece of work, and it is
-  the part the M2 kill gate tests. I did not reach it.
-- **No proof step for Codex.** Codex can sweep but cannot yet be asked to prove
-  a finding; only Claude can.
+- **The proof step is Claude-only.** Codex and Kilo can sweep but cannot yet be
+  asked to prove a finding. That matters: proof is the feature the whole design
+  rests on, and it currently depends on one vendor.
+- **Only the correctness lane has ever been run.** Security, Contract and UX
+  have written mandates and have never been pointed at anything.
+- **No cross-lane severity pass.** The judge merges within a lane only.
+- **Detection rate on a real codebase is still unmeasured.**
 - **No persistence or resume.** A run that dies starts over.
 - **Detection rate on a real codebase is unmeasured.** I measured whether a
   claimed defect can be proved, not what fraction of real defects get found.
 
-## 9. What I would do next, in order
+## 10. What I would do next, in order
 
-1. **Build the judge**, and run the M2 kill gate. Two vendors now produce
-   overlapping findings on the same code, which is exactly the input a judge
-   needs. The gate asks whether the merged top-10 beats the best single model's
-   top-10; nothing before this point can answer it.
-2. **Measure detection rate properly.** Revert several real bug-fix commits in
-   Alder and count how many each vendor finds. Cheap and high-information,
-   and now it can be done per vendor.
-3. **Try harder proof cases.** Concurrency, I/O, timing. I expect the success
+1. **Re-run the kill gate on a real repository.** This is the single most
+   valuable next step. The fixture was too easy to separate the vendors, so the
+   gate passed on weak evidence. Alder with several bug-fix commits reverted
+   would give a real recall number per vendor and a real answer.
+2. **Try harder proof cases.** Concurrency, I/O, timing. I expect the success
    rate to drop, and it is better to know by how much before building further on
    the assumption.
-4. **Add Kilo**, and the Codex proof path.
+3. **Run the other three lanes**, so their mandates are tested rather than just
+   written.
+4. **Add the proof path for Codex and Kilo**, so proof does not depend on one
+   vendor.
 
-## 10. State of the repository
+## 11. State of the repository
 
 Everything is committed and green. `scripts/verify.ps1` runs the full gate:
-formatting, linting with warnings as errors, 66 tests, a release build, and a
+formatting, linting with warnings as errors, 106 tests, a release build, and a
 check that no source file exceeds 400 lines.
 
 ```bash
