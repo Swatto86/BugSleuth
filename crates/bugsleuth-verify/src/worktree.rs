@@ -46,7 +46,7 @@ impl Worktree {
 
         // A previous run that was killed rather than dropped can leave both
         // behind; clear them so a retry is not blocked by its own wreckage.
-        let _ = remove(repo, &path);
+        remove(repo, &path);
         let _ = git(repo, &["branch", "-D", &branch]);
 
         git(
@@ -101,16 +101,47 @@ impl Worktree {
 
 impl Drop for Worktree {
     fn drop(&mut self) {
-        let _ = remove(&self.repo, &self.path);
+        remove(&self.repo, &self.path);
         let _ = git(&self.repo, &["branch", "-D", &self.branch]);
     }
 }
 
-fn remove(repo: &Path, path: &Path) -> Result<String, WorktreeError> {
-    git(
+/// Delete a worktree directory and deregister it.
+///
+/// `git worktree remove` alone is not enough. If anything built inside the
+/// worktree — and a proof attempt runs `cargo test`, so it will have — the
+/// resulting `target/` paths exceed the Windows 260-character limit and git
+/// gives up with "Filename too long", leaving the directory behind. That is not
+/// cosmetic: the leftovers make the *reviewed repository* dirty, which breaks
+/// the clean-baseline check the next proof attempt depends on, and quietly
+/// litters a repository BugSleuth promised not to modify.
+///
+/// So: ask git first, then delete whatever survives ourselves, using the
+/// extended-length path form that lifts the limit, and prune git's registry.
+fn remove(repo: &Path, path: &Path) {
+    let _ = git(
         repo,
         &["worktree", "remove", "--force", &path.to_string_lossy()],
-    )
+    );
+    if path.exists() {
+        let _ = std::fs::remove_dir_all(long_path(path));
+    }
+    // Whether or not the directory went, git's registry must not keep pointing
+    // at it, or the next run cannot reuse the same worktree name.
+    let _ = git(repo, &["worktree", "prune"]);
+}
+
+/// Windows' extended-length path form, which raises the 260-character limit.
+/// A no-op elsewhere, and on paths that already carry the prefix.
+fn long_path(path: &Path) -> PathBuf {
+    if !cfg!(windows) {
+        return path.to_path_buf();
+    }
+    let text = path.to_string_lossy();
+    if text.starts_with(r"\\?\") || !path.is_absolute() {
+        return path.to_path_buf();
+    }
+    PathBuf::from(format!(r"\\?\{}", text.replace('/', "\\")))
 }
 
 fn git(cwd: &Path, args: &[&str]) -> Result<String, WorktreeError> {
@@ -167,6 +198,81 @@ mod tests {
     fn a_long_label_is_truncated_rather_than_producing_an_unusable_path() {
         let slug = sanitize(&"a".repeat(200));
         assert_eq!(slug.len(), 48);
+    }
+
+    #[test]
+    fn a_long_absolute_path_gets_the_extended_length_prefix_on_windows() {
+        let path = Path::new(r"C:\Users\x\repo\.bugsleuth-worktrees\run");
+        let converted = long_path(path);
+        if cfg!(windows) {
+            assert!(
+                converted.to_string_lossy().starts_with(r#"\\?\"#),
+                "got {}",
+                converted.display()
+            );
+        } else {
+            assert_eq!(converted, path);
+        }
+    }
+
+    #[test]
+    fn a_path_that_already_has_the_prefix_is_not_given_a_second_one() {
+        let path = Path::new(r#"\\?\C:\repo\wt"#);
+        assert_eq!(long_path(path), path);
+    }
+
+    /// A throwaway git repository with one commit.
+    fn temp_repo(name: &str) -> Option<PathBuf> {
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-worktree-tests")
+            .join(format!("{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(long_path(&dir));
+        std::fs::create_dir_all(&dir).ok()?;
+        git(&dir, &["init", "-q"]).ok()?;
+        git(&dir, &["config", "user.email", "t@example.invalid"]).ok()?;
+        git(&dir, &["config", "user.name", "test"]).ok()?;
+        std::fs::write(dir.join("a.txt"), "hello\n").ok()?;
+        git(&dir, &["add", "-A"]).ok()?;
+        git(&dir, &["commit", "-qm", "base"]).ok()?;
+        Some(dir)
+    }
+
+    #[test]
+    fn dropping_a_worktree_deletes_it_even_with_deeply_nested_build_output() {
+        let Some(repo) = temp_repo("deep") else {
+            // No usable git in this environment; the other tests still cover the
+            // pure logic. Better to skip than to fail for an unrelated reason.
+            return;
+        };
+
+        let path = {
+            let worktree = match Worktree::create(&repo, "HEAD", "deep") {
+                Ok(worktree) => worktree,
+                Err(_) => return,
+            };
+            let path = worktree.path().to_path_buf();
+
+            // Imitate what `cargo test` leaves behind inside a proof worktree:
+            // paths long enough that `git worktree remove` fails on Windows with
+            // "Filename too long" and silently leaves the directory in place.
+            let mut deep = path.join("target");
+            for segment in 0..12 {
+                deep = deep.join(format!(
+                    "{segment}-a-rather-long-directory-name-like-cargo-makes"
+                ));
+            }
+            let _ = std::fs::create_dir_all(long_path(&deep));
+            let _ = std::fs::write(long_path(&deep.join("artifact.bin")), b"x");
+            assert!(path.exists(), "the worktree should exist before the drop");
+            path
+        };
+
+        assert!(
+            !path.exists(),
+            "the worktree survived its own drop at {}; it would dirty the reviewed repository",
+            path.display()
+        );
+        let _ = std::fs::remove_dir_all(long_path(&repo));
     }
 
     #[test]

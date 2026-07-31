@@ -1,0 +1,116 @@
+{
+  "lane": "Correctness",
+  "model": "kilo:",
+  "status": {
+    "state": "swept",
+    "turns": null
+  },
+  "findings": [
+    {
+      "id": "correctness-0",
+      "lane": "correctness",
+      "model": "kilo:",
+      "title": "remove_stock underflows when count exceeds available quantity",
+      "severity": "critical",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 36,
+        "claimed_line": 36,
+        "snippet": "        item.quantity -= count;"
+      },
+      "explanation": "The subtraction uses unchecked arithmetic on a u32. If count > item.quantity, the value wraps around to near-maximum in release builds (or panics in debug builds). The method returns Ok with the wrapped/panicked quantity instead of reporting an error.",
+      "failure_scenario": "Call remove_stock(\"A\", 15) when item A has quantity 10. In debug mode the program panics with 'attempt to subtract with overflow'. In release mode, item.quantity wraps to 4294967291, returning Ok(4294967291). Stock is reported as having billions of units instead of zero or an error."
+    },
+    {
+      "id": "correctness-1",
+      "lane": "correctness",
+      "model": "kilo:",
+      "title": "average_price divides by zero when inventory is empty",
+      "severity": "critical",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 43,
+        "claimed_line": 43,
+        "snippet": "        total / self.items.len() as u64"
+      },
+      "explanation": "When the inventory contains no items, self.items.len() is 0, and casting to u64 yields 0. Dividing by zero panics in debug mode and produces an undefined value (wraps to max) in release mode.",
+      "failure_scenario": "Create a new Inventory and call average_price() without adding any items. The program panics with 'attempt to divide by zero' (debug) or returns 0/undefined behaviour (release)."
+    },
+    {
+      "id": "correctness-2",
+      "lane": "correctness",
+      "model": "kilo:",
+      "title": "top_by_value panics when n exceeds the number of items",
+      "severity": "high",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 50,
+        "claimed_line": 50,
+        "snippet": "        items[..n].to_vec()"
+      },
+      "explanation": "Slicing items[..n] requires that n <= items.len(). If the caller passes an n larger than the number of items in inventory, this slice panics with 'range start index starts past end of slice'.",
+      "failure_scenario": "Call top_by_value(100) on an inventory containing only 3 items. The program panics because the slice index 100 is out of bounds for a vector of length 3."
+    },
+    {
+      "id": "correctness-4",
+      "lane": "correctness",
+      "model": "kilo:",
+      "title": "parse_price panics on input lacking a decimal point",
+      "severity": "high",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 26,
+        "claimed_line": 26,
+        "snippet": "    let (pounds, pence) = input.split_once('.').unwrap();"
+      },
+      "explanation": "split_once('.') returns None when the input contains no period. Calling unwrap() on None panics. A plain integer price string like '100' causes an unrecoverable panic.",
+      "failure_scenario": "Call parse_price('100') or parse_price('free'). The program panics with 'called Option::unwrap() on a None value'."
+    },
+    {
+      "id": "correctness-5",
+      "lane": "correctness",
+      "model": "kilo:",
+      "title": "parse_price panics when pounds or pence components are not valid integers",
+      "severity": "high",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 27,
+        "claimed_line": 27,
+        "snippet": "    pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()"
+      },
+      "explanation": "parse::<u64>() returns Err for non-numeric input. Unwrapping the error panics. Inputs like 'abc.def', '12.', or '.34' all cause a panic instead of returning a parseable error.",
+      "failure_scenario": "Call parse_price('abc.def') or parse_price('12.') or parse_price('.34'). The program panics with 'called Result::unwrap() on an Err value'."
+    },
+    {
+      "id": "correctness-3",
+      "lane": "correctness",
+      "model": "kilo:",
+      "title": "basket_total uses strict inequality instead of >=, missing discount thresholds per documentation",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 14,
+        "claimed_line": 14,
+        "snippet": "    let percent = if quantity > 50 {\n        10\n    } else if quantity > 10 {\n        5\n    } else {"
+      },
+      "explanation": "The doc comment says 'Baskets of 10 or more items get 5% off; 50 or more get 10% off', but the code uses strict greater-than (>), not greater-than-or-equal (>=). A basket of exactly 10 items gets 0% discount instead of 5%, and a basket of exactly 50 items gets 5% instead of 10%.",
+      "failure_scenario": "Call basket_total(100, 10) expecting a 5% discount (total 950 pence). The code gives 0% discount, returning 1000. Similarly basket_total(100, 50) returns 4750 instead of the documented 4500."
+    },
+    {
+      "id": "correctness-6",
+      "lane": "correctness",
+      "model": "kilo:",
+      "title": "parse_price produces wrong results when pence component has fewer than 2 digits",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 27,
+        "claimed_line": 27,
+        "snippet": "    pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()"
+      },
+      "explanation": "The formula blindly multiplies pounds by 100 and adds the numeric value of pence. For '12.3', this yields 1200 + 3 = 1203 pence instead of the correct 1230. The function does not pad single-digit pence with a trailing zero.",
+      "failure_scenario": "Call parse_price('12.3') expecting 1230 pence (twelve pounds and thirty pence). The result is 1203 pence, an incorrect price of £12.03 instead of £12.30."
+    }
+  ],
+  "rejected": []
+}

@@ -7,10 +7,16 @@
 //! discards non-matching quotes without argument and a model that does not know
 //! that will produce paraphrased snippets and lose real defects.
 
-use bugsleuth_domain::Lane;
+use bugsleuth_domain::{Lane, finding_schema};
 
 /// Build the full brief for one lane sweep.
-pub fn build(lane: Lane, scope: Option<&str>) -> String {
+///
+/// `enforced_schema` says whether the CLI itself will constrain the reply to
+/// our JSON Schema. Claude and Codex can; Kilo cannot, so for Kilo the schema
+/// has to be spelled out in the prompt instead. That is strictly weaker — a
+/// prompt is a request, a schema is a constraint — so expect more malformed
+/// replies from a vendor that needs the appendix.
+pub fn build(lane: Lane, scope: Option<&str>, enforced_schema: bool) -> String {
     let scope_line = match scope {
         Some(paths) if !paths.trim().is_empty() => {
             format!("\nRestrict your review to these paths: {}\n", paths.trim())
@@ -62,10 +68,32 @@ is tolerated and corrected automatically. An inaccurate snippet is not.
 
 Return your findings in the required JSON structure. Report an empty list if \
 you found nothing that meets your mandate. Never invent a finding to avoid \
-returning an empty list — an empty result is a valid and useful answer.",
+returning an empty list — an empty result is a valid and useful answer.{schema_appendix}",
         title = lane.title(),
         mandate = lane.mandate(),
         scope_line = scope_line,
+        schema_appendix = if enforced_schema {
+            String::new()
+        } else {
+            schema_appendix()
+        },
+    )
+}
+
+/// Spell out the required JSON shape for a CLI that cannot enforce one.
+///
+/// The instruction to emit nothing but the object matters as much as the schema
+/// itself. Without a constraint, the natural thing for a model to do is
+/// introduce its answer with a sentence of prose — and while the parser
+/// tolerates that, it is one more way for a paid-for sweep to come back
+/// unreadable.
+fn schema_appendix() -> String {
+    format!(
+        "\n\nYour reply must be a single JSON object and NOTHING else — no prose \
+before or after it, and no code fence. It must validate against this JSON \
+Schema:\n\n{}\n\nA reply that is not valid JSON matching this schema is \
+discarded entirely, however good the findings in it are.",
+        serde_json::to_string_pretty(&finding_schema()).unwrap_or_default()
     )
 }
 
@@ -135,11 +163,11 @@ mod tests {
 
     #[test]
     fn each_lane_gets_its_own_mandate_and_not_another_lanes() {
-        let ux = build(Lane::Ux, None);
+        let ux = build(Lane::Ux, None, true);
         assert!(ux.contains("Aesthetic opinions"));
         assert!(!ux.contains("SQL injection"));
 
-        let security = build(Lane::Security, None);
+        let security = build(Lane::Security, None, true);
         assert!(security.contains("authorization"));
         assert!(!security.contains("Aesthetic opinions"));
     }
@@ -148,16 +176,28 @@ mod tests {
     fn the_brief_always_explains_that_a_bad_quote_discards_the_finding() {
         for lane in Lane::ALL {
             assert!(
-                build(lane, None).contains("DISCARDED"),
+                build(lane, None, true).contains("DISCARDED"),
                 "{lane} brief omitted the anchor warning"
             );
         }
     }
 
     #[test]
+    fn a_vendor_without_schema_enforcement_gets_the_schema_in_the_prompt() {
+        let enforced = build(Lane::Correctness, None, true);
+        let described = build(Lane::Correctness, None, false);
+        assert!(!enforced.contains("JSON Schema"));
+        assert!(described.contains("JSON Schema"));
+        assert!(
+            described.contains("failure_scenario"),
+            "the schema itself must be present"
+        );
+    }
+
+    #[test]
     fn a_path_scope_appears_only_when_one_was_given() {
-        assert!(!build(Lane::Correctness, None).contains("Restrict your review"));
-        assert!(!build(Lane::Correctness, Some("  ")).contains("Restrict your review"));
-        assert!(build(Lane::Correctness, Some("src/")).contains("Restrict your review"));
+        assert!(!build(Lane::Correctness, None, true).contains("Restrict your review"));
+        assert!(!build(Lane::Correctness, Some("  "), true).contains("Restrict your review"));
+        assert!(build(Lane::Correctness, Some("src/"), true).contains("Restrict your review"));
     }
 }
