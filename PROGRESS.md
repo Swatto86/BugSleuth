@@ -123,8 +123,7 @@ keyboard, and observed:
 4. **A real review ran** — live progress streamed into the window
    (`Round 1/1: haiku × Correctness`, then `6 findings`).
 5. The result landed on disk at
-   `%APPDATA%\BugSleuth
-uns\seeded-repo\correctness-haiku.json`: lane
+   `%APPDATA%\BugSleuth\runs\seeded-repo\correctness-haiku.json`: lane
    Correctness, model `claude:haiku`, status swept, **6 findings, 0 rejected**,
    every one anchored to a real line of the fixture.
 6. Both themes render and switch.

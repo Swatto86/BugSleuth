@@ -498,7 +498,7 @@ Both gaps this section used to record are now closed, and closed by clicking
 rather than by reading the code:
 
 - **A real review has been run from the app.** Progress streamed into the window
-  and the sweep's JSON landed in `%APPDATA%\BugSleuthuns`, naming the model
+  and the sweep's JSON landed in `%APPDATA%\BugSleuth\runs`, naming the model
   and carrying anchors that resolve to real lines of the fixture. That last part
   is the evidence that counts: the window could display anything, but only a
   real run writes that file.
