@@ -10,11 +10,21 @@
 use bugsleuth_domain::{Finding, ModelId, Severity};
 use serde::Serialize;
 
-/// How far apart two anchors may be and still be candidates for the same
-/// defect. Deliberately tight. Anchor verification already corrects line
-/// numbers against the real file, so anchors are accurate — the slack is for a
-/// defect that genuinely spans a few lines, not for model error.
-const MAX_LINE_GAP: u32 = 3;
+/// How far apart two anchors may be and still be candidates for the same defect.
+///
+/// **Widened from 3 after real output showed 3 was too tight.** Reviewing a real
+/// repository, two vendors independently found the same bug in one small
+/// function — a timezone heuristic that assumes offsets are under 12 hours — but
+/// anchored it 5 lines apart, one at the signature and one at the offending
+/// comparison. They scored 0.25 on wording, well above the merge threshold, so
+/// only the distance kept them apart and the report claimed two defects with no
+/// agreement instead of one found by both.
+///
+/// Roughly "within the same small function". Widening this is safe because
+/// wording is the real separator: on measured output, different defects on
+/// *adjacent* lines score 0.07-0.08 against a 0.20 threshold, so distance is not
+/// what is doing the work.
+const MAX_LINE_GAP: u32 = 10;
 
 /// Minimum wording overlap for two nearby findings to be treated as one.
 ///

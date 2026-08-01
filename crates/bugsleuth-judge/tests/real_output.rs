@@ -172,3 +172,67 @@ fn merging_reduces_the_list_without_collapsing_it() {
         clusters.len()
     );
 }
+
+// ── A second corpus: real output from a real repository ──────────────────────
+//
+// The fixture above is a small purpose-built crate. This one is two vendors
+// sweeping a real 27-file crate, and it exposed a clustering miss the fixture
+// could not: the fixture's findings all landed within a line or two of each
+// other, so the anchor window was never stressed.
+
+fn load_real_repo() -> Vec<Finding> {
+    let mut all = Vec::new();
+    for name in ["real-repo-claude.json", "real-repo-codex.json"] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data")
+            .join(name);
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        let file: SweepFile = serde_json::from_str(&text)
+            .unwrap_or_else(|e| panic!("{} is not a sweep report: {e}", path.display()));
+        all.extend(file.findings);
+    }
+    all
+}
+
+#[test]
+fn one_defect_anchored_five_lines_apart_by_two_vendors_still_merges() {
+    // Both vendors independently found the same bug in `snap_all_day_to_midnight`
+    // — a timezone heuristic that assumes offsets are under 12 hours — but
+    // anchored it at the signature and at the offending comparison, 5 lines
+    // apart. With the original 3-line window this was reported as two separate
+    // defects, each with no agreement, instead of one found by both.
+    let clusters = cluster(load_real_repo());
+    assert!(
+        grouped(
+            &clusters,
+            "midnight-snap misclassifies",
+            "shift one day late"
+        ),
+        "the same timezone defect was reported as two defects with no agreement"
+    );
+    assert_eq!(cluster_with(&clusters, "shift one day late").agreement, 2);
+}
+
+#[test]
+fn unrelated_defects_in_the_same_real_crate_stay_separate() {
+    let clusters = cluster(load_real_repo());
+    // Different files entirely, and nothing to do with each other.
+    assert!(!grouped(
+        &clusters,
+        "Partial refresh-token writes",
+        "attachments()"
+    ));
+    assert!(!grouped(&clusters, "attachments()", "shift one day late"));
+}
+
+#[test]
+fn the_real_repo_corpus_merges_four_findings_into_three_defects() {
+    let clusters = cluster(load_real_repo());
+    assert_eq!(load_real_repo().len(), 4);
+    assert_eq!(
+        clusters.len(),
+        3,
+        "expected the two timezone findings to merge and the other two to stand alone"
+    );
+}
