@@ -1,0 +1,80 @@
+# Release acceptance runbook
+
+The journey to drive before shipping a change to the app, the provider adapters,
+the run lifecycle, or packaging. It takes about ten minutes and one cheap model
+invocation.
+
+`~/.agents/tauri.md` asks for one live acceptance task through the real webview.
+**The WebDriver harness does not currently satisfy that** — see `DECISIONS.md`
+3.10; it creates a session and launches the app but never sees its page. Until
+that is solved, this manual journey is the acceptance test, and it is the one
+that has actually caught things.
+
+## Build the thing you are shipping
+
+```bash
+cargo clean --release
+```
+
+```bash
+cargo tauri build
+```
+
+**Both steps, in that order.** A plain `cargo build --release` produces a binary
+that points at the Vite dev server instead of embedding the frontend, and cargo
+caches that decision in Tauri's *dependency* build script — so a later
+`cargo tauri build` will happily reuse it. The result looks perfect with a dev
+server running and shows a blank window without one.
+
+## Install it
+
+```bash
+./target/release/bundle/nsis/BugSleuth_0.1.0_x64-setup.exe /S
+```
+
+Test the installed copy, not the one in `target/`. It is what people get.
+
+## The journey
+
+Start `%LOCALAPPDATA%\BugSleuth\bugsleuth-app.exe` and check each of these by
+looking, not by inference:
+
+| # | Step | What must be true |
+|---|---|---|
+| 1 | App starts | Window appears; no blank page, no unstyled flash |
+| 2 | Providers panel | Every configured CLI listed with a real version |
+| 3 | Untick a lane's every box | The column head is marked and the banner names that lane as NOT SWEPT |
+| 4 | Set a repository, one model, one lane | Footer shows the sweep and round count; Run enables |
+| 5 | **Run review** | Progress streams into the result pane as it happens |
+| 6 | Wait for it | Status reaches Finished and findings are listed |
+| 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
+| 8 | Check the reviewed repo | Unchanged: `git status` clean, no `.bugsleuth-worktrees` left behind |
+| 9 | Switch theme light and dark | Both readable; "Match system" follows the OS |
+| 10 | Close the window | It hides; the process is still alive |
+| 11 | Click the tray icon | The window returns with its state intact |
+| 12 | Tray → Quit | The process exits, leaving no orphan |
+
+Step 7 is the one that matters most. Findings shown in the window could in
+principle come from anywhere; a sweep report on disk naming the model and
+carrying anchors that resolve to real lines could not.
+
+## Use the fixture
+
+Point it at `fixtures/seeded-repo`. Six known defects, builds in seconds, and a
+sweep that returns none of them means the pipeline ran and did nothing useful —
+which a status check alone would not catch.
+
+Model: `haiku` is enough. The journey is about the app, not the model.
+
+## Afterwards
+
+```bash
+pwsh -File scripts/verify.ps1 -Package
+```
+
+And confirm the portable executable is still self-contained — it must import
+nothing outside `System32`:
+
+```bash
+dumpbin /dependents target/release/bugsleuth-app.exe
+```

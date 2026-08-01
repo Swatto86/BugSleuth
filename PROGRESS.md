@@ -153,10 +153,20 @@ be produced by anything but a real run.
 - Both themes switch, and "match system" follows the OS rather than freezing.
 - The Quit button reaches the backend over the IPC and is keyboard reachable.
 
-**Still not driven:** the tray menu, and a click-through of Quit to process
-exit. The `WebDriver` harness is committed but does not currently observe
-anything — see `DECISIONS.md` 3.10 — so those were checked by construction and
-by the in-app Quit reaching the backend over the IPC, not by clicking the tray.
+**The tray was driven too**, by clicking it:
+
+- Closing the window hid it and left the process alive at 28 MB.
+- The tray icon carries a "BugSleuth" tooltip; left-clicking restored the window
+  with its state intact.
+- Right-click showed **Open BugSleuth** and **Quit**.
+- **Quit exited cleanly** — process gone, no orphans, settings preserved.
+
+So every desktop behaviour is now verified by observed effect. The full journey
+is written up in [RUNBOOK.md](RUNBOOK.md).
+
+**Still outstanding:** the WebDriver harness does not observe anything — see
+`DECISIONS.md` 3.10. It is committed and correct in shape but must not be
+treated as passing evidence; the runbook is the acceptance test until it works.
 
 ## Known gaps
 
