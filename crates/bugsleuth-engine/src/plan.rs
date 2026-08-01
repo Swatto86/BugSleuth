@@ -27,6 +27,22 @@ pub struct ModelPlan {
     /// Reasoning effort for this model. Empty means the vendor's own default.
     #[serde(default)]
     pub effort: String,
+    /// How many times to sweep each of this model's lanes.
+    ///
+    /// **Deliberate repetition, not a retry.** Three identical sweeps of the
+    /// same fixture each returned five findings, but the union across them was
+    /// six: the same model reliably finds slightly different things each time,
+    /// and describes what it does find in different words. Asking twice is the
+    /// cheapest recall there is — no second vendor, no second subscription.
+    ///
+    /// One by default. This costs a full sweep per pass and must be chosen.
+    #[serde(default = "one")]
+    pub passes: usize,
+}
+
+/// Serde needs a function; a bare `1` default is not expressible.
+fn one() -> usize {
+    1
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -39,6 +55,9 @@ pub struct Config {
 pub struct Unit {
     pub model: String,
     pub lane: Lane,
+    /// Which pass this is, 1-based. Part of the unit so two passes of one model
+    /// are two sweeps rather than one deduplicated away.
+    pub pass: usize,
     /// Reasoning effort. Part of the unit because two efforts of the same model
     /// on the same lane are two different sweeps, not one run twice.
     pub effort: String,
@@ -117,15 +136,20 @@ pub fn plan(config: &Config) -> Result<Plan> {
             let lane: Lane = slug
                 .parse()
                 .with_context(|| format!("model `{}` is assigned an unknown lane", model.id))?;
-            let unit = Unit {
-                model: model.id.trim().to_string(),
-                lane,
-                effort: model.effort.trim().to_string(),
-            };
-            // The same model assigned a lane twice is a config slip, not a
-            // request to pay for the same sweep twice.
-            if !units.contains(&unit) {
-                units.push(unit);
+            // A model listed twice against one lane is still a config slip,
+            // and still collapses. Repetition is asked for with `passes`, where
+            // it is visible and deliberate, rather than by writing the same
+            // line out twice and hoping that means something.
+            for pass in 1..=model.passes.max(1) {
+                let unit = Unit {
+                    model: model.id.trim().to_string(),
+                    lane,
+                    effort: model.effort.trim().to_string(),
+                    pass,
+                };
+                if !units.contains(&unit) {
+                    units.push(unit);
+                }
             }
         }
     }
@@ -154,6 +178,7 @@ mod tests {
                     id: (*id).to_string(),
                     lanes: lanes.iter().map(|l| (*l).to_string()).collect(),
                     effort: String::new(),
+                    passes: 1,
                 })
                 .collect(),
         }

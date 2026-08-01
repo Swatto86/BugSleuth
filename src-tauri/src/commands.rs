@@ -271,6 +271,7 @@ fn to_config(settings: &Settings) -> plan::Config {
                 id: m.id.clone(),
                 lanes: m.lanes.clone(),
                 effort: m.effort.clone(),
+                passes: m.passes.max(1),
             })
             .collect(),
     }

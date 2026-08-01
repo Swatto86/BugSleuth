@@ -155,6 +155,11 @@ function render(): void {
         if (existing) settings.models[index] = { ...existing, id, effort: "" };
         render();
       },
+      onPasses: (index, passes) => {
+        const existing = settings.models[index];
+        if (existing) settings.models[index] = { ...existing, passes };
+        refresh();
+      },
       onEffort: (index, effort) => {
         const existing = settings.models[index];
         if (existing) settings.models[index] = { ...existing, effort };
@@ -279,7 +284,10 @@ function bind(): void {
   });
 
   ui.addModel.addEventListener("click", () => {
-    settings.models = [...settings.models, { id: "", lanes: [], effort: "" }];
+    settings.models = [
+      ...settings.models,
+      { id: "", lanes: [], effort: "", passes: 1 },
+    ];
     render();
   });
 

@@ -327,6 +327,7 @@ mod tests {
                 model: model.to_string(),
                 lane: Lane::Correctness,
                 effort: String::new(),
+                pass: 1,
             };
             let _ = std::fs::create_dir_all(&dir);
             let _ = std::fs::write(dir.join(file_name_for(&unit)), report);
@@ -348,11 +349,13 @@ mod tests {
                     id: "claude:sonnet".into(),
                     lanes: vec!["correctness".into()],
                     effort: String::new(),
+                    passes: 1,
                 },
                 ModelPlan {
                     id: "codex:".into(),
                     lanes: vec!["correctness".into()],
                     effort: String::new(),
+                    passes: 1,
                 },
             ],
         })

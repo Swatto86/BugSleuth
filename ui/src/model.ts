@@ -27,6 +27,15 @@ export interface ModelSetting {
   lanes: string[];
   /** Reasoning effort. Empty means the vendor's own default. */
   effort: string;
+  /**
+   * How many times to sweep each lane with this model.
+   *
+   * Repetition is not redundancy. Three identical sweeps of one fixture each
+   * returned five findings and six between them — the same model finds slightly
+   * different things each time. Two passes is the cheapest recall available:
+   * no second vendor, no second subscription.
+   */
+  passes: number;
 }
 
 /** The vendors that can be picked, in the order they are offered. */
@@ -83,11 +92,20 @@ export function uncoveredLanes(models: ModelSetting[]): Lane[] {
   return LANES.filter((lane) => !models.some((m) => m.lanes.includes(lane)));
 }
 
+/**
+ * How many times a model sweeps each lane, tolerating settings written before
+ * passes existed — those have no field at all, and must read as one rather than
+ * turning the whole sweep estimate into NaN.
+ */
+function passesOf(model: ModelSetting): number {
+  return Math.max(1, model.passes ?? 1);
+}
+
 /** How many (model × lane) sweeps a configuration implies. */
 export function unitCount(models: ModelSetting[]): number {
   return models.reduce((total, model) => {
     const valid = new Set(model.lanes.filter((l) => (LANES as readonly string[]).includes(l)));
-    return total + (model.id.trim() ? valid.size : 0);
+    return total + (model.id.trim() ? valid.size * passesOf(model) : 0);
   }, 0);
 }
 
@@ -115,7 +133,7 @@ export function batchCount(models: ModelSetting[]): number {
     const lanes = new Set(model.lanes.filter((l) => (LANES as readonly string[]).includes(l)));
     if (lanes.size === 0) continue;
     const vendor = vendorOf(model.id);
-    perVendor.set(vendor, (perVendor.get(vendor) ?? 0) + lanes.size);
+    perVendor.set(vendor, (perVendor.get(vendor) ?? 0) + lanes.size * passesOf(model));
   }
   return perVendor.size === 0 ? 0 : Math.max(...perVendor.values());
 }
@@ -138,20 +156,20 @@ export function preset(name: Preset): ModelSetting[] {
   switch (name) {
     case "cheap":
       // One vendor, every lane. Fewest invocations that still reviews everything.
-      return [{ id: "haiku", lanes: [...LANES], effort: "" }];
+      return [{ id: "haiku", lanes: [...LANES], effort: "", passes: 1 }];
     case "deep":
       // Every vendor on every lane it can do. Kilo is excluded from nothing here
       // because sweeping is the one thing it does as well as the others.
       return [
-        { id: "opus", lanes: [...LANES], effort: "" },
-        { id: "codex:", lanes: [...LANES], effort: "" },
-        { id: "kilo:", lanes: ["correctness", "security"], effort: "" },
+        { id: "opus", lanes: [...LANES], effort: "", passes: 1 },
+        { id: "codex:", lanes: [...LANES], effort: "", passes: 1 },
+        { id: "kilo:", lanes: ["correctness", "security"], effort: "", passes: 1 },
       ];
     case "balanced":
     default:
       return [
-        { id: "sonnet", lanes: [...LANES], effort: "" },
-        { id: "codex:", lanes: ["correctness", "security"], effort: "" },
+        { id: "sonnet", lanes: [...LANES], effort: "", passes: 1 },
+        { id: "codex:", lanes: ["correctness", "security"], effort: "", passes: 1 },
       ];
   }
 }

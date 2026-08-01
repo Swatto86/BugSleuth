@@ -62,6 +62,7 @@ export interface MatrixHandlers {
   /** Changing vendor swaps which menu applies, so the table is rebuilt. */
   onVendor: (index: number, id: string) => void;
   onEffort: (index: number, effort: string) => void;
+  onPasses: (index: number, passes: number) => void;
   onToggle: (index: number, lane: Lane, on: boolean) => void;
   onRemove: (index: number) => void;
 }
@@ -218,7 +219,36 @@ function effortPicker(
   return select;
 }
 
-/** One row per configured model: provider, model, effort, then a lane per column. */
+/**
+ * How many times this model sweeps each of its lanes.
+ *
+ * Three identical sweeps of one fixture each returned five findings and six
+ * between them: the same model finds slightly different things every time.
+ * Two passes is the cheapest recall available — no second vendor needed. It
+ * also costs a full sweep of quota per pass, which is why it is not the default.
+ */
+function passPicker(
+  index: number,
+  model: ModelSetting,
+  handlers: MatrixHandlers,
+): HTMLSelectElement {
+  const select = document.createElement("select");
+  select.setAttribute("aria-label", `Passes for row ${index + 1}`);
+  const chosen = Math.max(1, model.passes ?? 1);
+  for (const n of [1, 2, 3]) {
+    select.append(option(String(n), n === 1 ? "1" : `${n}x`, n === chosen));
+  }
+  select.title =
+    "Sweep each lane this many times. The same model finds slightly different " +
+    "things each run, so repeating widens what is found — at one full sweep of " +
+    "quota per pass.";
+  select.addEventListener("change", () =>
+    handlers.onPasses(index, Number(select.value) || 1),
+  );
+  return select;
+}
+
+/** One row per configured model: provider, model, effort, passes, then a lane per column. */
 export function matrixRows(
   models: ModelSetting[],
   catalogue: Catalogue,
@@ -281,6 +311,11 @@ export function matrixRows(
     );
     row.append(idCell);
     row.append(effortCell);
+
+    const passCell = document.createElement("td");
+    passCell.className = "effort-cell";
+    passCell.append(passPicker(index, model, handlers));
+    row.append(passCell);
 
     for (const lane of LANES) {
       const cell = document.createElement("td");

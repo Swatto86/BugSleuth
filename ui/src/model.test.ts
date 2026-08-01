@@ -172,3 +172,17 @@ test("an unknown prefix is treated as a Claude model, colon and all", () => {
 });
 
 
+
+test("a repeated pass is a whole extra sweep, and an extra round", () => {
+  // Two passes of one model is two invocations of one vendor, which the engine
+  // will never run at once — so it costs a round as well as a sweep.
+  const models = [{ id: "sonnet", lanes: ["correctness"], passes: 2 }];
+  assert.equal(unitCount(models), 2);
+  assert.equal(batchCount(models), 2);
+});
+
+test("settings saved before passes existed still estimate as one pass each", () => {
+  // Reading a missing field as NaN would put "NaN sweeps" in front of someone
+  // whose only mistake was having used the app last week.
+  assert.equal(unitCount([{ id: "sonnet", lanes: ["correctness"] }]), 1);
+});

@@ -52,6 +52,14 @@ pub struct ModelSetting {
     /// still loads, rather than being discarded back to the shipped preset.
     #[serde(default)]
     pub effort: String,
+    /// How many times to sweep each lane with this model. One by default;
+    /// more is deliberate repetition, which measurably finds more.
+    #[serde(default = "one_pass")]
+    pub passes: usize,
+}
+
+fn one_pass() -> usize {
+    1
 }
 
 impl Default for Settings {
@@ -69,6 +77,7 @@ impl Default for Settings {
                 ModelSetting {
                     id: "sonnet".into(),
                     effort: String::new(),
+                    passes: 1,
                     lanes: vec![
                         "correctness".into(),
                         "security".into(),
@@ -80,6 +89,7 @@ impl Default for Settings {
                     id: "codex:".into(),
                     lanes: vec!["correctness".into(), "security".into()],
                     effort: String::new(),
+                    passes: 1,
                 },
             ],
             theme: "system".into(),

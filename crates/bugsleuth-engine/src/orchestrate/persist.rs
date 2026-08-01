@@ -30,14 +30,27 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
 }
 
 pub(super) fn file_name_for(unit: &Unit) -> String {
-    // The effort is part of the name only when it is set, so every report
-    // written before efforts existed keeps its filename and stays resumable.
+    // Effort and pass are part of the name only when they are set to something
+    // other than the default, so every report written before either existed
+    // keeps its filename and stays resumable.
     let effort = if unit.effort.trim().is_empty() {
         String::new()
     } else {
         format!("-{}", safe(unit.effort.trim()))
     };
-    format!("{}-{}{effort}.json", unit.lane.slug(), safe(&unit.model))
+    // Without this, a second pass would overwrite the first one's report and
+    // the repetition would buy nothing at all — the whole point is keeping both
+    // so the union is wider than either.
+    let pass = if unit.pass <= 1 {
+        String::new()
+    } else {
+        format!("-pass{}", unit.pass)
+    };
+    format!(
+        "{}-{}{effort}{pass}.json",
+        unit.lane.slug(),
+        safe(&unit.model)
+    )
 }
 
 /// Anything that is not a letter or digit becomes a dash, so a model id can
@@ -112,11 +125,13 @@ mod tests {
             model: "codex:".into(),
             lane: Lane::Correctness,
             effort: String::new(),
+            pass: 1,
         });
         let c = file_name_for(&Unit {
             model: "claude:sonnet".into(),
             lane: Lane::Security,
             effort: String::new(),
+            pass: 1,
         });
         assert_ne!(a, b);
         assert_ne!(a, c);
@@ -144,6 +159,7 @@ mod tests {
             model: "claude:sonnet".into(),
             lane: Lane::Correctness,
             effort: String::new(),
+            pass: 1,
         }
     }
 
@@ -176,5 +192,19 @@ mod tests {
             findings: vec![],
             rejected: vec![],
         }
+    }
+
+    #[test]
+    fn a_second_pass_writes_beside_the_first_rather_than_over_it() {
+        // The whole value of repetition is keeping both results: three
+        // identical sweeps of one fixture found five findings each but six
+        // between them. Overwriting would buy nothing.
+        let first = file_name_for(&unit());
+        let second = file_name_for(&Unit { pass: 2, ..unit() });
+        assert_ne!(first, second);
+        assert!(second.contains("pass2"), "got {second}");
+        // A first pass keeps the historical name, so reports written before
+        // passes existed still resume.
+        assert!(!first.contains("pass"), "got {first}");
     }
 }

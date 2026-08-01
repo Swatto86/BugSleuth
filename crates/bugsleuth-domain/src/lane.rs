@@ -99,6 +99,31 @@ zero, negative, overflow, unicode), swallowed or misreported errors, panics on \
 reachable input, resource leaks, and concurrency faults (races, deadlocks, \
 lost wakeups, non-atomic read-modify-write).
 
+# Two kinds you will miss unless you look for them deliberately
+
+Everything above is visible in code that is *present*. These two are not, and \
+they are the ones that get past reviewers.
+
+**Destroy-before-commit.** Look at every sequence that replaces stored state — \
+a file, a credential, a database row, a cache. Does it delete or clear the old \
+value *before* the new one is safely written? If the process died between those \
+two steps, or the second step returned an error, what is left? Code like \
+`clear()?; write(new)?` reads perfectly and destroys the only copy of something \
+whenever the write fails. This is not a concurrency bug and you will not find \
+it by looking for races; it is an ordering bug, visible only when you ask what \
+an interruption between two lines would leave behind.
+
+**Received but never handled.** Look for values the code takes in and then \
+silently drops: a field parsed from a response and never stored, an enum variant \
+or status the caller never branches on, an optional flag that only one of \
+several paths applies. The defect is the *absence* of a branch, so there is no \
+wrong line to spot — you have to compare what comes in against what is acted \
+on, and notice the gap. Ask of each incoming field: where does this end up, and \
+what happens when only this one changes?
+
+Both of these are found by asking what is missing, not by reading for what is \
+wrong. Spend real effort on them.
+
 OUT OF SCOPE for this lane: security vulnerabilities, API/type-contract \
 mismatches, and anything about the user interface. Other reviewers cover those. \
 Do not report style, naming, formatting, or 'this could be cleaner'.";
@@ -147,5 +172,27 @@ mod tests {
             let parsed: Lane = lane.slug().parse().unwrap_or(Lane::Ux);
             assert_eq!(parsed, lane);
         }
+    }
+
+    #[test]
+    fn the_correctness_mandate_asks_for_the_two_classes_it_measurably_missed() {
+        // Graded against known defects, the correctness lane found 1 of 3 with
+        // three vendors reading the exact files. Both misses were absence
+        // defects: a delete-then-write ordering, and a field received and never
+        // handled. Every class the mandate had listed was visible in code that
+        // was present, so neither miss was ever being looked for.
+        let mandate = Lane::Correctness.mandate();
+        assert!(
+            mandate.contains("before"),
+            "nothing asks about destroying state before the replacement is committed"
+        );
+        assert!(
+            mandate.contains("never handled") || mandate.contains("silently drops"),
+            "nothing asks about a value received and then dropped"
+        );
+        assert!(
+            mandate.contains("what is missing"),
+            "nothing tells the reviewer to read for absence rather than for error"
+        );
     }
 }
