@@ -505,3 +505,26 @@ is the whole point of this project:
 
 Both are live-acceptance work, and `~/.agents/tauri.md` is right that a release
 touching the core workflow should have it. This is not a release.
+
+### 3.8 The portable executable still needs the VC++ runtime
+
+**Observed, not yet fixed.** `dumpbin /dependents` on the release binary shows no
+`WebView2Loader.dll` — good, that one is handled — but it does import
+`VCRUNTIME140.dll` and `VCRUNTIME140_1.dll`. Those come from the Visual C++
+Redistributable, which is very commonly present but is *not* part of a clean
+Windows install.
+
+Core's rule is that a published desktop tool ships at least one self-contained,
+directly-runnable binary that launches with no installer and no prerequisites.
+As it stands the portable exe would fail on a machine without the redistributable
+— and it would fail with an unhelpful system dialog, not a message from us.
+
+**The fix is `-C target-feature=+crt-static`** in `.cargo/config.toml`, which
+statically links the CRT. It is deliberately not applied yet: a packaged build
+was running when this was found, static-CRT linking occasionally breaks against
+crates that assume the dynamic runtime, and destabilising a working build to fix
+something that only matters at release is the wrong order.
+
+**Do this before the first release**, and verify by running the portable exe on a
+machine (or container) without the redistributable — not by rechecking the
+imports, which will change whether or not the app actually starts.
