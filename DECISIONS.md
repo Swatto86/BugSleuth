@@ -411,3 +411,97 @@ next proof attempt depends on.
 Neither was visible by reading the code, and neither would have been caught by a
 test written from the documentation. Both came from running the thing and then
 checking what it left behind. **Check the repository afterwards, every time.**
+
+---
+
+## Part 3 — The desktop app
+
+### 3.1 The engine became a library before the UI existed
+
+**Decided:** move briefs, planning, sweeping, merging and proving out of the
+command-line binary into `bugsleuth-engine`, and make both front ends call it.
+
+**Why:** a Tauri app cannot import from a binary crate, so the alternative was
+reimplementing orchestration in the app. Two implementations of "is this lane
+swept or merely empty" is exactly the quiet divergence this tool exists to catch
+in other people's code — it would be embarrassing to ship it in this one.
+
+### 3.2 The frontend gets no filesystem or shell permission at all
+
+**Decided:** the Tauri capability file grants `core:default`, four window calls,
+event listening, and a folder picker. Nothing else.
+
+**Why:** everything BugSleuth does that touches disk or spawns a process happens
+in Rust behind a command that validates first. Granting the webview `fs` scope
+would create a second door with weaker checks, for no benefit — the frontend
+never needs to read a file.
+
+A repository path still arrives as a string the frontend chose, so it is
+canonicalized and checked to be a real directory before anything acts on it, and
+the Windows extended-length prefix is stripped because git rejects it.
+
+### 3.3 The tray exists because a sweep is slow, not because tray icons are nice
+
+**Decided:** BugSleuth is resident. Closing the window hides it; the tray menu
+and an in-app button both quit.
+
+**Why:** a run is tens of minutes. The realistic use is to start one, close the
+window, and be told when it lands. A tray icon on an app you interact with for
+ten seconds at a time would be clutter; here it is the whole point.
+
+**Two exits, deliberately.** The close button hides, so without a second path the
+tray would be a single point of failure — and a tray icon that fails to appear
+is a real Windows failure mode. An app you can only end from the task manager is
+precisely the unrecoverable state the UX lane's mandate describes.
+
+### 3.4 Two icons, not one scaled down
+
+**Decided:** `app-icon.svg` and `tray-icon.svg` are different drawings.
+
+**Why:** measured, not assumed. The first version was one icon with legs,
+antennae and a specular highlight. At 128px it read well; at 32px the legs
+reached the rim and the whole thing read as an asterisk or a sun, and the thin
+handle disappeared. The tray version drops every one of those details and keeps
+only the ring, a fat handle and a solid body.
+
+Both were checked by generating the PNGs and looking at them at the sizes that
+matter, and the shipped icon was checked by extracting it *from the built
+executable* rather than trusting the window.
+
+### 3.5 Theme "match system" removes the attribute rather than resolving it
+
+**Decided:** choosing "match system" deletes `data-theme` from the document so
+the CSS media query takes over. It is not resolved to light or dark in
+JavaScript.
+
+**Why:** resolving in JS freezes the choice at whatever the OS was doing when the
+app started. Letting CSS handle it means the app follows a change made while it
+is running, which is what "match system" means.
+
+### 3.6 Windows needed an 8 MB main-thread stack
+
+**Decided:** `.cargo/config.toml` passes `/STACK:8388608` on the MSVC target.
+
+**Why:** the release build overflowed its stack on startup and exited before
+showing a window, while the debug build was fine. Windows gives the main thread
+1 MB; with LTO, Tauri's generated context initialiser — which embeds the whole
+frontend bundle — becomes one very deep frame.
+
+**Worth recording because the symptom is so misleading:** an app that exits
+instantly with "has overflowed its stack" looks like infinite recursion, and
+there is none. The trigger is the optimisation profile, so it appears only in
+release, which is the build you ship.
+
+### 3.7 What the app has not been shown to do
+
+Honest limits, because the difference between "wired up" and "observed working"
+is the whole point of this project:
+
+- Clicking the tray menu, and a full click-through of Quit to process exit, were
+  **not** driven end to end. That needs WebDriver or an installed app.
+- **No real run has been started from the app.** The engine underneath is the
+  same code the command line has run many times and the command is a thin
+  wrapper, but the app has not itself driven a sweep.
+
+Both are live-acceptance work, and `~/.agents/tauri.md` is right that a release
+touching the core workflow should have it. This is not a release.
