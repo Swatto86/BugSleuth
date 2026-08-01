@@ -129,13 +129,77 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
         .await;
 
         let payload = match report {
-            Ok(report) => serde_json::json!({ "ok": true, "text": report.to_text() }),
+            Ok(report) => {
+                let mut text = report.to_text();
+                // Honour the proof settings. Without this the UI would offer a
+                // "prove top N" control that silently does nothing, which is
+                // precisely the defect BugSleuth's own UX lane exists to catch.
+                text.push_str(&prove_top(&app, &settings, &repo, &report).await);
+                serde_json::json!({ "ok": true, "text": text })
+            }
             Err(error) => serde_json::json!({ "ok": false, "text": error.to_string() }),
         };
         let _ = app.emit("run-finished", payload);
     });
 
     Ok(())
+}
+
+/// Attempt proof for the top defects, if the settings ask for it.
+///
+/// Returns the section to append to the report, or nothing when proving is off.
+/// Proving needs a test command and a git repository — a worktree cannot be made
+/// without one — so a request that cannot be honoured says so rather than
+/// failing silently.
+async fn prove_top(
+    app: &tauri::AppHandle,
+    settings: &Settings,
+    repo: &std::path::Path,
+    report: &orchestrate::RunReport,
+) -> String {
+    if settings.prove_top == 0 {
+        return String::new();
+    }
+    let command = settings.test_command.trim();
+    if command.is_empty() {
+        return "
+
+Proof was requested but no test command was given, so nothing was                 attempted. That is not the same as nothing being provable."
+            .to_string();
+    }
+    if !repo.join(".git").exists() {
+        return "
+
+Proof was requested but this is not a git repository. A proof attempt                 needs a throwaway worktree, so nothing was attempted."
+            .to_string();
+    }
+
+    let _ = app.emit(
+        "run-progress",
+        serde_json::json!({
+            "kind": "batch_started",
+            "index": 1,
+            "total": 1,
+            "units": [format!("proving the top {} defects", settings.prove_top)],
+        }),
+    );
+
+    let proved = orchestrate::proving::prove_top(
+        &report.ranked,
+        &orchestrate::proving::ProveOptions {
+            repo,
+            model: "sonnet",
+            test_command: command,
+            top: settings.prove_top,
+            max_turns: 40,
+            timeout: Duration::from_secs(2700),
+            test_timeout: Duration::from_secs(600),
+            api_key: None,
+        },
+    )
+    .await;
+
+    orchestrate::proving::to_text(&proved, report.ranked.len())
 }
 
 /// Native folder picker. The frontend has no filesystem permission, so this is
