@@ -64,6 +64,7 @@ const ui = {
   spinner: el<HTMLSpanElement>("spinner"),
   planSummary: el<HTMLSpanElement>("plan-summary"),
   run: el<HTMLButtonElement>("run"),
+  quit: el<HTMLButtonElement>("quit"),
 };
 
 let settings: Settings = {
@@ -323,6 +324,10 @@ function bind(): void {
   }
 
   ui.run.addEventListener("click", () => void startRun());
+
+  // Closing the window only hides it. This is the reachable, keyboard-navigable
+  // way to actually exit, so the tray is not the single point of failure.
+  ui.quit.addEventListener("click", () => void invoke("quit"));
 }
 
 async function boot(): Promise<void> {

@@ -197,6 +197,17 @@ fn non_empty(value: &str) -> Option<&str> {
     Some(value.trim()).filter(|v| !v.is_empty())
 }
 
+/// Exit the application for real.
+///
+/// The window's close button hides to the tray, so without this the only way
+/// out is the tray menu — and if the tray ever fails to appear, there would be
+/// no way out at all short of the task manager. A second, keyboard-reachable
+/// exit is cheap insurance against an unrecoverable state.
+#[tauri::command]
+pub fn quit(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 /// Reveal the window once the frontend has mounted and themed itself.
 #[tauri::command]
 pub fn frontend_ready(app: tauri::AppHandle) {
