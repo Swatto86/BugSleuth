@@ -87,6 +87,7 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
     for (key, value) in invocation.env {
         command.env(key, value);
     }
+    no_console_window(&mut command);
 
     let mut child = command.spawn().map_err(|source| ProcessError::Spawn {
         binary: invocation.binary.to_string(),
@@ -139,6 +140,28 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
         }
     }
 }
+
+/// Keep a console CLI from opening a window of its own.
+///
+/// Every provider here is a console program, and Windows gives a console program
+/// launched from a windowed process a brand new console — which appears as a
+/// black window on the user's desktop. A run is a dozen sweeps, so without this
+/// the desktop app flashes a dozen console windows over whatever the user is
+/// doing. Observed during a real run: a `conhost.exe` sitting under the CLI child.
+///
+/// `CREATE_NO_WINDOW`. Named rather than written as a bare hex literal because
+/// `0x0800_0000` at a call site means nothing to the next reader.
+#[cfg(windows)]
+fn no_console_window(command: &mut Command) {
+    // `tokio::process::Command` carries `creation_flags` itself on Windows, so
+    // unlike the `std` variant in `bugsleuth-verify` this needs no extension trait.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+/// Nothing to do: only Windows conjures a console for a child process.
+#[cfg(not(windows))]
+fn no_console_window(_command: &mut Command) {}
 
 /// Drain a child stream, retaining at most [`OUTPUT_CAP`] bytes but continuing to
 /// read (and discard) beyond it so the child is never blocked by a full pipe.

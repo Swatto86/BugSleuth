@@ -96,7 +96,7 @@ pub fn run(
         })
     };
 
-    let mut child = Command::new(program)
+    let mut child = crate::console::hide(&mut Command::new(program))
         .args(&args)
         .current_dir(dir)
         // Colour codes would corrupt the parsing below and clutter the report.

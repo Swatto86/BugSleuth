@@ -152,7 +152,7 @@ fn long_path(path: &Path) -> PathBuf {
 }
 
 fn git(cwd: &Path, args: &[&str]) -> Result<String, WorktreeError> {
-    let output = Command::new("git")
+    let output = crate::console::hide(&mut Command::new("git"))
         .args(args)
         .current_dir(cwd)
         .output()

@@ -51,7 +51,7 @@ pub struct Proved {
 /// That is precisely the kind of confidently-wrong output this tool exists to
 /// avoid, so the mismatch is surfaced rather than left to be misread.
 pub fn has_uncommitted_changes(repo: &Path) -> bool {
-    std::process::Command::new("git")
+    bugsleuth_verify::hide_console_window(&mut std::process::Command::new("git"))
         .args(["status", "--porcelain"])
         .current_dir(repo)
         .output()

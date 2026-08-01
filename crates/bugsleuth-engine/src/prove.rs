@@ -190,14 +190,14 @@ pub async fn attempt(spec: Attempt<'_>) -> anyhow::Result<AttemptReport> {
 
 /// The model's changes as a patch, including files it newly created.
 fn capture_patch(dir: &Path) -> String {
-    let add = std::process::Command::new("git")
+    let add = bugsleuth_verify::hide_console_window(&mut std::process::Command::new("git"))
         .args(["add", "-AN"])
         .current_dir(dir)
         .output();
     if add.is_err() {
         return String::new();
     }
-    std::process::Command::new("git")
+    bugsleuth_verify::hide_console_window(&mut std::process::Command::new("git"))
         .args(["diff"])
         .current_dir(dir)
         .output()
