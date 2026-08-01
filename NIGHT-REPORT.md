@@ -442,7 +442,8 @@ the output just quietly means something other than it appears to.
 
 ## 10. What I did not do
 
-- **No user interface.** Out of scope by instruction.
+- **No user interface.** Out of scope by instruction — *that instruction was
+  later lifted, and the desktop app now exists. See `PROGRESS.md`.*
 - **Kilo cannot prove.** Claude and Codex both can now. Kilo is refused with a
   stated reason: it cannot be given an output schema to enforce, so its account
   of what it did cannot be relied on, and a proof step whose self-report cannot

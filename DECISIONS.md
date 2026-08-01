@@ -492,23 +492,33 @@ instantly with "has overflowed its stack" looks like infinite recursion, and
 there is none. The trigger is the optimisation profile, so it appears only in
 release, which is the build you ship.
 
-### 3.7 What the app has not been shown to do
+### 3.7 What the app has been shown to do, and how
 
-Honest limits, because the difference between "wired up" and "observed working"
-is the whole point of this project:
+Both gaps this section used to record are now closed, and closed by clicking
+rather than by reading the code:
 
-- Clicking the tray menu, and a full click-through of Quit to process exit, were
-  **not** driven end to end. That needs WebDriver or an installed app.
-- **No real run has been started from the app.** The engine underneath is the
-  same code the command line has run many times and the command is a thin
-  wrapper, but the app has not itself driven a sweep.
+- **A real review has been run from the app.** Progress streamed into the window
+  and the sweep's JSON landed in `%APPDATA%\BugSleuthuns`, naming the model
+  and carrying anchors that resolve to real lines of the fixture. That last part
+  is the evidence that counts: the window could display anything, but only a
+  real run writes that file.
+- **The tray was driven.** Closing the window hid it and left the process alive;
+  the tray icon restored it with its state intact; the menu offered Open and
+  Quit; Quit exited cleanly with no orphan.
 
-Both are live-acceptance work, and `~/.agents/tauri.md` is right that a release
-touching the core workflow should have it. This is not a release.
+The journey is written down in [RUNBOOK.md](RUNBOOK.md) so it can be repeated
+rather than rediscovered. It was driven manually, because the WebDriver harness
+does not observe anything — see 3.10.
 
-### 3.8 The portable executable still needs the VC++ runtime
+What remains unobserved is narrower and worth naming: **proving has never been
+run from the app.** It is wired, it refuses clearly when the repository is not
+a git checkout or no test command is set, and the engine underneath is the same
+code the experiments used — but no proof round has been started by clicking
+Run.
 
-**Observed, not yet fixed.** `dumpbin /dependents` on the release binary shows no
+### 3.8 The portable executable needed the VC++ runtime, and no longer does
+
+**Observed, then fixed.** `dumpbin /dependents` on the release binary showed no
 `WebView2Loader.dll` — good, that one is handled — but it does import
 `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll`. Those come from the Visual C++
 Redistributable, which is very commonly present but is *not* part of a clean
