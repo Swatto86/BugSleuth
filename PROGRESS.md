@@ -528,7 +528,25 @@ defect looks worse than its label it should be treated as worse.
   through them.
 - **Compound findings do not merge.** When one model bundles two defects into one
   finding it stays separate from both single-defect counterparts. Documented at
-  the threshold in `crates/bugsleuth-judge/src/cluster.rs`.
+  the threshold in `crates/bugsleuth-judge/src/cluster/pairing.rs`.
+- ~~The wording threshold has a thin margin on the wrong-merge side.~~ **It was
+  crossed, by a feature added the same afternoon.** Asking one model to sweep the
+  same code twice — the new repeat pass — broke the merge rule, and the tool's
+  own output is what showed it. Two passes of *one* model word two different
+  defects far more alike than two vendors ever did: an underflow in
+  `remove_stock`, a division by zero in `average_price` and an index panic in
+  `top_by_value`, all inside ten lines, scored 0.36 to 0.42 against each other
+  against a 0.35 threshold. All three collapsed into one, and a defect both
+  passes had found **disappeared from the report entirely** — the worst failure
+  this judge has, because the reader never learns it exists.
+
+  No threshold fixes that; the two populations now overlap. What separates them
+  is that they name different code. Merging now also requires the two accounts to
+  share a `snake_case` or `camelCase` identifier, which keeps the case the line
+  window was widened for — one defect anchored at a signature and at the
+  offending comparison, where both accounts still say the same function name.
+  Both passes are committed as a fourth test corpus, and both new tests were
+  confirmed to fail with the gate removed.
 
 ## Next concrete step
 

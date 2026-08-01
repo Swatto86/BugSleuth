@@ -236,3 +236,65 @@ fn the_real_repo_corpus_merges_four_findings_into_three_defects() {
         "expected the two timezone findings to merge and the other two to stand alone"
     );
 }
+
+// ── Two passes of one model ─────────────────────────────────────────────────
+//
+// Real output from sweeping one fixture twice with the same model, which is
+// what asking for a repeat pass produces. It is the corpus that exposed the
+// wrong-merge failure: one model's two accounts of *different* defects are
+// worded far more alike than two vendors' accounts ever were.
+
+fn load_repeated() -> Vec<Finding> {
+    let mut all = Vec::new();
+    for name in ["repeat-pass1.json", "repeat-pass2.json"] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data")
+            .join(name);
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        let file: SweepFile = serde_json::from_str(&text)
+            .unwrap_or_else(|e| panic!("{} is not a sweep report: {e}", path.display()));
+        all.extend(file.findings);
+    }
+    all
+}
+
+#[test]
+fn three_different_defects_within_ten_lines_are_not_collapsed_into_one() {
+    // All three are in one file inside a ten-line span, and every pair scores
+    // 0.36 to 0.42 on wording — above the merge threshold. They are an
+    // underflow, a division by zero and an index panic, in three different
+    // functions. Merging them lost one defect out of the report entirely, which
+    // is the worst failure this judge has: the reader never learns it exists.
+    let clusters = cluster(load_repeated());
+    assert!(!grouped(&clusters, "remove_stock", "average_price"));
+    assert!(!grouped(&clusters, "average_price", "top_by_value"));
+    assert!(!grouped(&clusters, "remove_stock", "top_by_value"));
+}
+
+#[test]
+fn the_same_defect_seen_twice_by_one_model_still_merges() {
+    // The gate must not simply refuse to merge. Both passes found the underflow
+    // in remove_stock and described it differently; that is one defect.
+    let clusters = cluster(load_repeated());
+    assert_eq!(
+        clusters.len(),
+        6,
+        "eleven findings across two passes are six distinct defects"
+    );
+    for title in [
+        "remove_stock",
+        "average_price",
+        "top_by_value",
+        "basket_total",
+        "parse_price",
+    ] {
+        assert!(
+            clusters.iter().any(|c| c
+                .findings
+                .iter()
+                .any(|f| f.title.contains(title) || f.explanation.contains(title))),
+            "{title} was lost during merging"
+        );
+    }
+}

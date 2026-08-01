@@ -44,6 +44,12 @@ const MAX_LINE_GAP: u32 = 10;
 /// report is an annoyance, while two distinct defects silently collapsed into
 /// one means the reader never learns about the second.
 ///
+/// **That thin margin was crossed the moment one model was asked to sweep
+/// twice.** The measurements above are cross-vendor; two passes of the *same*
+/// model word two different defects far more alike, and three unrelated defects
+/// in one file scored 0.36 to 0.42 against each other. Wording alone can no
+/// longer do this job, which is why [`names_overlap`] now has to agree too.
+///
 /// Two limitations this leaves in place, both real and neither fixable by a
 /// threshold. A compound finding — one model describing a panic *and* an
 /// arithmetic error as a single defect — is not one-to-one with either
@@ -64,7 +70,59 @@ pub(super) fn same_defect(left: &Finding, right: &Finding) -> bool {
     // words that distinguish "divides by zero" from "can overflow".
     let left_text = format!("{} {}", left.title, left.explanation);
     let right_text = format!("{} {}", right.title, right.explanation);
-    crate::similarity(&left_text, &right_text) >= MIN_WORDING_OVERLAP
+    if crate::similarity(&left_text, &right_text) < MIN_WORDING_OVERLAP {
+        return false;
+    }
+    names_overlap(&left_text, &right_text)
+}
+
+/// Whether two accounts name any of the same code.
+///
+/// **The gate that prose could not provide.** Two sweeps of the *same* model
+/// word two different defects almost identically — same habits, same sentence
+/// shapes — so repeating a model pushed different-defect pairs from around 0.30
+/// up past the 0.35 wording threshold. Three unrelated defects in one file
+/// collapsed into one on real output: an underflow in `remove_stock`, a
+/// division by zero in `average_price`, and an index panic in `top_by_value`,
+/// all within ten lines and all scoring 0.36 to 0.42 against each other. No
+/// threshold separates that, because the populations now overlap.
+///
+/// Identifiers do separate it. Two accounts of one defect name the same
+/// function; two defects in neighbouring functions name different ones. This
+/// keeps the case the line window was widened for — one defect anchored at a
+/// signature and at the offending comparison five lines apart, where both
+/// accounts still say `snap_all_day_to_midnight`.
+///
+/// Silent when there is nothing to go on: a finding that names no identifier at
+/// all is judged on wording alone, as before. Absent evidence must not read as
+/// evidence of difference.
+fn names_overlap(left: &str, right: &str) -> bool {
+    let (left, right) = (identifiers(left), identifiers(right));
+    if left.is_empty() || right.is_empty() {
+        return true;
+    }
+    left.iter().any(|name| right.contains(name))
+}
+
+/// Words that look like code rather than prose: `snake_case` or `camelCase`.
+/// Deliberately narrow — an ordinary English word appearing in both accounts
+/// says nothing, which is exactly the problem this exists to get around.
+fn identifiers(text: &str) -> Vec<String> {
+    let mut found: Vec<String> = text
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .filter(|word| word.len() > 3 && looks_like_code(word))
+        .map(|word| word.to_ascii_lowercase())
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+fn looks_like_code(word: &str) -> bool {
+    let inner_underscore = word.trim_matches('_').contains('_');
+    let camel = word.chars().next().is_some_and(char::is_lowercase)
+        && word.chars().skip(1).any(char::is_uppercase);
+    inner_underscore || camel
 }
 
 /// Whether a finding carries usable fix instructions.

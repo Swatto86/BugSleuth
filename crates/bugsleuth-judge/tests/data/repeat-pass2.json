@@ -1,0 +1,146 @@
+{
+  "lane": "Correctness",
+  "model": "claude:haiku",
+  "status": {
+    "state": "swept",
+    "turns": 9
+  },
+  "findings": [
+    {
+      "id": "correctness-0",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Unsigned integer underflow in remove_stock on overdraft",
+      "severity": "critical",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 36,
+        "claimed_line": 36,
+        "snippet": "        item.quantity -= count;"
+      },
+      "explanation": "Subtracting count from item.quantity without checking that count <= quantity causes unsigned integer underflow. When count exceeds the available quantity, the u32 silently wraps around to a huge value instead of failing. This corrupts the inventory state irreversibly.",
+      "failure_scenario": "Call remove_stock(\"A\", 100) when item A has quantity=10. Expected: error or 0 items left. Actual: quantity wraps to u32::MAX - 89 = 4294967206, leaving an absurdly large phantom stock that cannot be corrected.",
+      "fix": {
+        "approach": "Check that count does not exceed the available quantity before performing the subtraction. Return an error if overdraft is attempted, matching the pattern already established for missing SKUs on line 35.",
+        "edits": [
+          {
+            "file": "src/inventory.rs",
+            "location": "remove_stock method",
+            "change": "        if count > item.quantity {\n            return Err(format!(\"insufficient stock: {} available, {} requested\", item.quantity, count));\n        }\n        item.quantity -= count;"
+          }
+        ],
+        "verification": "Add a test: #[test]\\nfn overdraft_is_an_error() {\\n    let mut inv = Inventory::new();\\n    inv.add(item(\"A\", 5, 100));\\n    assert!(inv.remove_stock(\"A\", 10).is_err());\\n    assert_eq!(inv.get(\"A\").unwrap().quantity, 5);\\n}\\nRun: cargo test overdraft_is_an_error",
+        "risks": "The return type is already Result<u32, String>, so the error is already in the contract. Any caller checking the result will work correctly. Callers that panic on Err() already handle missing SKUs the same way, so this is consistent. No change to the success path."
+      }
+    },
+    {
+      "id": "correctness-1",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Division by zero panic in average_price when inventory is empty",
+      "severity": "high",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 43,
+        "claimed_line": 43,
+        "snippet": "        total / self.items.len() as u64"
+      },
+      "explanation": "If the inventory has no items, self.items.len() returns 0, and dividing by 0 causes an immediate panic. This is reachable from any code that calls average_price() on an empty inventory without checking is_empty() first.",
+      "failure_scenario": "Create a new Inventory and call average_price() immediately. Expected: reasonable return value (e.g., 0). Actual: panic.",
+      "fix": {
+        "approach": "Check whether the inventory is empty before dividing. Return a sensible default (0) for an empty inventory, since there is no average when there are no items.",
+        "edits": [
+          {
+            "file": "src/inventory.rs",
+            "location": "average_price method",
+            "change": "        if self.items.is_empty() {\n            return 0;\n        }\n        let total: u64 = self.items.values().map(|item| item.unit_price_pence).sum();\n        total / self.items.len() as u64"
+          }
+        ],
+        "verification": "Add a test: #[test]\\nfn average_price_of_empty_inventory() {\\n    let inv = Inventory::new();\\n    assert_eq!(inv.average_price(), 0);\\n}\\nRun: cargo test average_price_of_empty_inventory",
+        "risks": "Callers already have the option to check is_empty() before calling average_price(). Returning 0 for an empty inventory is a sensible semantic (no items = no cost = 0). No caller expectations are violated."
+      }
+    },
+    {
+      "id": "correctness-2",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Array index out of bounds panic in top_by_value",
+      "severity": "high",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 50,
+        "claimed_line": 50,
+        "snippet": "        items[..n].to_vec()"
+      },
+      "explanation": "Slicing items[..n] panics if n > items.len(). There is no bounds check. Any caller requesting more items than exist in inventory will crash.",
+      "failure_scenario": "Call top_by_value(1000) on an inventory with 5 items. Expected: return the 5 items (or error). Actual: panic with index out of bounds.",
+      "fix": {
+        "approach": "Clamp n to the actual number of items before slicing. Use std::cmp::min(n, items.len()) to return at most n items without panicking.",
+        "edits": [
+          {
+            "file": "src/inventory.rs",
+            "location": "top_by_value method",
+            "change": "        items[..std::cmp::min(n, items.len())].to_vec()"
+          }
+        ],
+        "verification": "Add a test: #[test]\\nfn requesting_more_items_than_exist() {\\n    let mut inv = Inventory::new();\\n    inv.add(item(\"A\", 1, 100));\\n    inv.add(item(\"B\", 1, 200));\\n    let top = inv.top_by_value(100);\\n    assert_eq!(top.len(), 2);\\n}\\nRun: cargo test requesting_more_items_than_exist",
+        "risks": "The return type is Vec, which already allows returning fewer items than requested. The semantic is unchanged: return up to n items. All callers will see the same results for valid n values."
+      }
+    },
+    {
+      "id": "correctness-3",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Panics on malformed input in parse_price",
+      "severity": "high",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 26,
+        "claimed_line": 26,
+        "snippet": "    let (pounds, pence) = input.split_once('.').unwrap();\n    pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()"
+      },
+      "explanation": "Two separate .unwrap() calls with no error handling. Missing a decimal point causes the first unwrap to panic. Non-numeric strings in pounds or pence cause subsequent unwraps to panic. This function accepts any &str input and will crash on any malformed price string.",
+      "failure_scenario": "Call parse_price(\"12\") (missing decimal). Expected: error or fallback. Actual: panic. Or call parse_price(\"12.abc\"). Expected: error. Actual: panic on pence.parse().",
+      "fix": {
+        "approach": "Return a Result type instead of panicking. Check split_once() and parse() results explicitly and return an error instead of unwrapping.",
+        "edits": [
+          {
+            "file": "src/pricing.rs",
+            "location": "parse_price function",
+            "change": "pub fn parse_price(input: &str) -> Result<u64, String> {\n    let (pounds, pence) = input\n        .split_once('.')\n        .ok_or_else(|| \"price must contain a decimal point\".to_string())?;\n    let pounds_val = pounds\n        .parse::<u64>()\n        .map_err(|_| \"pounds part must be a valid number\".to_string())?;\n    let pence_val = pence\n        .parse::<u64>()\n        .map_err(|_| \"pence part must be a valid number\".to_string())?;\n    Ok(pounds_val * 100 + pence_val)\n}"
+          }
+        ],
+        "verification": "Update existing test to: assert_eq!(parse_price(\"12.34\"), Ok(1234));\\nAdd new tests: #[test] fn parse_price_missing_dot() { assert!(parse_price(\"12\").is_err()); }\\n#[test] fn parse_price_non_numeric() { assert!(parse_price(\"12.abc\").is_err()); }\\nRun: cargo test parse_price",
+        "risks": "The return type changes from u64 to Result<u64, String>. All existing callers of parse_price() must handle the Result. Search for all usages with grep -r parse_price and update call sites."
+      }
+    },
+    {
+      "id": "correctness-4",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Off-by-one error in basket_total discount thresholds",
+      "severity": "medium",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 14,
+        "claimed_line": 14,
+        "snippet": "    let percent = if quantity > 50 {\n        10\n    } else if quantity > 10 {\n        5"
+      },
+      "explanation": "The docstring states 'Baskets of 10 or more items get 5% off; 50 or more get 10% off.' But the code uses > instead of >=. This means quantity=10 gets 0% instead of 5%, and quantity=50 gets 5% instead of 10%, contradicting the documented behavior.",
+      "failure_scenario": "Call basket_total(100, 10). Expected: 100*10 with 5% discount = 950 pence. Actual: 100*10 = 1000 pence (0% discount). Call basket_total(100, 50). Expected: with 10% discount = 4500 pence. Actual: 4750 pence (5% discount).",
+      "fix": {
+        "approach": "Change > to >= on both boundary checks so discount thresholds match documentation: 10-49 items get 5%, 50+ get 10%.",
+        "edits": [
+          {
+            "file": "src/pricing.rs",
+            "location": "basket_total function",
+            "change": "    let percent = if quantity >= 50 {\n        10\n    } else if quantity >= 10 {\n        5"
+          }
+        ],
+        "verification": "Add tests: #[test] fn ten_items_gets_five_percent() { assert_eq!(basket_total(100, 10), 950); }\\n#[test] fn fifty_items_gets_ten_percent() { assert_eq!(basket_total(100, 50), 4500); }\\nRun: cargo test basket_total",
+        "risks": "This changes discount calculation for quantities of exactly 10 and 50. Existing clients relying on the old boundaries will see different prices. This corrects behavior to match documented API."
+      }
+    }
+  ],
+  "rejected": []
+}

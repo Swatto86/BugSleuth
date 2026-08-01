@@ -1,0 +1,173 @@
+{
+  "lane": "Correctness",
+  "model": "claude:haiku",
+  "status": {
+    "state": "swept",
+    "turns": 11
+  },
+  "findings": [
+    {
+      "id": "correctness-0",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Underflow panic or wraparound in remove_stock when count exceeds available quantity",
+      "severity": "critical",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 36,
+        "claimed_line": 36,
+        "snippet": "        item.quantity -= count;"
+      },
+      "explanation": "The code subtracts count from quantity without validating that count <= quantity. Since quantity is u32 (unsigned), subtracting a larger value causes a panic in debug mode or silent wraparound in release mode. This silently corrupts inventory state.",
+      "failure_scenario": "Call remove_stock('A', 10) on an item with quantity 5. In debug builds, this panics with overflow. In release builds, quantity wraps to u32::MAX - 5, corrupting the inventory state.",
+      "fix": {
+        "approach": "Validate that count does not exceed available quantity before performing the subtraction. The root cause is missing boundary validation of the count parameter at the system boundary where external requests modify state.",
+        "edits": [
+          {
+            "file": "src/inventory.rs",
+            "location": "remove_stock function",
+            "change": "Replace:\n        item.quantity -= count;\n        Ok(item.quantity)\n\nWith:\n        if count > item.quantity {\n            return Err(format!(\"insufficient stock: need {count}, have {}\", item.quantity));\n        }\n        item.quantity -= count;\n        Ok(item.quantity)"
+          }
+        ],
+        "verification": "Add test: fn test_insufficient_stock() { let mut inv = Inventory::new(); inv.add(item('A', 5, 100)); assert!(inv.remove_stock('A', 10).is_err()); } Run cargo test to verify the test passes after the fix and panics before.",
+        "risks": "Callers that expect the function to always succeed will now receive Err results. Check all call sites of remove_stock for error handling. However, the function already returns Result, so callers should already handle errors."
+      }
+    },
+    {
+      "id": "correctness-1",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Panic on division by zero in average_price when inventory is empty",
+      "severity": "high",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 43,
+        "claimed_line": 43,
+        "snippet": "        total / self.items.len() as u64"
+      },
+      "explanation": "When the inventory is empty, self.items.len() is 0, causing division by zero which panics. This is a reachable edge case since inventory can be empty initially or after removing all items.",
+      "failure_scenario": "Call average_price() on an empty Inventory or one where all items were removed. The function panics with 'attempt to divide by zero'.",
+      "fix": {
+        "approach": "Check if the inventory is empty before dividing. Return a sensible value (0 or an error) for the empty case. The root cause is missing edge case handling for empty collections.",
+        "edits": [
+          {
+            "file": "src/inventory.rs",
+            "location": "average_price function",
+            "change": "Replace:\n        let total: u64 = self.items.values().map(|item| item.unit_price_pence).sum();\n        total / self.items.len() as u64\n\nWith:\n        if self.items.is_empty() {\n            return 0;\n        }\n        let total: u64 = self.items.values().map(|item| item.unit_price_pence).sum();\n        total / self.items.len() as u64"
+          }
+        ],
+        "verification": "Add test: fn test_average_price_empty() { let inv = Inventory::new(); assert_eq!(inv.average_price(), 0); } Run cargo test. Before the fix, this test panics; after, it passes.",
+        "risks": "Callers that expect average_price to never return 0 may be affected. However, 0 is a reasonable default for an empty collection. If a different behavior is desired (error or None), that should be documented."
+      }
+    },
+    {
+      "id": "correctness-2",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Panic on index out of bounds in top_by_value when n exceeds item count",
+      "severity": "high",
+      "anchor": {
+        "file": "src/inventory.rs",
+        "line": 50,
+        "claimed_line": 50,
+        "snippet": "        items[..n].to_vec()"
+      },
+      "explanation": "The function slices items[..n] without checking that n <= items.len(). If n is greater than the number of items, this causes an index out of bounds panic. This is a reachable edge case since n is a user-provided parameter.",
+      "failure_scenario": "Call top_by_value(100) on an inventory with only 5 items. The function panics with 'range end index 100 out of bounds'.",
+      "fix": {
+        "approach": "Clamp n to the actual number of items before slicing. The root cause is missing boundary validation on the n parameter, which is user-provided.",
+        "edits": [
+          {
+            "file": "src/inventory.rs",
+            "location": "top_by_value function",
+            "change": "Replace:\n        items.sort_by_key(|item| std::cmp::Reverse(item.unit_price_pence * item.quantity as u64));\n        items[..n].to_vec()\n\nWith:\n        items.sort_by_key(|item| std::cmp::Reverse(item.unit_price_pence * item.quantity as u64));\n        let limit = n.min(items.len());\n        items[..limit].to_vec()"
+          }
+        ],
+        "verification": "Add test: fn test_top_by_value_exceeds_items() { let mut inv = Inventory::new(); inv.add(item('A', 5, 100)); inv.add(item('B', 3, 100)); let top = inv.top_by_value(10); assert_eq!(top.len(), 2); } Run cargo test. Before the fix, this panics; after, it returns all available items.",
+        "risks": "Callers that expect exactly n items may now receive fewer results. This is the correct behavior (requesting top 100 from a list of 5 should return 5, not panic), so callers should already handle variable-length results."
+      }
+    },
+    {
+      "id": "correctness-3",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Boundary error in basket_total: off-by-one in bulk discount thresholds",
+      "severity": "high",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 14,
+        "claimed_line": 14,
+        "snippet": "    let percent = if quantity > 50 {\n        10\n    } else if quantity > 10 {"
+      },
+      "explanation": "The specification states 'Baskets of 10 or more items get 5% off; 50 or more get 10% off', but the code uses > (strictly greater than) instead of >= (greater than or equal). This causes off-by-one errors: at exactly 10 items, no discount is applied (should be 5%); at exactly 50 items, only 5% is applied (should be 10%).",
+      "failure_scenario": "Call basket_total(100, 10). Expected: 100 * 10 * 0.95 = 950. Actual: 100 * 10 = 1000. Call basket_total(100, 50). Expected: 100 * 50 * 0.90 = 4500. Actual: 100 * 50 * 0.95 = 4750.",
+      "fix": {
+        "approach": "Change > to >= for both threshold comparisons to match the documented specification. The root cause is a boundary condition error where the comparison operators do not match the intended business logic.",
+        "edits": [
+          {
+            "file": "src/pricing.rs",
+            "location": "basket_total function",
+            "change": "Replace:\n    let percent = if quantity > 50 {\n        10\n    } else if quantity > 10 {\n        5\n\nWith:\n    let percent = if quantity >= 50 {\n        10\n    } else if quantity >= 10 {\n        5"
+          }
+        ],
+        "verification": "Add tests: fn test_basket_10_items() { assert_eq!(basket_total(100, 10), 950); } fn test_basket_50_items() { assert_eq!(basket_total(100, 50), 4500); } Run cargo test. Before the fix, these assertions fail; after, they pass.",
+        "risks": "This changes discount behavior at the exact threshold quantities. Any code that depends on the current (incorrect) behavior would be affected, but changing to match the specification is the correct fix. No callers should depend on the bug."
+      }
+    },
+    {
+      "id": "correctness-4",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Panic on missing decimal point in parse_price",
+      "severity": "high",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 26,
+        "claimed_line": 26,
+        "snippet": "    let (pounds, pence) = input.split_once('.').unwrap();"
+      },
+      "explanation": "The unwrap() on split_once('.') panics if the input does not contain a decimal point. This is a reachable edge case since input is user-provided and the function has no documentation stating it requires a decimal point.",
+      "failure_scenario": "Call parse_price('12') without a decimal point. The function panics with 'called `Option::unwrap()` on a `None` value'.",
+      "fix": {
+        "approach": "Handle the case where input lacks a decimal point. Either treat it as a whole number of pounds (with 0 pence), or return an error. The root cause is missing error handling for invalid input at a system boundary (parsing user input).",
+        "edits": [
+          {
+            "file": "src/pricing.rs",
+            "location": "parse_price function",
+            "change": "Replace:\n    let (pounds, pence) = input.split_once('.').unwrap();\n    pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()\n\nWith:\n    let (pounds, pence_str) = input.split_once('.').unwrap_or((input, \"0\"));\n    let pence = if pence_str.is_empty() { 0 } else { pence_str.parse::<u64>().unwrap_or(0) };\n    pounds.parse::<u64>().unwrap_or(0) * 100 + pence"
+          }
+        ],
+        "verification": "Add tests: fn test_parse_price_no_decimal() { assert_eq!(parse_price(\"12\"), 1200); } fn test_parse_price_with_decimal() { assert_eq!(parse_price(\"12.34\"), 1234); } Run cargo test. Before the fix, the first test panics; after, both pass.",
+        "risks": "This changes the behavior to accept prices without decimals. Callers that provide well-formed input are unaffected. The new behavior is more robust."
+      }
+    },
+    {
+      "id": "correctness-5",
+      "lane": "correctness",
+      "model": "claude:haiku",
+      "title": "Incorrect parsing of fractional pence in parse_price",
+      "severity": "high",
+      "anchor": {
+        "file": "src/pricing.rs",
+        "line": 27,
+        "claimed_line": 27,
+        "snippet": "    pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()"
+      },
+      "explanation": "The pence part is parsed as a raw number without zero-padding, causing incorrect results. For example, '12.3' parses as 12*100 + 3 = 1203 pence (12.03 pounds) when it should be 1230 pence (12.30 pounds). The function also does not validate that pence are in the range 0-99.",
+      "failure_scenario": "Call parse_price('12.3'). Expected: 1230 pence (12.30 pounds). Actual: 1203 pence (12.03 pounds). Call parse_price('12.150'). Expected: error or 1215 pence. Actual: 1250 pence with no validation error.",
+      "fix": {
+        "approach": "Zero-pad the pence part to 2 digits, or take only the first 2 digits. Validate that pence are in the range 0-99. The root cause is missing input validation and normalization for fractional decimal parts.",
+        "edits": [
+          {
+            "file": "src/pricing.rs",
+            "location": "parse_price function",
+            "change": "Replace:\n    let (pounds, pence) = input.split_once('.').unwrap();\n    pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()\n\nWith:\n    let (pounds, pence_str) = input.split_once('.').unwrap_or((input, \"0\"));\n    let pence_normalized = format!(\"{:<02}\", pence_str).chars().take(2).collect::<String>();\n    pounds.parse::<u64>().unwrap_or(0) * 100 + pence_normalized.parse::<u64>().unwrap_or(0)"
+          }
+        ],
+        "verification": "Add tests: fn test_parse_price_single_pence() { assert_eq!(parse_price(\"12.3\"), 1230); } fn test_parse_price_two_pence() { assert_eq!(parse_price(\"12.34\"), 1234); } fn test_parse_price_zero_pence() { assert_eq!(parse_price(\"12.0\"), 1200); } Run cargo test. Before the fix, these assertions fail; after, they pass.",
+        "risks": "This changes behavior for prices with non-standard decimal places. Callers providing well-formed input (exactly 2 decimal places) are unaffected. The new behavior correctly handles edge cases."
+      }
+    }
+  ],
+  "rejected": []
+}
