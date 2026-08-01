@@ -193,6 +193,14 @@ async fn run_batch(batch: &[Unit], options: &RunOptions<'_>) -> Vec<SweepOutcome
 }
 
 impl RunReport {
+    /// How many distinct lanes actually ran.
+    fn lanes_swept(&self) -> usize {
+        let mut lanes: Vec<Lane> = self.swept.iter().map(|(_, lane, _)| *lane).collect();
+        lanes.sort_by_key(|lane| lane.slug());
+        lanes.dedup();
+        lanes.len()
+    }
+
     pub fn to_text(&self) -> String {
         let mut out = String::from("=== run report ===\n");
         for (model, lane, count) in &self.swept {
@@ -222,6 +230,19 @@ impl RunReport {
             self.swept.len(),
             self.ranked.len()
         ));
+
+        // Severity means different things in different mandates. A "high" from
+        // the security lane and a "high" from the correctness lane were assigned
+        // by models answering different questions, so ordering one against the
+        // other is not a judgement anyone actually made. Say so rather than let
+        // a single ranked list imply a comparison it cannot support.
+        if self.lanes_swept() > 1 {
+            out.push_str(
+                "\n  Note: this list spans more than one lane. Severities are relative to\n  \
+                 each lane's own mandate and are NOT directly comparable between lanes -\n  \
+                 read the ordering within a lane, not across them.\n",
+            );
+        }
 
         for entry in &self.ranked {
             let cluster = &entry.cluster;
@@ -366,6 +387,41 @@ mod tests {
         assert!(text.contains("found by 2 of 2 models"));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_single_lane_report_does_not_warn_about_comparing_lanes() {
+        assert!(!report(vec![]).to_text().contains("NOT directly comparable"));
+    }
+
+    #[test]
+    fn a_multi_lane_report_warns_that_severities_are_not_comparable() {
+        // A "high" from the security lane and a "high" from the correctness lane
+        // were assigned by models answering different questions.
+        let multi = RunReport {
+            ranked: vec![],
+            swept: vec![
+                ("claude:sonnet".into(), Lane::Correctness, 1),
+                ("claude:sonnet".into(), Lane::Security, 1),
+            ],
+            gaps: vec![],
+        };
+        assert_eq!(multi.lanes_swept(), 2);
+        assert!(multi.to_text().contains("NOT directly comparable"));
+    }
+
+    #[test]
+    fn two_models_on_one_lane_is_still_one_lane() {
+        let same_lane = RunReport {
+            ranked: vec![],
+            swept: vec![
+                ("claude:sonnet".into(), Lane::Correctness, 1),
+                ("codex:".into(), Lane::Correctness, 1),
+            ],
+            gaps: vec![],
+        };
+        assert_eq!(same_lane.lanes_swept(), 1);
+        assert!(!same_lane.to_text().contains("NOT directly comparable"));
     }
 
     #[test]
