@@ -4,19 +4,25 @@
 //! different reasons: this is the shape of a single defect on the page, that is
 //! which documents exist and what warnings they carry.
 
-use bugsleuth_domain::Finding;
+use bugsleuth_domain::{Finding, Severity};
 
 /// One defect, written as a work order.
 ///
 /// `position` is its rank in the merged report, so a person and a model reading
 /// the same document are talking about the same number.
-pub fn work_order(position: usize, finding: &Finding, agreement: usize, sources: usize) -> String {
+pub fn work_order(
+    position: usize,
+    finding: &Finding,
+    severity: Severity,
+    agreement: usize,
+    sources: usize,
+) -> String {
     let mut out = String::new();
     let anchor = &finding.anchor;
 
     out.push_str(&format!(
         "\n### {position}. [{}] {}\n\n",
-        finding.severity.as_str().to_uppercase(),
+        severity.as_str().to_uppercase(),
         finding.title
     ));
     out.push_str(&format!("- **Where:** `{}`:{}\n", anchor.file, anchor.line));
@@ -128,7 +134,7 @@ mod tests {
         // Silence would read as "nothing to do here", which is the opposite of
         // what a missing plan means — and this is the case that happens whenever
         // an older sweep report is merged.
-        let text = work_order(1, &finding(Default::default()), 1, 3);
+        let text = work_order(1, &finding(Default::default()), Severity::High, 1, 3);
         assert!(text.contains("no fix plan"), "{text}");
     }
 
@@ -136,7 +142,7 @@ mod tests {
     fn a_corrected_line_number_is_called_out_so_the_right_one_is_used() {
         // The implementer will go to a line. If the reviewer's number was wrong
         // and we show both without comment, they may pick the wrong one.
-        let text = work_order(1, &finding(Default::default()), 1, 3);
+        let text = work_order(1, &finding(Default::default()), Severity::High, 1, 3);
         assert!(text.contains("said line 40"), "{text}");
         assert!(text.contains("actually found at 42"), "{text}");
     }
@@ -153,7 +159,7 @@ mod tests {
             verification: "cargo test average_price_of_empty".into(),
             risks: "checked both callers".into(),
         };
-        let text = work_order(3, &finding(plan), 2, 3);
+        let text = work_order(3, &finding(plan), Severity::High, 2, 3);
         for expected in [
             "Guard the empty case",
             "fn average_price",
@@ -165,5 +171,16 @@ mod tests {
         ] {
             assert!(text.contains(expected), "missing {expected:?} in\n{text}");
         }
+    }
+
+    #[test]
+    fn the_work_order_shows_the_graded_severity_not_the_finders_own() {
+        // The prompt and the report it came from must agree. After a triage
+        // pass they are different values, and someone reading "defect 7" in one
+        // and finding it two bands apart in the other has no way to tell which
+        // to believe.
+        let text = work_order(1, &finding(Default::default()), Severity::Low, 1, 3);
+        assert!(text.contains("[LOW]"), "{text}");
+        assert!(!text.contains("[HIGH]"), "{text}");
     }
 }

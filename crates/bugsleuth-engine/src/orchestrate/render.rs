@@ -18,6 +18,15 @@ impl RunReport {
         lanes.len()
     }
 
+    /// Whether one grader compared every defect in this report against every
+    /// other. A partial pass does not count: half a list graded one way and
+    /// half another is exactly the state the cross-lane warning is for.
+    fn graded_together(&self) -> bool {
+        self.triage.note.is_empty()
+            && self.triage.graded > 0
+            && self.triage.graded == self.ranked.len()
+    }
+
     pub fn to_text(&self) -> String {
         let mut out = String::from("=== run report ===\n");
         for (model, lane, count) in &self.swept {
@@ -65,7 +74,12 @@ impl RunReport {
         // by models answering different questions, so ordering one against the
         // other is not a judgement anyone actually made. Say so rather than let
         // a single ranked list imply a comparison it cannot support.
-        if self.lanes_swept() > 1 {
+        //
+        // Unless a triage pass graded the whole list, in which case that
+        // comparison *was* made, by one grader against one rubric. Repeating the
+        // warning then would be telling the reader not to trust the one thing
+        // that was done specifically to make the ordering trustworthy.
+        if self.lanes_swept() > 1 && !self.graded_together() {
             out.push_str(
                 "\n  Note: this list spans more than one lane. Severities are relative to\n  \
                  each lane's own mandate and are NOT directly comparable between lanes -\n  \
@@ -235,6 +249,35 @@ mod triage_tests {
         })
         .to_text();
         assert!(text.contains("ungraded"), "{text}");
+    }
+
+    #[test]
+    fn a_fully_graded_multi_lane_report_stops_warning_that_lanes_cannot_be_compared() {
+        // The warning exists because each lane's severities were assigned by
+        // models answering different questions. Once one grader has compared the
+        // whole list against one rubric, that is no longer what happened, and
+        // repeating it would tell the reader not to trust the very step taken to
+        // make the ordering trustworthy.
+        let mut multi = RunReport {
+            ranked: vec![],
+            triage: Outcome {
+                graded: 0,
+                changed: 0,
+                note: String::new(),
+            },
+            swept: vec![
+                ("claude:sonnet".into(), Lane::Correctness, 1),
+                ("claude:sonnet".into(), Lane::Security, 1),
+            ],
+            gaps: vec![],
+        };
+        // Nothing graded: the warning stands.
+        assert!(multi.to_text().contains("NOT directly comparable"));
+
+        // Graded, but only part of the list: still two standards in one list.
+        multi.ranked = vec![];
+        multi.triage.graded = 1;
+        assert!(multi.to_text().contains("NOT directly comparable"));
     }
 
     #[test]

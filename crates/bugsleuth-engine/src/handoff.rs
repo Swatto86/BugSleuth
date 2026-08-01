@@ -47,6 +47,11 @@ pub fn prompt(repo: &str, ranked: &[Ranked], not_reviewed: &[String], sweeps: us
         out.push_str(&work_order(
             entry.position,
             entry.cluster.representative(),
+            // The cluster's severity, not the finder's own: after a triage pass
+            // they differ, and a prompt that disagreed with the report it came
+            // from would have someone fixing defect 7 while reading it graded
+            // two bands apart.
+            entry.cluster.severity(),
             entry.cluster.agreement,
             sweeps,
         ));
@@ -105,6 +110,7 @@ pub fn single(repo: &str, entry: &Ranked, total: usize, sweeps: usize) -> String
     out.push_str(&work_order(
         entry.position,
         entry.cluster.representative(),
+        entry.cluster.severity(),
         entry.cluster.agreement,
         sweeps,
     ));
