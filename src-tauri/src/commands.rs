@@ -350,4 +350,49 @@ mod tests {
             "the default settings should leave no lane unswept"
         );
     }
+
+    #[test]
+    fn the_fix_prompt_carries_the_repo_and_every_unreviewed_lane() {
+        // The app-side half of the deliverable. It cannot be observed without a
+        // window, so it is checked here instead: an agent handed this must learn
+        // which repository it is working on and which lanes nobody looked at.
+        // Omitting either turns an incomplete review into an apparently
+        // complete one.
+        let report = orchestrate::RunReport {
+            ranked: vec![],
+            swept: vec![],
+            gaps: vec![
+                orchestrate::Gap {
+                    lane: bugsleuth_domain::Lane::Security,
+                    model: None,
+                    reason: "no model is assigned to this lane".to_string(),
+                },
+                orchestrate::Gap {
+                    lane: bugsleuth_domain::Lane::Ux,
+                    model: Some("kilo:".to_string()),
+                    reason: "the kilo CLI exited with code 1".to_string(),
+                },
+            ],
+        };
+        let prompt = fix_prompt(std::path::Path::new("C:/x/my-repo"), &report);
+
+        assert!(prompt.contains("my-repo"), "the repository is not named");
+        assert!(
+            prompt.contains("Security"),
+            "an unassigned lane is not listed"
+        );
+        assert!(
+            prompt.contains("nobody"),
+            "an unassigned lane has no owner shown"
+        );
+        assert!(prompt.contains("Ux") || prompt.contains("UX"));
+        assert!(
+            prompt.contains("kilo:"),
+            "a failed sweep does not name its model"
+        );
+        assert!(
+            prompt.contains("not evidence that they are clean"),
+            "nothing warns that the unreviewed lanes are not known-good"
+        );
+    }
 }
