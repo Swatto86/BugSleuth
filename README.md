@@ -46,7 +46,8 @@ marks the empty column and says so in as many words.
 
 Dark and light both, following the system by default, switchable in the title
 bar. Settings live in `%APPDATA%\BugSleuth\settings.json`, and each run's
-per-sweep JSON goes in `%APPDATA%\BugSleuthuns\<repo>`.
+per-sweep JSON goes in `%APPDATA%\BugSleuth
+uns\<repo>`.
 
 ## Using the command line
 
@@ -128,6 +129,30 @@ repository you care about:
   and a "high" from the correctness lane were assigned by models answering
   different questions, so a multi-lane report says so rather than implying a
   ranking nobody made.
+
+## End-to-end tests
+
+```bash
+pwsh -File scripts/setup-e2e.ps1
+```
+
+```bash
+npm run e2e
+```
+
+Drives the real release binary through its own webview. The Edge driver has to
+match this machine's WebView2 runtime version exactly — the setup script reads
+that from the registry rather than guessing, because a mismatch fails with an
+error that says nothing about the cause.
+
+The suite is deliberately one short journey, not a spec per feature: boot,
+provider preflight, the uncovered-lane warning, **a real review with a real
+model**, and the reviewed repository left untouched. It asserts effects rather
+than calls — findings in the window could come from anywhere, but a sweep report
+landing in the app's runs directory naming the model that produced it could not.
+
+Set `BUGSLEUTH_E2E_MODEL` to pick the model; it defaults to `haiku` because the
+journey should cost as little as a real run can.
 
 ## Building
 
