@@ -17,7 +17,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use bugsleuth_domain::{ProofClaim, ProofVerdict};
-use bugsleuth_provider::claude::{ProveRequest, prove as run_model};
+use bugsleuth_provider::claude::{ProveRequest, prove as claude_prove};
+use bugsleuth_provider::codex;
 use bugsleuth_verify::{Outcome, Worktree, counts, run_tests};
 
 mod judge;
@@ -39,6 +40,12 @@ pub struct Attempt<'a> {
     pub test_timeout: Duration,
     pub api_key: Option<&'a str>,
     pub label: &'a str,
+}
+
+/// The model's own account of a proof attempt, before anything is believed.
+struct ProveOutcome {
+    claim: ProofClaim,
+    turns: Option<u32>,
 }
 
 pub struct AttemptReport {
@@ -108,20 +115,44 @@ pub async fn attempt(spec: Attempt<'_>) -> anyhow::Result<AttemptReport> {
         );
     }
 
-    // 2. Let the model try.
-    let result = run_model(ProveRequest {
-        worktree: &dir,
-        model: spec.model,
-        brief: spec.brief,
-        timeout: spec.timeout,
-        max_turns: spec.max_turns,
-        binary: None,
-        api_key: spec.api_key,
-    })
-    .await;
+    // 2. Let the model try. Which vendor is chosen the same way sweeps choose.
+    let (vendor, model) = crate::sweep::Vendor::parse(spec.model);
+    let attempt = match vendor {
+        crate::sweep::Vendor::Claude => claude_prove(ProveRequest {
+            worktree: &dir,
+            model,
+            brief: spec.brief,
+            timeout: spec.timeout,
+            max_turns: spec.max_turns,
+            binary: None,
+            api_key: spec.api_key,
+        })
+        .await
+        .map(|r| (r.claim, r.turns)),
+        crate::sweep::Vendor::Codex => codex::prove(&dir, model, spec.brief, spec.timeout)
+            .await
+            .map(|claim| (claim, None)),
+        // Kilo cannot be constrained to a schema and has no per-invocation
+        // permission control. Refused rather than attempted: a proof step that
+        // cannot be trusted to report accurately is worse than no proof step.
+        crate::sweep::Vendor::Kilo => {
+            return Ok(AttemptReport {
+                verdict: ProofVerdict::NoTestWritten,
+                claim: None,
+                baseline_passed,
+                after_passed: 0,
+                after_failed: 0,
+                changed_files: vec![],
+                turns: None,
+                patch: String::new(),
+                detail: "kilo cannot be used for proof attempts: it cannot be given an output                          schema to enforce, so its report of what it did cannot be relied on"
+                    .to_string(),
+            });
+        }
+    };
 
-    let result = match result {
-        Ok(result) => result,
+    let result = match attempt {
+        Ok((claim, turns)) => ProveOutcome { claim, turns },
         Err(error) => {
             return Ok(AttemptReport {
                 verdict: ProofVerdict::NoTestWritten,

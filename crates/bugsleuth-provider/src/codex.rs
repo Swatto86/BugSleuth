@@ -16,7 +16,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use bugsleuth_domain::{RawFindings, finding_schema};
+use bugsleuth_domain::{ProofClaim, RawFindings, finding_schema, proof_schema};
 
 use crate::error::ProviderError;
 use crate::process::{self, Invocation, preview};
@@ -39,8 +39,75 @@ pub struct CodexResult {
     pub findings: RawFindings,
 }
 
+/// What the sandbox is allowed to do.
+///
+/// A sweep is read-only: the operating system refuses a write, which is a far
+/// stronger guarantee than asking the agent not to. A proof attempt genuinely
+/// has to write a test and run it, so it gets `workspace-write` - and is only
+/// ever pointed at a throwaway worktree, never a real checkout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Sandbox {
+    ReadOnly,
+    WorkspaceWrite,
+}
+
+impl Sandbox {
+    fn flag(self) -> &'static str {
+        match self {
+            Sandbox::ReadOnly => "read-only",
+            Sandbox::WorkspaceWrite => "workspace-write",
+        }
+    }
+}
+
+/// Ask Codex to demonstrate a defect with a failing test.
+///
+/// Takes a `worktree` rather than a `repo`, so the type makes the unsafe call
+/// impossible to write: this invocation can modify what it is pointed at.
+pub async fn prove(
+    worktree: &Path,
+    model: &str,
+    brief: &str,
+    timeout: Duration,
+) -> Result<ProofClaim, ProviderError> {
+    invoke(Invoke {
+        dir: worktree,
+        model,
+        brief,
+        timeout,
+        binary: None,
+        schema: proof_schema(),
+        sandbox: Sandbox::WorkspaceWrite,
+    })
+    .await
+}
+
 /// Run one read-only lane sweep through Codex.
 pub async fn sweep(spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
+    let findings = invoke(Invoke {
+        dir: spec.repo,
+        model: spec.model,
+        brief: spec.brief,
+        timeout: spec.timeout,
+        binary: spec.binary,
+        schema: finding_schema(),
+        sandbox: Sandbox::ReadOnly,
+    })
+    .await?;
+    Ok(CodexResult { findings })
+}
+
+pub(crate) struct Invoke<'a> {
+    pub(crate) dir: &'a Path,
+    pub(crate) model: &'a str,
+    pub(crate) brief: &'a str,
+    pub(crate) timeout: Duration,
+    pub(crate) binary: Option<&'a str>,
+    pub(crate) schema: serde_json::Value,
+    pub(crate) sandbox: Sandbox,
+}
+
+async fn invoke<T: serde::de::DeserializeOwned>(spec: Invoke<'_>) -> Result<T, ProviderError> {
     let binary = match spec.binary {
         Some(path) => PathBuf::from(path),
         None => discover::resolve_binary().ok_or_else(not_found)?,
@@ -53,13 +120,13 @@ pub async fn sweep(spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
     let scratch = scratch_dir()?;
     let schema_path = scratch.join("schema.json");
     let answer_path = scratch.join("answer.json");
-    write_file(&schema_path, &finding_schema().to_string())?;
+    write_file(&schema_path, &spec.schema.to_string())?;
 
     let args = build_args(&spec, &schema_path, &answer_path);
     let output = process::run(Invocation {
         binary: &binary.to_string_lossy(),
         args: &args,
-        cwd: spec.repo,
+        cwd: spec.dir,
         stdin: Some(spec.brief.as_bytes()),
         env: &[],
         timeout: spec.timeout,
@@ -72,10 +139,10 @@ pub async fn sweep(spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
     result
 }
 
-fn finish(
+fn finish<T: serde::de::DeserializeOwned>(
     output: Result<crate::process::CliOutput, crate::process::ProcessError>,
     answer_path: &Path,
-) -> Result<CodexResult, ProviderError> {
+) -> Result<T, ProviderError> {
     let output = output?;
 
     if !output.succeeded() {
@@ -109,9 +176,7 @@ fn finish(
     }
 
     let value = serde_json::from_str(&answer).unwrap_or(serde_json::Value::String(answer));
-    Ok(CodexResult {
-        findings: crate::json::structured(&value)?,
-    })
+    crate::json::structured(&value)
 }
 
 /// Build the non-interactive argv.
@@ -121,15 +186,13 @@ fn finish(
 /// repository's own rules, which is both a security problem and a
 /// reproducibility one. `--sandbox read-only` is stronger than a tool
 /// allowlist — the operating system refuses the write, not the agent.
-fn build_args(spec: &CodexSweep<'_>, schema: &Path, answer: &Path) -> Vec<String> {
+fn build_args(spec: &Invoke<'_>, schema: &Path, answer: &Path) -> Vec<String> {
     let mut args: Vec<String> = ["--ask-for-approval", "never", "exec", "--json"]
         .iter()
         .map(|s| (*s).to_string())
         .collect();
     args.extend(
         [
-            "--sandbox",
-            "read-only",
             "--skip-git-repo-check",
             "--ephemeral",
             "--ignore-user-config",
@@ -140,6 +203,8 @@ fn build_args(spec: &CodexSweep<'_>, schema: &Path, answer: &Path) -> Vec<String
         .iter()
         .map(|s| (*s).to_string()),
     );
+    args.push("--sandbox".into());
+    args.push(spec.sandbox.flag().into());
     args.push("--output-schema".into());
     args.push(schema.to_string_lossy().into_owned());
     args.push("--output-last-message".into());
@@ -221,24 +286,29 @@ pub async fn probe() -> Result<String, ProviderError> {
 mod tests {
     use super::*;
 
-    fn spec<'a>(model: &'a str) -> CodexSweep<'a> {
-        CodexSweep {
-            repo: Path::new("."),
+    fn spec<'a>(model: &'a str, sandbox: Sandbox) -> Invoke<'a> {
+        Invoke {
+            dir: Path::new("."),
             model,
             brief: "",
             timeout: Duration::from_secs(60),
             binary: None,
+            schema: finding_schema(),
+            sandbox,
         }
+    }
+
+    fn args_for(model: &str, sandbox: Sandbox) -> Vec<String> {
+        build_args(
+            &spec(model, sandbox),
+            Path::new("s.json"),
+            Path::new("a.json"),
+        )
     }
 
     #[test]
     fn a_sweep_runs_read_only_and_ignores_the_reviewed_repos_own_config() {
-        let args = build_args(
-            &spec("gpt-5.6-codex"),
-            Path::new("s.json"),
-            Path::new("a.json"),
-        );
-        let joined = args.join(" ");
+        let joined = args_for("gpt-5.6-codex", Sandbox::ReadOnly).join(" ");
         assert!(joined.contains("--sandbox read-only"));
         assert!(joined.contains("--ignore-user-config"));
         assert!(joined.contains("--ignore-rules"));
@@ -246,20 +316,27 @@ mod tests {
     }
 
     #[test]
+    fn a_proof_attempt_may_write_because_it_has_to_add_a_test() {
+        let joined = args_for("", Sandbox::WorkspaceWrite).join(" ");
+        assert!(joined.contains("--sandbox workspace-write"));
+        // Still never the escape hatch, even when writing is allowed.
+        assert!(!joined.contains("dangerously"));
+    }
+
+    #[test]
     fn the_prompt_comes_from_stdin_so_a_long_brief_cannot_overflow_the_command_line() {
-        let args = build_args(&spec(""), Path::new("s.json"), Path::new("a.json"));
+        let args = args_for("", Sandbox::ReadOnly);
         assert_eq!(args.last().map(String::as_str), Some("-"));
     }
 
     #[test]
     fn an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument() {
-        let args = build_args(&spec("  "), Path::new("s.json"), Path::new("a.json"));
-        assert!(!args.iter().any(|a| a == "-m"));
+        assert!(!args_for("  ", Sandbox::ReadOnly).iter().any(|a| a == "-m"));
     }
 
     #[test]
     fn the_schema_and_answer_paths_are_passed_as_files_not_inline_json() {
-        let args = build_args(&spec(""), Path::new("s.json"), Path::new("a.json"));
+        let args = args_for("", Sandbox::ReadOnly);
         let after = |flag: &str| {
             args.iter()
                 .position(|a| a == flag)
