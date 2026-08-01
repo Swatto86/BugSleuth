@@ -79,6 +79,54 @@ looks like 100%; on real code, for this one defect, it is 0 of 2. Everything els
 rests on the sweep actually finding things, and one defect is far too small a
 sample to conclude anything except that this needs measuring properly.
 
+### Measured properly: 1 of 3, and no agreement at all
+
+The experiment the note above asked for, run and graded.
+
+**Setup.** A scratch clone of Alder at the commit before the first of six
+documented fix commits, so all six defects are present naturally — no reverts,
+no conflicts. `PLAN.md` and `BUGSWEEP.md` were removed from that tree first:
+they enumerate the very defects being measured, and leaving them in would have
+measured reading comprehension. Three vendors, one lane, scope narrowed to the
+three files holding three of the known defects — so every vendor was pointed
+straight at them and at each other.
+
+**Graded independently rather than by me.** Two judges per defect, each told to
+answer "not found" when unsure, and told explicitly that same file, same
+function, or symptom-without-cause all count as *not* found. Both judges agreed
+on every one of the three.
+
+| Known defect | Found? |
+|---|---|
+| #1 rotated refresh token destroyed by non-atomic keyring write | **No** |
+| #4 `hasAttachments`-only delta silently dropped | **No** |
+| #5 load-images banner misses non-canonical markup | **Yes** — Codex |
+
+**Recall: 1 of 3**, with every vendor reading the exact files containing them.
+
+Defect #1 is the one to look at. Claude reported a defect in the *same file and
+the same function area* — a swallowed keyring error leaving orphaned chunks.
+Both judges called it out as a different fault, "the mirror image of the actual
+defect", and noted that fixing it would leave the delete-then-write ordering
+untouched. Graded by hand it would very likely have been scored a hit. That is
+the strongest argument in this project for not marking your own homework.
+
+**Agreement: 0 of 7.** Every cross-vendor pair was judged, and not one pair
+described the same defect. Five findings, five distinct defects.
+
+That result kills the explanation offered earlier in this file. The claim was
+that agreement fails because independent agents exploring a large repository
+rarely read the same files. Co-location was then forced — one lane, three
+files — and agreement did not appear. So the explanation was at best
+incomplete: the vendors do not merely look in different places, they see
+different things in the same place.
+
+**What this does and does not establish.** Three defects and seven pairs is a
+small sample from one repository. It does not establish a recall *rate*. What
+it does establish is that neither the coverage explanation nor the merge
+threshold accounts for the missing corroboration, and that a defect sitting in
+a file a vendor is actively reading can still be missed by all three.
+
 ### A design gap that showed up with it
 
 The reverted bug is a *silent UI failure* — an image is stripped and no banner
@@ -90,10 +138,25 @@ offers to load it — but it lives in backend Rust (`crates/infrastructure/src/h
 - The **correctness lane** can see the file but its mandate does not point at
   user-visible consequences.
 
-So this defect currently falls between lanes. That is a real design question, not
-a bug to quietly patch: widening the UX lane to all files risks exactly the
-aesthetic-opinion pollution the file filter exists to prevent. **This needs your
-decision.**
+So this defect fell between lanes, reachable by neither.
+
+**Resolved, on evidence.** The filter existed to stop the UX lane filing "no
+loading state" against a backend module — and across every run on disk, three
+full multi-lane sweeps of a real repository with thirteen-plus UX findings, it
+rejected exactly nothing. Its guard had never once fired; its false negative was
+demonstrated. A check that cannot catch what it was built for and does reject
+what it should not is worse than no check, so it is gone.
+
+The mandate carries the guard alone, which is what was doing the work anyway:
+every UX finding across those runs was behavioural — missing confirmations,
+unannounced status changes, focus traps — with no aesthetic opinions among them.
+It now also states that a user-visible failure counts wherever it is
+implemented, and requires each finding to name both the code and the symptom the
+user experiences. Naming the symptom is the real discriminator; the file
+extension never was.
+
+If aesthetic pollution ever does appear, the answer is a check on the finding's
+content, not on its path. See `DECISIONS.md`.
 
 ## Operational facts learned by running it on a real repository
 
@@ -243,7 +306,9 @@ need the expected schema"*, having been given it. That is what the worked
 example in the brief now addresses, and the fix is verified: the Correctness
 lane that failed with `missing field 'title'` sweeps clean afterwards.
 
-**Overlap is almost nil, and it was worth finding out why.** See below.
+**Overlap is almost nil**, and the reason is now measured rather than guessed —
+see "Measured properly" above. It is not the merge threshold and it is not
+file coverage.
 
 ### Why the vendors barely agree
 
@@ -290,9 +355,12 @@ deliberate experiment rather than another threshold.
 - **Kilo cannot prove.** Claude and Codex both can. Kilo is refused with a stated
   reason: it cannot be given an output schema to enforce, so its account of what
   it did cannot be relied on.
-- **Proving has never been run from the app.** It is wired and refuses clearly
-  when there is no test command or no git repository, but no proof round has
-  been started by clicking Run.
+- ~~Proving has never been run from the app.~~ **Done.** Both branches observed:
+  it refuses a non-git target with a stated reason, and on a git-backed copy of
+  the fixture it wrote a test that fails because of the defect, confirmed every
+  previously passing test still passes, and reported "1 proved, 0 not" while
+  saying outright that the other five were *not attempted*, which is not the
+  same as not provable.
 - **Nothing merged on real code.** Twenty findings from seven sweeps of Alder
   became twenty distinct defects — the vendors overlapped on nothing at all. So
   cross-vendor review bought coverage but no corroboration, and "found by N
