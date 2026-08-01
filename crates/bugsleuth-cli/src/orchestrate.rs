@@ -29,6 +29,14 @@ pub struct RunOptions<'a> {
     /// Where each individual sweep's JSON is written, so a run that dies part
     /// way through has not thrown away the sweeps already paid for.
     pub out_dir: Option<&'a Path>,
+    /// Reuse sweeps already present in `out_dir` instead of paying for them
+    /// again. A sweep costs real subscription quota and can take tens of
+    /// minutes, so a run that died at unit nine of twelve must not start over.
+    ///
+    /// Only *successful* sweeps are reused. A sweep that failed is retried,
+    /// which is the whole point — the usual reason a run died is that something
+    /// was rate-limited, and that is exactly what should be attempted again.
+    pub resume: bool,
 }
 
 pub struct RunReport {
@@ -57,7 +65,28 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         })
         .collect();
 
-    let batches = plan.batches();
+    // Reuse whatever a previous attempt already paid for.
+    let mut outstanding: Vec<Unit> = Vec::new();
+    for unit in &plan.units {
+        match reusable(unit, &options) {
+            Some(previous) => {
+                eprintln!(
+                    "reusing {} x {} from a previous run",
+                    unit.model,
+                    unit.lane.slug()
+                );
+                swept.push((previous.model.clone(), unit.lane, previous.findings.len()));
+                findings.extend(previous.findings);
+            }
+            None => outstanding.push(unit.clone()),
+        }
+    }
+
+    let remaining = Plan {
+        units: outstanding,
+        uncovered: vec![],
+    };
+    let batches = remaining.batches();
     for (index, batch) in batches.iter().enumerate() {
         eprintln!(
             "batch {}/{}: {}",
@@ -158,6 +187,23 @@ async fn run_batch(batch: &[Unit], options: &RunOptions<'_>) -> Vec<SweepOutcome
         }
     }
     out
+}
+
+/// A previous successful sweep for this unit, if resuming and one exists.
+///
+/// A file that cannot be read or parsed is treated as absent rather than as an
+/// error: the likeliest cause is a run killed mid-write, and the right response
+/// to a truncated report is to sweep again, not to refuse to start.
+fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<crate::report::LaneReport> {
+    if !options.resume {
+        return None;
+    }
+    let path = options.out_dir?.join(file_name_for(unit));
+    let text = std::fs::read_to_string(path).ok()?;
+    let report: crate::report::LaneReport = serde_json::from_str(&text).ok()?;
+    // A failed sweep is retried. The usual reason a run died is a rate limit,
+    // which is exactly the case worth attempting again.
+    matches!(report.status, Status::Swept { .. }).then_some(report)
 }
 
 fn file_name_for(unit: &Unit) -> String {
@@ -280,6 +326,100 @@ mod tests {
         let text = report(vec![]).to_text();
         assert!(text.contains("swept: Correctness lane"));
         assert!(text.contains("0 findings"));
+    }
+
+    fn unit() -> Unit {
+        Unit {
+            model: "claude:sonnet".into(),
+            lane: Lane::Correctness,
+        }
+    }
+
+    fn options<'a>(dir: &'a Path, resume: bool) -> RunOptions<'a> {
+        RunOptions {
+            repo: Path::new("."),
+            scope: None,
+            max_turns: 10,
+            timeout: Duration::from_secs(60),
+            api_key: None,
+            out_dir: Some(dir),
+            resume,
+        }
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-resume-tests")
+            .join(format!("{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    fn lane_report(status: Status) -> LaneReport {
+        LaneReport {
+            lane: "Correctness".into(),
+            model: "claude:sonnet".into(),
+            status,
+            findings: vec![],
+            rejected: vec![],
+        }
+    }
+
+    #[test]
+    fn a_successful_sweep_is_reused_rather_than_paid_for_twice() {
+        let dir = scratch("reuse");
+        let report = lane_report(Status::Swept { turns: Some(3) });
+        assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
+        assert!(reusable(&unit(), &options(&dir, true)).is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_sweep_is_retried_not_reused() {
+        // The usual reason a run died is a rate limit, which is exactly the case
+        // worth attempting again. Reusing it would make the failure permanent.
+        let dir = scratch("retry-failed");
+        let report = lane_report(Status::NotSwept {
+            reason: "rate limited".into(),
+        });
+        assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
+        assert!(reusable(&unit(), &options(&dir, true)).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn nothing_is_reused_unless_resume_was_asked_for() {
+        let dir = scratch("no-resume");
+        let report = lane_report(Status::Swept { turns: None });
+        assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
+        assert!(reusable(&unit(), &options(&dir, false)).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_truncated_report_is_swept_again_rather_than_failing_the_run() {
+        // A run killed mid-write leaves half a file. The right response is to
+        // sweep again, not to refuse to start.
+        let dir = scratch("truncated");
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join(file_name_for(&unit())), r#"{"lane":"Corr"#);
+        assert!(reusable(&unit(), &options(&dir, true)).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn each_unit_gets_a_distinct_file_so_sweeps_cannot_overwrite_each_other() {
+        let a = file_name_for(&unit());
+        let b = file_name_for(&Unit {
+            model: "codex:".into(),
+            lane: Lane::Correctness,
+        });
+        let c = file_name_for(&Unit {
+            model: "claude:sonnet".into(),
+            lane: Lane::Security,
+        });
+        assert_ne!(a, b);
+        assert_ne!(a, c);
     }
 
     #[test]

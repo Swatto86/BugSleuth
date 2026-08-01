@@ -61,6 +61,10 @@ struct RunArgs {
     /// through does not discard the sweeps already paid for.
     #[arg(long)]
     out_dir: Option<PathBuf>,
+    /// Reuse successful sweeps already in --out-dir instead of paying for them
+    /// again. Failed sweeps are retried.
+    #[arg(long, requires = "out_dir")]
+    resume: bool,
     #[arg(long)]
     use_api_key: bool,
 }
@@ -166,6 +170,7 @@ async fn run_all(args: RunArgs) -> Result<()> {
             timeout: Duration::from_secs(args.timeout_secs),
             api_key: api_key(args.use_api_key)?.as_deref(),
             out_dir: args.out_dir.as_deref(),
+            resume: args.resume,
         },
     )
     .await?;

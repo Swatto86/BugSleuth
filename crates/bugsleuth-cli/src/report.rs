@@ -7,9 +7,9 @@
 //! this tool could produce, so absence is always stated explicitly.
 
 use bugsleuth_domain::{Finding, Severity};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LaneReport {
     pub lane: String,
     pub model: String,
@@ -21,16 +21,19 @@ pub struct LaneReport {
     pub rejected: Vec<Rejected>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum Status {
     /// The lane ran to completion.
-    Swept { turns: Option<u32> },
+    Swept {
+        #[serde(default)]
+        turns: Option<u32>,
+    },
     /// The lane did not run, or did not finish. Never rendered as "no findings".
     NotSwept { reason: String },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Rejected {
     pub title: String,
     pub claimed_file: String,
