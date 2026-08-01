@@ -29,6 +29,7 @@ use crate::error::ProviderError;
 use crate::process::{self, Invocation, preview};
 
 mod discover;
+mod events;
 
 pub(crate) const VENDOR: &str = "kilo";
 
@@ -135,7 +136,14 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
 
     if !output.succeeded() {
         let code = output.code.unwrap_or(-1);
-        let message = preview(output.stderr.trim(), 2000);
+        // stderr *then* stdout. Kilo says almost nothing on stderr and streams
+        // its errors as NDJSON events on stdout alongside everything else, so
+        // looking only at stderr reported "no diagnostic output" for a failure
+        // that had said exactly what was wrong. That cost a long time to find.
+        let message = match preview(output.stderr.trim(), 2000) {
+            text if !text.is_empty() => text,
+            _ => events::error_events(&output.stdout),
+        };
         return Err(if message.is_empty() {
             ProviderError::FailedSilently {
                 vendor: VENDOR,
@@ -150,7 +158,7 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
         });
     }
 
-    let text = assistant_text(&output.stdout);
+    let text = events::assistant_text(&output.stdout);
     if text.trim().is_empty() {
         return Err(ProviderError::Empty(VENDOR));
     }
@@ -191,62 +199,6 @@ fn build_args(spec: &KiloSweep<'_>) -> Vec<String> {
         args.push(effort.to_string());
     }
     args
-}
-
-/// The assistant's final message, from Kilo's NDJSON event stream.
-///
-/// **Not a concatenation.** Each `text` event carries the *complete* text of its
-/// message, not an incremental delta, and Kilo emits the same message more than
-/// once. Appending them produced `{"findings":[]}{"findings":[]}` — two valid
-/// objects glued into one invalid document — and the first real Kilo sweep
-/// failed on exactly that.
-///
-/// So events are grouped by message id, the latest text wins within a message,
-/// and the last message is the answer. Earlier messages are the agent narrating
-/// its progress ("I'll start by exploring the repository structure"), which is
-/// not the reply and must not be mixed into it.
-///
-/// The payload is nested under a `part` object in current versions, with an
-/// older flat shape still in the wild. Both are read, and unparseable lines are
-/// skipped rather than failing the sweep: the wire format is still moving
-/// upstream and one unknown event should not discard a completed review.
-fn assistant_text(stdout: &str) -> String {
-    // (message id, latest text) in first-seen order. A handful of messages, so
-    // a linear scan is cheaper than a map and keeps the ordering for free.
-    let mut messages: Vec<(String, String)> = Vec::new();
-
-    for line in stdout.lines() {
-        let line = line.trim();
-        if !line.starts_with('{') {
-            continue;
-        }
-        let Ok(event) = serde_json::from_str::<Value>(line) else {
-            continue;
-        };
-        if event["type"].as_str() != Some("text") {
-            continue;
-        }
-        let Some(text) = event["part"]["text"]
-            .as_str()
-            .or_else(|| event["text"].as_str())
-        else {
-            continue;
-        };
-        // Messages without an id are treated as one anonymous message rather
-        // than being dropped; older event shapes carry no id at all.
-        let id = event["part"]["messageID"]
-            .as_str()
-            .or_else(|| event["messageID"].as_str())
-            .unwrap_or("")
-            .to_string();
-
-        match messages.iter_mut().find(|(seen, _)| *seen == id) {
-            Some((_, existing)) => *existing = text.to_string(),
-            None => messages.push((id, text.to_string())),
-        }
-    }
-
-    messages.pop().map(|(_, text)| text).unwrap_or_default()
 }
 
 fn not_found() -> ProviderError {
@@ -353,54 +305,5 @@ mod tests {
     #[test]
     fn an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument() {
         assert!(!build_args(&spec("   ")).iter().any(|a| a == "-m"));
-    }
-
-    #[test]
-    fn a_message_repeated_by_the_stream_is_not_glued_to_itself() {
-        // Kilo really does emit the same complete message twice. Concatenating
-        // these produced `{"findings":[]}{"findings":[]}` and the first real
-        // Kilo sweep failed to parse.
-        let stdout = concat!(
-            r#"{"type":"step_start"}"#,
-            "\n",
-            r#"{"type":"text","part":{"messageID":"m1","text":"{\"findings\":[]}"}}"#,
-            "\n",
-            r#"{"type":"text","part":{"messageID":"m1","text":"{\"findings\":[]}"}}"#,
-            "\n",
-            r#"{"type":"step_finish"}"#,
-        );
-        assert_eq!(assistant_text(stdout), r#"{"findings":[]}"#);
-    }
-
-    #[test]
-    fn narration_from_earlier_messages_is_not_mixed_into_the_answer() {
-        let stdout = concat!(
-            r#"{"type":"text","part":{"messageID":"m1","text":"I'll start by exploring."}}"#,
-            "\n",
-            r#"{"type":"text","part":{"messageID":"m2","text":"{\"findings\":[]}"}}"#,
-        );
-        assert_eq!(assistant_text(stdout), r#"{"findings":[]}"#);
-    }
-
-    #[test]
-    fn the_older_flat_event_shape_is_still_read() {
-        let stdout = r#"{"type":"text","text":"hello"}"#;
-        assert_eq!(assistant_text(stdout), "hello");
-    }
-
-    #[test]
-    fn a_stream_with_no_text_events_yields_nothing_rather_than_panicking() {
-        assert_eq!(assistant_text(r#"{"type":"step_finish"}"#), "");
-        assert_eq!(assistant_text(""), "");
-    }
-
-    #[test]
-    fn a_malformed_event_is_skipped_rather_than_discarding_the_whole_review() {
-        let stdout = concat!(
-            "not json at all\n",
-            r#"{"type":"text","part":{"text":"kept"}}"#,
-            "\n{ broken json\n",
-        );
-        assert_eq!(assistant_text(stdout), "kept");
     }
 }

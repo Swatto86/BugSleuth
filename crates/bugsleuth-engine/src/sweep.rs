@@ -1,5 +1,7 @@
 //! One lane sweep, end to end: brief the model, run it, verify what comes back.
 
+mod isolate;
+
 use std::path::Path;
 use std::time::Duration;
 
@@ -99,7 +101,15 @@ pub async fn run(request: Request<'_>) -> LaneReport {
     // The worktree is held for the whole sweep and deletes itself on drop.
     let isolation = if vendor.needs_isolation() {
         match Worktree::create(request.repo, "HEAD", &format!("sweep-{}", vendor.label())) {
-            Ok(worktree) => Some(worktree),
+            Ok(worktree) => {
+                // The worktree is ours and about to be deleted, so the reviewed
+                // repository's standing orders can simply be taken out of it.
+                // Claude and Codex get the same isolation from a flag; Kilo has
+                // none, and inheriting a large instructions file was enough to
+                // end its sweeps before they read any code.
+                isolate::strip_agent_instructions(worktree.path());
+                Some(worktree)
+            }
             Err(error) => {
                 return not_swept(format!(
                     "{} cannot be run read-only, so its sweep needs a throwaway git worktree, \
