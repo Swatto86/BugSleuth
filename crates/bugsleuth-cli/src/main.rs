@@ -51,6 +51,27 @@ async fn run_all(args: RunArgs) -> Result<()> {
     .await?;
 
     print!("{}", report.to_text());
+    if let Some(path) = args.prompt_out.as_deref() {
+        let skipped: Vec<String> = report
+            .gaps
+            .iter()
+            .map(|g| {
+                format!(
+                    "{} lane, by {} — {}",
+                    g.lane,
+                    g.model.as_deref().unwrap_or("nobody"),
+                    g.reason
+                )
+            })
+            .collect();
+        let prompt = bugsleuth_engine::handoff::prompt(
+            &repo.display().to_string(),
+            &report.ranked,
+            &skipped,
+            report.swept.len(),
+        );
+        write_prompt(path, &prompt)?;
+    }
 
     // Proving is the expensive half, so it only runs when explicitly asked for.
     if args.prove_top > 0
@@ -83,9 +104,32 @@ async fn run_all(args: RunArgs) -> Result<()> {
     Ok(())
 }
 
+/// Write the fix prompt, if one was asked for.
+///
+/// Reported on stderr rather than stdout so the report itself stays pipeable.
+fn write_prompt(path: &std::path::Path, prompt: &str) -> Result<()> {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, prompt)
+        .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", path.display()))?;
+    eprintln!(
+        "
+wrote the fix prompt to {}",
+        path.display()
+    );
+    Ok(())
+}
+
 fn run_judge(args: JudgeArgs) -> Result<()> {
     let merged = merge::merge(&args.reports)?;
     print!("{}", merged.to_text());
+    if let Some(path) = args.prompt_out.as_deref() {
+        write_prompt(
+            path,
+            &merged.to_fix_prompt(&args.repo.display().to_string()),
+        )?;
+    }
 
     if let Some(path) = args.json_out {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {

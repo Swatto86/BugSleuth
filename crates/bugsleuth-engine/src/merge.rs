@@ -140,26 +140,38 @@ impl Merged {
             ));
         }
 
-        // Everything above is a summary someone skims. Everything below is what
-        // an implementer works from, and it is in the same document on purpose:
-        // a fix plan filed separately is a fix plan nobody reads.
         if !self.ranked.is_empty() {
             out.push_str(
                 "
-## Fixing these
+  A prompt for fixing these — one work order per defect, written
+                   for a coding agent — is available separately.
 ",
             );
-            out.push_str(crate::handoff::preamble());
-            for entry in &self.ranked {
-                out.push_str(&crate::handoff::work_order(
-                    entry.position,
-                    entry.cluster.representative(),
-                    entry.cluster.agreement,
-                    self.sources.len(),
-                ));
-            }
         }
         out
+    }
+}
+
+impl Merged {
+    /// The whole thing as one prompt, to paste into a coding agent.
+    ///
+    /// Deliberately not part of `to_text`. The report is for a person deciding
+    /// what matters; this is for a model doing the work, and mixing them made a
+    /// document that served neither — the reader scrolled past pages of
+    /// replacement code, and anyone copying it for an agent sent along a summary
+    /// the agent had no use for.
+    ///
+    /// Includes the unswept lanes on purpose. An agent handed a list of defects
+    /// should know which parts of the repository nobody looked at, or it will
+    /// reasonably assume the list is complete.
+    #[must_use]
+    pub fn to_fix_prompt(&self, repo: &str) -> String {
+        let skipped: Vec<String> = self
+            .unswept
+            .iter()
+            .map(|m| format!("{} lane, by {} — {}", m.lane, m.model, m.reason))
+            .collect();
+        crate::handoff::prompt(repo, &self.ranked, &skipped, self.sources.len())
     }
 }
 

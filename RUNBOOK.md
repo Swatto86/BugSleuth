@@ -49,13 +49,18 @@ looking, not by inference:
 | 6 | Wait for it | Status reaches Finished and findings are listed |
 | 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
 | 7b | Check a finding's `fix` | It has an approach, at least one edit naming a symbol, a verification command, and risks. An empty plan renders as "no fix plan" rather than as nothing |
+| 7c | **Copy fix prompt** | The button appears when the run ends, copies, and briefly says "Copied". The path under it points at a real `fix-prompt.md` in the run directory |
 | 8 | Check the reviewed repo | Unchanged: `git status` clean, no `.bugsleuth-worktrees` left behind |
 | 9 | Switch theme light and dark | Both readable; "Match system" follows the OS |
 | 10 | Close the window | It hides; the process is still alive |
 | 11 | Click the tray icon | The window returns with its state intact |
 | 12 | Tray → Quit | The process exits, leaving no orphan |
 
-Step 7 is the one that matters most. Findings shown in the window could in
+Step 7c is the deliverable. Everything else in this list exists to produce a
+prompt you can paste into a coding agent; if that button does not hand over
+something usable, nothing above it counts.
+
+Step 7 is the one that matters most for trusting the run. Findings shown in the window could in
 principle come from anywhere; a sweep report on disk naming the model and
 carrying anchors that resolve to real lines could not.
 

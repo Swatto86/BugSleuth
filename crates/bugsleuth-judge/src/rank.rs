@@ -1,14 +1,21 @@
 //! Ordering merged defects.
 //!
-//! Severity first, then how many models independently found it. That order is
-//! deliberate and worth stating: agreement is a strong signal about whether a
-//! finding is *real*, but it says nothing about whether it *matters*. A
-//! critical defect one model spotted still outranks a low-severity one that
-//! three models all noticed.
+//! Severity, then location. **Agreement is deliberately not used**, and that is
+//! a reversal worth recording.
 //!
-//! Agreement therefore breaks ties within a severity band rather than driving
-//! the ranking. A vendor that reports everything would otherwise be able to
-//! push its own noise up the list simply by agreeing with itself.
+//! It used to break ties within a severity band, on the reasoning that two
+//! models finding the same defect is evidence it is real. The reasoning is
+//! sound; the input is not there. Measured across a full multi-lane run of a
+//! real repository and a narrow experiment designed to produce agreement — one
+//! lane, three vendors, all pointed at the same three files — cross-vendor
+//! agreement was 2 of 23 defects in the first and **0 of 7 pairs** in the
+//! second. Independent judges confirmed the second.
+//!
+//! A tie-break that is almost always 1-versus-1 does not order anything; it
+//! just implies a confidence signal exists. Ranking on it made the report claim
+//! something the data does not support, so it is gone. Agreement is still
+//! counted and still shown, because "two models saw this" is worth knowing when
+//! it happens — it is simply not a rank.
 
 use serde::Serialize;
 
@@ -28,7 +35,6 @@ pub fn rank(clusters: Vec<Cluster>) -> Vec<Ranked> {
     clusters.sort_by(|a, b| {
         severity_order(a.severity())
             .cmp(&severity_order(b.severity()))
-            .then_with(|| b.agreement.cmp(&a.agreement))
             // Then by location, so the order is stable across runs rather than
             // depending on which model happened to answer first.
             .then_with(|| {
@@ -81,7 +87,7 @@ mod tests {
     }
 
     #[test]
-    fn severity_outranks_agreement() {
+    fn severity_decides_the_order() {
         let ranked = rank(vec![
             cluster_of(Severity::Low, 3, "a.rs", 1),
             cluster_of(Severity::Critical, 1, "b.rs", 1),
@@ -91,13 +97,19 @@ mod tests {
     }
 
     #[test]
-    fn agreement_breaks_ties_within_a_severity_band() {
+    fn agreement_does_not_affect_the_order() {
+        // Deliberate. Ranking on agreement implied a confidence signal that the
+        // measurements do not support, so within a severity band the order is
+        // decided by location alone and a widely-agreed defect gets no lift.
         let ranked = rank(vec![
             cluster_of(Severity::High, 1, "a.rs", 1),
-            cluster_of(Severity::High, 3, "b.rs", 1),
+            cluster_of(Severity::High, 3, "z.rs", 1),
         ]);
-        assert_eq!(ranked[0].cluster.agreement, 3);
-        assert_eq!(ranked[1].cluster.agreement, 1);
+        assert_eq!(ranked[0].cluster.representative().anchor.file, "a.rs");
+        assert_eq!(
+            ranked[0].cluster.agreement, 1,
+            "agreement pushed a defect up"
+        );
     }
 
     #[test]

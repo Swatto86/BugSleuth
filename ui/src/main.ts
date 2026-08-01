@@ -55,6 +55,8 @@ const ui = {
   planSummary: el<HTMLSpanElement>("plan-summary"),
   run: el<HTMLButtonElement>("run"),
   quit: el<HTMLButtonElement>("quit"),
+  copyPrompt: el<HTMLButtonElement>("copy-prompt"),
+  promptPath: el<HTMLParagraphElement>("prompt-path"),
 };
 
 let settings: Settings = {
@@ -79,6 +81,9 @@ const NEWLINE = String.fromCharCode(10);
 
 /** Lines accumulated during a run, newest last. */
 let progressLog: string[] = [];
+
+/** The last run's fix prompt, held so the Copy button has something to give. */
+let fixPrompt = "";
 
 // ── Theme ───────────────────────────────────────────────────────────────────
 
@@ -284,6 +289,26 @@ function bind(): void {
   // Closing the window only hides it. This is the reachable, keyboard-navigable
   // way to actually exit, so the tray is not the single point of failure.
   ui.quit.addEventListener("click", () => void invoke("quit"));
+
+  ui.copyPrompt.addEventListener("click", () => {
+    void navigator.clipboard.writeText(fixPrompt).then(
+      () => {
+        // Confirm by changing the button, not with a dialog: you are about to
+        // paste somewhere else, and a dialog would be one more thing to dismiss.
+        ui.copyPrompt.textContent = "Copied";
+        window.setTimeout(() => {
+          ui.copyPrompt.textContent = "Copy fix prompt";
+        }, 1500);
+      },
+      () => {
+        // Clipboard access can be refused. Say so and point at the file, which
+        // is always written — silently doing nothing would be the worst outcome
+        // for the one button that hands over the result.
+        ui.copyPrompt.textContent = "Copy failed — use the saved file";
+        ui.copyPrompt.classList.add("error");
+      },
+    );
+  });
 }
 
 /** Fill the model and effort menus, then redraw the table with them. */
@@ -341,12 +366,24 @@ async function boot(): Promise<void> {
     ui.output.scrollTop = ui.output.scrollHeight;
   });
 
-  await listen<{ ok: boolean; text: string }>("run-finished", (event) => {
-    running = false;
-    ui.output.textContent = event.payload.text;
-    setStatus(event.payload.ok ? "Finished" : "Run failed", event.payload.ok ? "" : "error");
-    renderPlanSummary();
-  });
+  await listen<{ ok: boolean; text: string; prompt?: string; promptPath?: string | null }>(
+    "run-finished",
+    (event) => {
+      running = false;
+      ui.output.textContent = event.payload.text;
+      setStatus(event.payload.ok ? "Finished" : "Run failed", event.payload.ok ? "" : "error");
+
+      // The prompt is the point of the run, so it is offered the moment there
+      // is one — and its path is shown either way, because a window can be
+      // closed and tens of minutes of sweeping should not go with it.
+      fixPrompt = event.payload.prompt ?? "";
+      ui.copyPrompt.classList.toggle("hidden", fixPrompt === "");
+      const path = event.payload.promptPath;
+      ui.promptPath.classList.toggle("hidden", !path);
+      ui.promptPath.textContent = path ? `Also saved to ${path}` : "";
+      renderPlanSummary();
+    },
+  );
 
   // After the reveal on purpose: filling the menus asks Kilo for its catalogue,
   // and the window must not wait on a CLI to appear.

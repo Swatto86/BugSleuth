@@ -135,7 +135,20 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
                 // "prove top N" control that silently does nothing, which is
                 // precisely the defect BugSleuth's own UX lane exists to catch.
                 text.push_str(&prove_top(&app, &settings, &repo, &report).await);
-                serde_json::json!({ "ok": true, "text": text })
+
+                // The prompt is the thing that gets used, so it is written to
+                // disk as well as handed to the window. A run is tens of
+                // minutes and the window can be closed; losing the output to a
+                // stray click would be the worst possible ending.
+                let prompt = fix_prompt(&repo, &report);
+                let path = out_dir.join("fix-prompt.md");
+                let saved = std::fs::write(&path, &prompt).is_ok();
+                serde_json::json!({
+                    "ok": true,
+                    "text": text,
+                    "prompt": prompt,
+                    "promptPath": saved.then(|| path.display().to_string()),
+                })
             }
             Err(error) => serde_json::json!({ "ok": false, "text": error.to_string() }),
         };
@@ -143,6 +156,28 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
     });
 
     Ok(())
+}
+
+/// The defects as a prompt for a coding agent.
+fn fix_prompt(repo: &std::path::Path, report: &orchestrate::RunReport) -> String {
+    let skipped: Vec<String> = report
+        .gaps
+        .iter()
+        .map(|gap| {
+            format!(
+                "{} lane, by {} — {}",
+                gap.lane,
+                gap.model.as_deref().unwrap_or("nobody"),
+                gap.reason
+            )
+        })
+        .collect();
+    bugsleuth_engine::handoff::prompt(
+        &repo.display().to_string(),
+        &report.ranked,
+        &skipped,
+        report.swept.len(),
+    )
 }
 
 /// Attempt proof for the top defects, if the settings ask for it.

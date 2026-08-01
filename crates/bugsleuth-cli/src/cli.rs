@@ -75,6 +75,10 @@ pub(crate) struct RunArgs {
     /// Model used for proof attempts. Kilo cannot prove.
     #[arg(long, default_value = "sonnet")]
     pub(crate) prove_model: String,
+    /// Write a prompt here for handing the defects to a coding agent to fix.
+    /// One work order per defect, ready to paste.
+    #[arg(long)]
+    pub(crate) prompt_out: Option<PathBuf>,
 }
 
 #[derive(Parser)]
@@ -85,6 +89,13 @@ pub(crate) struct JudgeArgs {
     /// Write the merged report here as JSON.
     #[arg(long)]
     pub(crate) json_out: Option<PathBuf>,
+    /// Write a prompt here for handing the defects to a coding agent to fix.
+    #[arg(long)]
+    pub(crate) prompt_out: Option<PathBuf>,
+    /// Repository the defects are in. Named in the prompt so the agent knows
+    /// what it is working on.
+    #[arg(long, default_value = ".")]
+    pub(crate) repo: PathBuf,
 }
 
 #[derive(Parser)]

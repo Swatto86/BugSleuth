@@ -121,7 +121,14 @@
         </section>
 
         <section class="panel">
-          <h2>Result</h2>
+          <div class="row" style="margin-bottom: 10px">
+            <h2 style="margin: 0">Result</h2>
+            <span class="spacer" style="flex: 1"></span>
+            <button id="copy-prompt" type="button" class="primary hidden">
+              Copy fix prompt
+            </button>
+          </div>
+          <p class="hint hidden" id="prompt-path" style="margin: 0 0 10px"></p>
           <pre class="output" id="output" tabindex="0" aria-live="polite">No run yet.</pre>
         </section>
       </main>
