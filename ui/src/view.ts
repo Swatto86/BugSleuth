@@ -48,7 +48,10 @@ export function vendorPills(statuses: VendorStatus[]): HTMLElement[] {
 export interface VendorModels {
   vendor: string;
   groups: ModelGroup[];
+  /** Efforts the CLI accepts, for vendors where that is a CLI-wide property. */
   efforts: string[];
+  /** Efforts a particular model accepts, for vendors where it is per model. */
+  efforts_by_model: Record<string, string[] | undefined>;
   error: string | null;
 }
 
@@ -91,6 +94,7 @@ function modelPicker(
   model: ModelSetting,
   catalogue: Catalogue,
   handlers: MatrixHandlers,
+  onModelChanged: (id: string) => void,
 ): HTMLElement {
   const { vendor, model: current } = splitId(model.id);
   const menu = catalogue[vendor];
@@ -106,7 +110,14 @@ function modelPicker(
   // Say why there are no suggestions. A box that offers nothing otherwise reads
   // as a bug rather than as a vendor that could not be asked.
   if (menu?.error) input.title = menu.error;
-  input.addEventListener("input", () => handlers.onRename(index, joinId(vendor, input.value)));
+  input.addEventListener("input", () => {
+    const id = joinId(vendor, input.value);
+    handlers.onRename(index, id);
+    // Which efforts apply depends on which model this is, so the effort control
+    // has to follow it. Only that one cell is rebuilt: re-rendering the row on
+    // every keystroke would take the focus out of this box mid-word.
+    onModelChanged(id);
+  });
 
   if (!menu || menu.groups.length === 0) return input;
 
@@ -132,6 +143,45 @@ function modelPicker(
 }
 
 /**
+ * Which effort levels apply to one row, and why there may be none.
+ *
+ * Two vendors answer this about themselves and one answers about each model.
+ * Claude and Codex take a CLI flag that means the same whatever model is
+ * chosen. Kilo forwards `--variant` to whichever provider is behind the model,
+ * so the levels are the model's: most of its models accept none at all, and
+ * some accept `instant`/`thinking` rather than a ladder. Offering a
+ * vendor-wide list there would put levels in the menu that the provider
+ * rejects, and hide the ones it actually takes.
+ *
+ * The `unavailable` string is not decoration. A disabled control with no
+ * explanation reads as broken, and the three reasons it can be disabled call
+ * for three different responses from the user.
+ */
+function effortsFor(
+  menu: VendorModels | undefined,
+  vendor: string,
+  model: string,
+): { levels: string[]; unavailable: string } {
+  if (!menu) {
+    return { levels: [], unavailable: "still asking the CLI what it supports" };
+  }
+  if (menu.efforts.length > 0) {
+    return { levels: menu.efforts, unavailable: "" };
+  }
+  if (model === "") {
+    return {
+      levels: [],
+      unavailable: `${vendor} sets effort per model — choose a model to see its levels`,
+    };
+  }
+  const levels = menu.efforts_by_model[model] ?? [];
+  return {
+    levels,
+    unavailable: levels.length === 0 ? `${model} takes no effort setting` : "",
+  };
+}
+
+/**
  * The effort picker for one row.
  *
  * Disabled, not hidden, when a vendor accepts no effort setting — a control
@@ -143,8 +193,10 @@ function effortPicker(
   catalogue: Catalogue,
   handlers: MatrixHandlers,
 ): HTMLSelectElement {
-  const { vendor } = splitId(model.id);
-  const levels = catalogue[vendor]?.efforts ?? [];
+  const { vendor, model: current } = splitId(model.id);
+  const menu = catalogue[vendor];
+  const { levels, unavailable } = effortsFor(menu, vendor, current);
+
   const select = document.createElement("select");
   select.setAttribute("aria-label", `Effort for row ${index + 1}`);
   select.append(option("", "Default", model.effort === ""));
@@ -152,7 +204,7 @@ function effortPicker(
     select.append(option(level, level, level === model.effort));
   }
   // A stored effort the catalogue does not list — because it has not loaded
-  // yet, or the vendor's levels changed — must still show. Otherwise the row
+  // yet, or the model's levels changed — must still show. Otherwise the row
   // reads "Default" while the run uses the stored value, and the control is
   // lying about what will happen.
   if (model.effort !== "" && !levels.includes(model.effort)) {
@@ -160,7 +212,7 @@ function effortPicker(
   }
   if (levels.length === 0) {
     select.disabled = true;
-    select.title = `${vendor} takes no effort setting`;
+    select.title = unavailable;
   }
   select.addEventListener("change", () => handlers.onEffort(index, select.value));
   return select;
@@ -191,14 +243,43 @@ export function matrixRows(
     vendorCell.append(vendorSelect);
     row.append(vendorCell);
 
-    const idCell = document.createElement("td");
-    idCell.className = "model-id";
-    idCell.append(modelPicker(index, model, catalogue, handlers));
-    row.append(idCell);
-
     const effortCell = document.createElement("td");
     effortCell.className = "effort-cell";
-    effortCell.append(effortPicker(index, model, catalogue, handlers));
+
+    // The row's own view of what is selected, so the effort cell can be rebuilt
+    // without waiting for the whole table to re-render.
+    let live: ModelSetting = model;
+    const drawEffort = () => {
+      effortCell.replaceChildren(
+        effortPicker(index, live, catalogue, {
+          ...handlers,
+          onEffort: (i, effort) => {
+            live = { ...live, effort };
+            handlers.onEffort(i, effort);
+          },
+        }),
+      );
+    };
+    drawEffort();
+
+    const idCell = document.createElement("td");
+    idCell.className = "model-id";
+    idCell.append(
+      modelPicker(index, model, catalogue, handlers, (id) => {
+        // A model that does not accept the effort already chosen must not keep
+        // it: it would be sent to the CLI and rejected. Clearing is the honest
+        // reset — different model, different levels.
+        const { vendor: v, model: m } = splitId(id);
+        const allowed = catalogue[v]?.efforts.length
+          ? catalogue[v].efforts
+          : (catalogue[v]?.efforts_by_model[m] ?? []);
+        const effort = allowed.includes(live.effort) ? live.effort : "";
+        if (effort !== live.effort) handlers.onEffort(index, effort);
+        live = { ...live, id, effort };
+        drawEffort();
+      }),
+    );
+    row.append(idCell);
     row.append(effortCell);
 
     for (const lane of LANES) {

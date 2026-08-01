@@ -4,6 +4,8 @@
 //! vendor purely to *describe* what is available, rather than to review
 //! anything — and because `commands.rs` is already at its size budget.
 
+use std::collections::BTreeMap;
+
 use bugsleuth_engine::models::{self, ModelGroup};
 use serde::Serialize;
 
@@ -17,9 +19,15 @@ pub struct VendorModels {
     /// Models to offer, grouped. For Kilo the group label is the billing route,
     /// which is the difference the user is actually choosing between.
     pub groups: Vec<ModelGroup>,
-    /// Effort levels this vendor accepts, lowest first. Empty means it takes
-    /// none, and the control must be disabled rather than silently ignored.
+    /// Effort levels the *CLI* accepts, weakest first, for vendors where that
+    /// is a property of the CLI rather than of the model. Empty means the
+    /// answer is per model instead — see `efforts_by_model`.
     pub efforts: Vec<String>,
+    /// Effort levels a particular model accepts. Kilo forwards `--variant` to
+    /// whichever provider is behind the model, so this is the only truthful
+    /// answer for it: most of its models take none, and some take
+    /// `instant`/`thinking` rather than a ladder.
+    pub efforts_by_model: BTreeMap<String, Vec<String>>,
     /// Why this vendor's list is empty, when it is. Carried per vendor so one
     /// missing CLI does not blank the other two.
     pub error: Option<String>,
@@ -34,17 +42,18 @@ pub struct VendorModels {
 pub async fn available_models() -> Vec<VendorModels> {
     let mut out = Vec::with_capacity(VENDORS.len());
     for vendor in VENDORS {
-        let (groups, error) = match models::available(vendor).await {
-            Ok(groups) => (groups, None),
-            Err(error) => (vec![], Some(error.to_string())),
+        let (catalogue, error) = match models::available(vendor).await {
+            Ok(catalogue) => (catalogue, None),
+            Err(error) => (models::VendorCatalogue::default(), Some(error.to_string())),
         };
         out.push(VendorModels {
             vendor: vendor.to_string(),
-            groups,
+            groups: catalogue.groups,
             efforts: models::efforts(vendor)
                 .iter()
                 .map(|e| (*e).to_string())
                 .collect(),
+            efforts_by_model: catalogue.efforts_by_model,
             error,
         });
     }
@@ -56,14 +65,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_offered_vendor_has_effort_levels() {
-        // A vendor in the dropdown with no efforts would render a dead control.
-        // If one is ever added that genuinely has none, the UI must be taught to
-        // disable it before this assertion is relaxed.
+    fn a_vendor_answers_about_effort_either_for_the_cli_or_for_each_model() {
+        // Every vendor must have *an* answer, but not the same kind. Claude and
+        // Codex take a CLI flag that means the same for every model. Kilo
+        // forwards `--variant` to whichever provider is behind the model, so its
+        // answer is per model and a vendor-wide list would be a fiction.
+        //
+        // What must never happen is a vendor with neither, which would render a
+        // control that does nothing.
         for vendor in VENDORS {
+            let cli_wide = !models::efforts(vendor).is_empty();
+            let per_model = vendor == "kilo";
             assert!(
-                !models::efforts(vendor).is_empty(),
-                "{vendor} offers no effort levels"
+                cli_wide != per_model,
+                "{vendor} must answer about effort exactly one way, not both or neither"
             );
         }
     }

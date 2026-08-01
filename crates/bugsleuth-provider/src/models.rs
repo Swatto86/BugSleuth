@@ -9,18 +9,20 @@
 //!
 //! - **Kilo** publishes its whole catalogue, and it is the one list worth
 //!   fetching live: it is long, it changes, and getting the billing route wrong
-//!   is the mistake that costs money. The route is *mostly* the id's first
-//!   segment — but not entirely. A handful of `kilo/` models are reached
-//!   through Kilo and billed to a plan you bought from the provider directly
-//!   (Kimi Code, the Z.ai Coding Plan). Nothing in the id says so, which is why
-//!   this reads `--verbose` and takes the catalogue's own word for it.
+//!   is the mistake that costs money. It also says, per model, which reasoning
+//!   efforts that model accepts — which is not uniform and is not always a
+//!   graded scale. See `kilo_catalogue`.
 //! - **Claude and Codex** have no list command. Their aliases are few, stable
-//!   and documented in `--help`, so they are named here.
+//!   and documented in `--help`, so they are named here, and their effort
+//!   levels belong to the CLI rather than to any one model.
 //!
 //! Every list is a *suggestion*. A model id that is not on it must still be
 //! usable, because a curated list goes stale and a tool that refuses a valid
 //! model is worse than one that offers an incomplete menu.
 
+mod kilo_catalogue;
+
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::error::ProviderError;
@@ -37,22 +39,35 @@ pub struct ModelGroup {
     pub models: Vec<String>,
 }
 
-/// Effort levels a vendor accepts, in increasing order.
+/// Everything the pickers for one vendor need.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+pub struct VendorCatalogue {
+    pub groups: Vec<ModelGroup>,
+    /// Efforts a *particular* model accepts, where the vendor says so.
+    ///
+    /// Empty for vendors whose effort levels belong to the CLI rather than the
+    /// model. A model absent from this map has no per-model answer, which is
+    /// not the same as accepting none — see [`efforts`].
+    pub efforts_by_model: BTreeMap<String, Vec<String>>,
+}
+
+/// Effort levels a vendor accepts, for vendors where that is a property of the
+/// CLI rather than of the model.
 ///
-/// Empty means the vendor takes no effort setting, which the UI must show as
-/// "not supported" rather than offering a control that silently does nothing.
+/// Empty means the answer is per-model instead, and the caller must look in
+/// [`VendorCatalogue::efforts_by_model`]. Either way an empty result must show
+/// as unavailable rather than as a control that silently does nothing.
 #[must_use]
 pub fn efforts(vendor: &str) -> &'static [&'static str] {
     match vendor {
-        // `claude --effort <level>`.
+        // `claude --effort <level>` — the CLI's own flag, same for every model.
         "claude" => &["low", "medium", "high", "xhigh", "max"],
-        // `codex -c model_reasoning_effort=<level>`.
+        // `codex -c model_reasoning_effort=<level>`, likewise.
         "codex" => &["low", "medium", "high", "xhigh", "max"],
-        // `kilo --variant <v>`: passed through to whichever provider is behind
-        // the model, so these are the values that are common across them rather
-        // than a set Kilo itself defines. An unsupported one is the provider's
-        // to reject.
-        "kilo" => &["low", "medium", "high"],
+        // Kilo passes `--variant` straight through to whichever provider is
+        // behind the model, so there is no vendor-wide set — most of its models
+        // accept none at all, and some accept `instant`/`thinking` rather than a
+        // ladder. Answered per model.
         _ => &[],
     }
 }
@@ -64,14 +79,14 @@ const CLAUDE_MODELS: &[&str] = &["fable", "opus", "sonnet", "haiku"];
 /// help and defaults name.
 const CODEX_MODELS: &[&str] = &["gpt-5.6-codex", "gpt-5.6-sol"];
 
-/// Models to offer for a vendor.
+/// Models to offer for a vendor, and what each one can be asked to do.
 ///
 /// Only Kilo costs anything to ask, and asking it starts no model — `kilo
 /// models` reads a cached catalogue.
-pub async fn available(vendor: &str) -> Result<Vec<ModelGroup>, ProviderError> {
+pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
     match vendor {
-        "claude" => Ok(vec![named("Claude", CLAUDE_MODELS)]),
-        "codex" => Ok(vec![named("Codex", CODEX_MODELS)]),
+        "claude" => Ok(fixed("Claude", CLAUDE_MODELS)),
+        "codex" => Ok(fixed("Codex", CODEX_MODELS)),
         "kilo" => kilo_models().await,
         _ => Err(ProviderError::NotFound {
             vendor: "unknown",
@@ -80,14 +95,17 @@ pub async fn available(vendor: &str) -> Result<Vec<ModelGroup>, ProviderError> {
     }
 }
 
-fn named(label: &str, models: &[&str]) -> ModelGroup {
-    ModelGroup {
-        label: label.to_string(),
-        models: models.iter().map(|m| (*m).to_string()).collect(),
+fn fixed(label: &str, models: &[&str]) -> VendorCatalogue {
+    VendorCatalogue {
+        groups: vec![ModelGroup {
+            label: label.to_string(),
+            models: models.iter().map(|m| (*m).to_string()).collect(),
+        }],
+        efforts_by_model: BTreeMap::new(),
     }
 }
 
-async fn kilo_models() -> Result<Vec<ModelGroup>, ProviderError> {
+async fn kilo_models() -> Result<VendorCatalogue, ProviderError> {
     let binary = kilo::binary_path().ok_or_else(|| ProviderError::NotFound {
         vendor: kilo::VENDOR,
         hint: "install the Kilo CLI to list its models".into(),
@@ -95,10 +113,8 @@ async fn kilo_models() -> Result<Vec<ModelGroup>, ProviderError> {
     let output = process::run(process::Invocation {
         binary: &binary.to_string_lossy(),
         // `--verbose` rather than the bare list, because the bare list cannot
-        // answer the question that matters. A handful of `kilo/` models are
-        // reached through Kilo but billed to your own plan with that vendor —
-        // Kimi Code, the Z.ai Coding Plan — and they look exactly like gateway
-        // models until you read the catalogue's own flag for them.
+        // answer either question that matters: which account a model bills to,
+        // and which efforts it accepts.
         args: &["models".to_string(), "--verbose".to_string()],
         cwd: &std::env::temp_dir(),
         stdin: None,
@@ -112,205 +128,127 @@ async fn kilo_models() -> Result<Vec<ModelGroup>, ProviderError> {
     Ok(group_by_route(&output.stdout))
 }
 
-/// Marker Kilo's catalogue puts on a model you can reach with your own plan.
-const BYOK_FLAG: &str = "\"hasUserByokAvailable\": true";
-
-/// Split `kilo models --verbose` into groups, one per billing route.
-///
-/// The output is a sequence of records: a bare `provider/model` line followed
-/// by that model's JSON. So each id owns everything up to the next id, and the
-/// BYOK flag is read out of that block.
+/// Turn a verbose listing into groups by billing route, plus per-model efforts.
 ///
 /// Kept separate from the process call so it can be tested against real
 /// captured output without running anything.
 #[must_use]
-pub fn group_by_route(listing: &str) -> Vec<ModelGroup> {
-    // Insertion-ordered so the routes come out in the order the catalogue
-    // lists them rather than in hash order.
-    let mut groups: Vec<ModelGroup> = Vec::new();
-    let mut pending: Option<(&str, bool)> = None;
+pub fn group_by_route(listing: &str) -> VendorCatalogue {
+    let mut catalogue = VendorCatalogue::default();
 
-    let flush = |entry: Option<(&str, bool)>, groups: &mut Vec<ModelGroup>| {
-        let Some((id, byok)) = entry else { return };
-        let route = match kilo::route_of(id) {
-            kilo::Route::Gateway if byok => kilo::Route::KiloByok,
+    for entry in kilo_catalogue::parse(listing) {
+        // A `kilo/` id is Gateway unless the catalogue says the model bills to
+        // a plan of your own. Nothing in the id itself distinguishes them.
+        let route = match kilo::route_of(&entry.id) {
+            kilo::Route::Gateway if entry.byok => kilo::Route::KiloByok,
             other => other,
         };
         let label = route.describe().to_string();
-        match groups.iter_mut().find(|g| g.label == label) {
-            Some(group) => group.models.push(id.to_string()),
-            None => groups.push(ModelGroup {
+        match catalogue.groups.iter_mut().find(|g| g.label == label) {
+            Some(group) => group.models.push(entry.id.clone()),
+            None => catalogue.groups.push(ModelGroup {
                 label,
-                models: vec![id.to_string()],
+                models: vec![entry.id.clone()],
             }),
         }
-    };
-
-    for line in listing.lines() {
-        if is_model_id(line) {
-            flush(pending.take(), &mut groups);
-            pending = Some((line.trim(), false));
-        } else if line.contains(BYOK_FLAG)
-            && let Some(entry) = pending.as_mut()
-        {
-            entry.1 = true;
+        if !entry.efforts.is_empty() {
+            catalogue.efforts_by_model.insert(entry.id, entry.efforts);
         }
     }
-    flush(pending.take(), &mut groups);
-    groups
-}
-
-/// Whether a line is a bare `provider/model` id rather than JSON or a banner.
-///
-/// The CLI prints ASCII art before the list and pretty-printed JSON after each
-/// id, so this has to reject both. An id sits at the left margin, contains a
-/// slash, and carries none of the punctuation JSON is made of.
-fn is_model_id(line: &str) -> bool {
-    !line.starts_with(char::is_whitespace)
-        && !line.trim().is_empty()
-        && line.contains('/')
-        && !line.contains(' ')
-        && !line.contains('"')
-        && !line.contains('{')
-        && !line.contains('}')
+    catalogue
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn kilo_models_are_grouped_by_who_pays_for_them() {
-        // Abridged from real `kilo models` output. The grouping is the whole
-        // point of the control: the same underlying model reached by two routes
-        // bills to two different places, and the id alone does not say which.
-        let listing = "\
-kilo/anthropic/claude-opus-5
-kilo/deepseek/deepseek-v4-pro
-openrouter/anthropic/claude-opus-5
-openrouter/z-ai/glm-4.6
-openai/gpt-5.6-codex
-ollama/qwen3-coder
-";
-        let groups = group_by_route(listing);
-        let labels: Vec<&str> = groups.iter().map(|g| g.label.as_str()).collect();
-        assert_eq!(labels.len(), 4, "one group per route, got {labels:?}");
-
-        let kilo_group = groups
-            .iter()
-            .find(|g| g.models.iter().any(|m| m.starts_with("kilo/")))
-            .expect("no Kilo Gateway group");
-        assert_eq!(kilo_group.models.len(), 2);
-
-        // The same model under two routes must land in two different groups,
-        // because that difference is exactly what the user is choosing between.
-        let opus_groups: Vec<&str> = groups
-            .iter()
-            .filter(|g| g.models.iter().any(|m| m.ends_with("/claude-opus-5")))
-            .map(|g| g.label.as_str())
-            .collect();
-        assert_eq!(opus_groups.len(), 2, "got {opus_groups:?}");
-    }
-
-    #[test]
-    fn the_banner_and_blank_lines_are_not_mistaken_for_models() {
-        // `kilo models` prints ASCII art first. Treating a banner line as a
-        // model id would put unselectable rubbish in the dropdown.
-        let listing = "\n██  ██ ████\n~~  ~~ ~~~~\n\nkilo/openai/gpt-latest\n";
-        let groups = group_by_route(listing);
-        assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].models, vec!["kilo/openai/gpt-latest"]);
-    }
-
-    /// Two records abridged from real `kilo models --verbose` output: one
-    /// coding-plan model and one ordinary gateway model. Trimmed to the fields
-    /// that matter, with the shape (id line, then its JSON) preserved.
+    /// Abridged from real `kilo models --verbose` output, shape preserved.
     const VERBOSE: &str = r#"
 kilo/ai21/jamba-large-1.7
 {
   "id": "ai21/jamba-large-1.7",
-  "providerID": "kilo",
-  "cost": { "input": 2, "output": 8 },
+  "variants": {},
   "hasUserByokAvailable": false
 }
 kilo/zai-coding/glm-5.2
 {
   "id": "zai-coding/glm-5.2",
-  "providerID": "kilo",
-  "cost": { "input": 0, "output": 0 },
+  "variants": { "high": {}, "max": {} },
   "hasUserByokAvailable": true
 }
-kilo/kimi-coding/kimi-for-coding
+kilo/z-ai/glm-5.2
 {
-  "id": "kimi-coding/kimi-for-coding",
-  "providerID": "kilo",
-  "hasUserByokAvailable": true
+  "id": "z-ai/glm-5.2",
+  "variants": { "low": {}, "medium": {}, "high": {} },
+  "hasUserByokAvailable": false
 }
-openrouter/z-ai/glm-4.6
+openrouter/anthropic/claude-opus-5
 {
-  "id": "z-ai/glm-4.6",
-  "providerID": "openrouter"
+  "id": "anthropic/claude-opus-5"
+}
+ollama/qwen3-coder
+{
+  "id": "qwen3-coder"
 }
 "#;
 
     #[test]
     fn a_kilo_model_billed_to_your_own_plan_is_not_filed_under_the_subscription() {
-        // The whole reason this reads `--verbose`. `kilo/zai-coding/glm-5.2` and
-        // `kilo/ai21/jamba-large-1.7` are both `kilo/` ids, but one spends a
-        // plan you bought from Z.ai and the other spends Kilo Gateway credit.
-        // Filing them together tells you the wrong thing about what a sweep
-        // costs, and the id cannot distinguish them.
-        let groups = group_by_route(VERBOSE);
+        // `kilo/z-ai/glm-5.2` spends Kilo Gateway credit and
+        // `kilo/zai-coding/glm-5.2` spends a plan you bought from Z.ai. Same
+        // model, same prefix, different bill — and the id cannot tell you.
+        let catalogue = group_by_route(VERBOSE);
+        let group_of = |id: &str| {
+            catalogue
+                .groups
+                .iter()
+                .find(|g| g.models.iter().any(|m| m == id))
+                .unwrap_or_else(|| panic!("{id} is in no group"))
+                .label
+                .as_str()
+        };
+        assert!(group_of("kilo/zai-coding/glm-5.2").contains("BYOK"));
+        assert!(group_of("kilo/z-ai/glm-5.2").contains("Gateway"));
+        assert_ne!(
+            group_of("kilo/zai-coding/glm-5.2"),
+            group_of("kilo/z-ai/glm-5.2")
+        );
+    }
 
-        let byok = groups
-            .iter()
-            .find(|g| g.label.contains("BYOK"))
-            .unwrap_or_else(|| panic!("no BYOK group in {:?}", labels(&groups)));
+    #[test]
+    fn efforts_are_recorded_per_model_and_only_where_the_model_has_any() {
+        let catalogue = group_by_route(VERBOSE);
         assert_eq!(
-            byok.models,
-            vec![
-                "kilo/zai-coding/glm-5.2",
-                "kilo/kimi-coding/kimi-for-coding"
-            ]
+            catalogue.efforts_by_model.get("kilo/zai-coding/glm-5.2"),
+            Some(&vec!["high".to_string(), "max".to_string()])
         );
-
-        let gateway = groups
-            .iter()
-            .find(|g| g.label.contains("Gateway"))
-            .unwrap_or_else(|| panic!("no gateway group in {:?}", labels(&groups)));
-        assert_eq!(gateway.models, vec!["kilo/ai21/jamba-large-1.7"]);
-    }
-
-    #[test]
-    fn the_flag_only_applies_to_the_model_it_was_printed_under() {
-        // The flag is read out of a JSON block that follows its id. If the scan
-        // ever leaked it forwards, every model after the first coding-plan entry
-        // would be mislabelled BYOK — and the list is alphabetical, so that
-        // would be most of the catalogue.
-        let groups = group_by_route(VERBOSE);
-        let openrouter = groups
-            .iter()
-            .find(|g| g.models.iter().any(|m| m.starts_with("openrouter/")))
-            .expect("no OpenRouter group");
+        assert_eq!(
+            catalogue.efforts_by_model.get("kilo/z-ai/glm-5.2"),
+            Some(&vec![
+                "low".to_string(),
+                "medium".to_string(),
+                "high".to_string()
+            ]),
+            "the same model on two routes can still accept different efforts"
+        );
+        // Absent rather than present-and-empty: the UI keys off absence to
+        // disable the control, and an empty vec would read as "loading".
         assert!(
-            !openrouter.label.contains("BYOK via Kilo"),
-            "the flag leaked past its own record: {}",
-            openrouter.label
+            !catalogue
+                .efforts_by_model
+                .contains_key("kilo/ai21/jamba-large-1.7")
         );
-        assert_eq!(openrouter.models.len(), 1);
-    }
-
-    fn labels(groups: &[ModelGroup]) -> Vec<&str> {
-        groups.iter().map(|g| g.label.as_str()).collect()
     }
 
     #[test]
-    fn a_vendor_that_takes_no_effort_setting_says_so_with_an_empty_list() {
-        // The UI keys off this to disable the control. A vendor missing from
-        // the match must not silently get someone else's levels.
-        assert!(efforts("nonesuch").is_empty());
+    fn kilo_has_no_vendor_wide_effort_list_because_it_has_no_such_thing() {
+        // Claude and Codex take an effort flag that means the same for every
+        // model. Kilo forwards `--variant` to the provider, so the answer is
+        // the model's, and claiming otherwise would offer levels that get
+        // rejected.
+        assert!(efforts("kilo").is_empty());
         assert!(!efforts("claude").is_empty());
         assert!(!efforts("codex").is_empty());
-        assert!(!efforts("kilo").is_empty());
+        assert!(efforts("nonesuch").is_empty());
     }
 }
