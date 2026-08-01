@@ -28,6 +28,23 @@ describe("BugSleuth desktop app", () => {
   it("shows its window with the shell mounted", async () => {
     // The window starts hidden and the frontend reveals it. If that ever breaks
     // the app is a process with no UI, so this is the first thing to check.
+    //
+    // The diagnostic matters as much as the assertion. An empty document here
+    // almost always means the binary was built with plain `cargo build` rather
+    // than `cargo tauri build`, so it points at the dev server instead of
+    // embedding the frontend — and every other spec then fails with a confusing
+    // "element not found" that says nothing about the real cause.
+    await browser.waitUntil(
+      async () => (await (await $$("#app")).length) > 0,
+      {
+        timeout: 30_000,
+        timeoutMsg:
+          "the app shell never rendered. If the page is blank, the binary is " +
+          "probably a development build: run `cargo clean --release` then " +
+          "`cargo tauri build`, because Tauri caches the dev/production choice " +
+          "in its own build script and a plain cargo release build poisons it.",
+      },
+    );
     await expect($("h1")).toHaveText("BugSleuth");
     await expect($("#run")).toBeExisting();
   });
@@ -113,6 +130,32 @@ describe("BugSleuth desktop app", () => {
       report.findings.length > 0,
       "the seeded fixture returned no findings, so the review did not really work",
     );
+  });
+
+  it("keeps both themes working", async () => {
+    // Dark and light are both first-class, and "match system" must follow the
+    // OS rather than freezing at startup — so it is stored as the absence of an
+    // override, not as a resolved value.
+    const readTheme = () =>
+      browser.execute(() => {
+        const style = getComputedStyle(document.documentElement);
+        return {
+          attr: document.documentElement.getAttribute("data-theme"),
+          bg: style.getPropertyValue("--bg").trim(),
+        };
+      });
+
+    await $("#theme").selectByAttribute("value", "light");
+    const light = await readTheme();
+    await $("#theme").selectByAttribute("value", "dark");
+    const dark = await readTheme();
+    await $("#theme").selectByAttribute("value", "system");
+    const system = await readTheme();
+
+    assert.equal(light.attr, "light");
+    assert.equal(dark.attr, "dark");
+    assert.equal(system.attr, null, "match-system must remove the override, not resolve it");
+    assert.notEqual(light.bg, dark.bg, "the two themes render the same background");
   });
 
   it("leaves the reviewed repository untouched", () => {
