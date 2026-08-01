@@ -22,11 +22,16 @@ a sweep that reports this repository clean is a broken sweep.
 | # | File | What | Why it is a defect |
 |---|---|---|---|
 | C6 | `src/pricing.rs` · `parse_price` | `pence.parse::<u64>()` is added as a raw number | The fractional part is treated as a count of pence rather than as decimal digits, so `"12.3"` returns 1203 pence instead of 1230. |
+| C7 | `src/pricing.rs` · `apply_discount` | `price_pence - discount` with no bound on `percent_off` | A percentage above 100 makes the discount exceed the price, and the unsigned subtraction underflows. Confirmed: `apply_discount(100, 101)` panics with "attempt to subtract with overflow". |
 
-**C6 was not planted.** It was reported by Codex during the cross-vendor
-comparison, and was in the fixture by accident — neither the author of this file
-nor the Claude sweep noticed it. It was confirmed by running the function:
-`parse_price("12.3")` returns 1203.
+**Neither C6 nor C7 was planted.** Both were reported during the cross-vendor
+comparison and were in the fixture by accident — the author of this file had not
+noticed either. Both were confirmed by running the code rather than by reading
+it: `parse_price("12.3")` returns 1203, and `apply_discount(100, 101)` panics.
+
+C6 is the more interesting of the two, because **Claude's first sweep missed it
+and Codex found it** — a concrete instance of the cross-vendor premise paying
+off. C7 was found by both.
 
 It is left in place, because an answer key that the tool improved on is a more
 honest fixture than one curated to match what the tool already finds.
