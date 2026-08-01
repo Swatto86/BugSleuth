@@ -21,6 +21,9 @@ use serde::Deserialize;
 struct SweepFile {
     lane: String,
     model: String,
+    /// The commit the sweep reviewed, when its report recorded one.
+    #[serde(default)]
+    commit: Option<String>,
     status: SweepStatus,
     #[serde(default)]
     findings: Vec<Finding>,
@@ -36,6 +39,11 @@ enum SweepStatus {
 pub struct Merged {
     pub ranked: Vec<Ranked>,
     pub sources: Vec<Source>,
+    /// Distinct commits the merged sweeps reviewed, when recorded. More than
+    /// one means the report spans two versions of the code — anchors from one
+    /// sweep may simply not exist in the tree another reviewed, and anyone
+    /// re-checking the findings must be told which tree each came from.
+    pub commits: Vec<String>,
     /// Sweeps that did not run. Reported loudly and never silently dropped: a
     /// merged report that quietly omits a failed sweep reads exactly like one
     /// where that sweep found nothing.
@@ -59,6 +67,7 @@ pub fn merge(paths: &[PathBuf]) -> Result<Merged> {
     let mut all: Vec<Finding> = Vec::new();
     let mut sources = Vec::new();
     let mut unswept = Vec::new();
+    let mut commits: Vec<String> = Vec::new();
 
     for path in paths {
         let file = read(path)?;
@@ -69,6 +78,11 @@ pub fn merge(paths: &[PathBuf]) -> Result<Merged> {
                 reason,
             }),
             SweepStatus::Swept => {
+                if let Some(commit) = &file.commit
+                    && !commits.contains(commit)
+                {
+                    commits.push(commit.clone());
+                }
                 sources.push(Source {
                     lane: file.lane,
                     model: file.model,
@@ -83,6 +97,7 @@ pub fn merge(paths: &[PathBuf]) -> Result<Merged> {
         ranked: rank(cluster(all)),
         sources,
         unswept,
+        commits,
     })
 }
 
@@ -101,6 +116,19 @@ impl Merged {
             out.push_str(&format!(
                 "  swept: {} lane by {} ({} findings)\n",
                 source.lane, source.model, source.findings
+            ));
+        }
+        // Learned the expensive way: a set of correct findings was re-graded
+        // against a different checkout and condemned as fabricated, because
+        // nothing said which tree they described.
+        if self.commits.len() > 1 {
+            let short: Vec<&str> = self.commits.iter().map(|c| &c[..c.len().min(9)]).collect();
+            out.push_str(&format!(
+                "\n  WARNING: these sweeps reviewed {} different commits ({}). The merged\n  \
+                 list spans two versions of the code; a finding may cite code that only\n  \
+                 exists in the version its own sweep reviewed.\n",
+                self.commits.len(),
+                short.join(", ")
             ));
         }
         for miss in &self.unswept {
@@ -261,5 +289,61 @@ mod tests {
         let dir = scratch("merge-bad");
         let paths = vec![write(&dir, "bad.json", "{ not json")];
         assert!(merge(&paths).is_err());
+    }
+
+    #[test]
+    fn sweeps_of_two_different_commits_are_called_out_in_the_merged_report() {
+        // A set of correct findings was once re-graded against a different
+        // checkout and condemned as fabricated - the cited code genuinely was
+        // not there. Nothing in the report said which tree each sweep saw.
+        let dir = scratch_dir("mixed-commits");
+        let a = dir.join("a.json");
+        let b = dir.join("b.json");
+        let _ = std::fs::write(
+            &a,
+            r#"{"lane":"UX","model":"claude:sonnet","commit":"aaaaaaaaaaaaaaaa","status":{"state":"swept"},"findings":[]}"#,
+        );
+        let _ = std::fs::write(
+            &b,
+            r#"{"lane":"UX","model":"codex:","commit":"bbbbbbbbbbbbbbbb","status":{"state":"swept"},"findings":[]}"#,
+        );
+        let merged = merge(&[a, b]).unwrap_or_else(|e| panic!("merge failed: {e}"));
+        assert_eq!(merged.commits.len(), 2);
+        assert!(merged.to_text().contains("WARNING"), "{}", merged.to_text());
+        assert!(merged.to_text().contains("2 different commits"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sweeps_of_one_commit_and_reports_with_none_recorded_stay_quiet() {
+        // Every report written before commits were recorded has none; loading
+        // them must neither fail nor warn.
+        let dir = scratch_dir("one-commit");
+        let a = dir.join("a.json");
+        let b = dir.join("b.json");
+        let _ = std::fs::write(
+            &a,
+            r#"{"lane":"UX","model":"claude:sonnet","commit":"aaaaaaaaaaaaaaaa","status":{"state":"swept"},"findings":[]}"#,
+        );
+        let _ = std::fs::write(
+            &b,
+            r#"{"lane":"UX","model":"codex:","status":{"state":"swept"},"findings":[]}"#,
+        );
+        let merged = merge(&[a, b]).unwrap_or_else(|e| panic!("merge failed: {e}"));
+        assert_eq!(merged.commits.len(), 1);
+        assert!(
+            !merged.to_text().contains("WARNING"),
+            "{}",
+            merged.to_text()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn scratch_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-merge-tests")
+            .join(format!("{}-{name}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        dir
     }
 }

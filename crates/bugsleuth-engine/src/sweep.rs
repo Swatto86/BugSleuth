@@ -88,10 +88,14 @@ pub async fn run(request: Request<'_>) -> LaneReport {
     let (vendor, model) = Vendor::parse(request.model);
     let model_label = format!("{}:{model}", vendor.label());
     let brief = brief::build(request.lane, request.scope, vendor.enforces_schema());
+    // Recorded before anything runs, so even a failed sweep says what tree it
+    // was pointed at.
+    let commit = reviewed_commit(request.repo);
 
     let not_swept = |reason: String| LaneReport {
         lane: request.lane.title().to_string(),
         model: model_label.clone(),
+        commit: commit.clone(),
         status: Status::NotSwept { reason },
         findings: vec![],
         rejected: vec![],
@@ -173,10 +177,27 @@ pub async fn run(request: Request<'_>) -> LaneReport {
     LaneReport {
         lane: request.lane.title().to_string(),
         model: model_label,
+        commit,
         status: Status::Swept { turns },
         findings,
         rejected,
     }
+}
+
+/// The commit HEAD points at, or nothing for a directory that is not a git
+/// repository. Never an error: provenance is worth recording, not worth
+/// failing a sweep over.
+fn reviewed_commit(repo: &Path) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(repo)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!hash.is_empty()).then_some(hash)
 }
 
 /// Split reported findings into those whose quoted code was located in the file

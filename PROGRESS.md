@@ -410,6 +410,38 @@ That is a usable number. Roughly one finding in five is not worth acting on,
 which is why the prompt tells the implementer to verify before editing rather
 than to trust the list.
 
+### Re-measured after the mandate work: 12 of 13 (92%) on the UX corpus
+
+The thirteen UX findings were graded again, one strict judge per finding, each
+required to read the real code and to search the whole source tree for the
+handling a finding claims is absent before believing the claim. Twelve are real.
+
+The one false positive has a teachable shape: the reviewer said folder actions
+were reachable only by right-click, but the folder rows are native `<button>`
+elements — the platform itself gives those Enter/Space activation and a
+Shift+F10 path to the very `contextmenu` listener in question. The reviewer got
+the sibling finding *right* (message rows are plain `<div>`s, genuinely
+unreachable); it never checked which kind of element this one targeted. The UX
+mandate now instructs exactly that check, with a test, the same route that took
+correctness recall from 1 of 3 to 3 of 3.
+
+### A grading mistake worth keeping: three correct findings condemned as fabricated
+
+The first grading pass returned 10 of 13 and called three findings fabrications
+— quoted code that "did not exist", functions "invented", a comparison built on
+a comment "not present in the file". Every one of those elements exists,
+verbatim, in the repository the sweep actually reviewed. The graders had been
+pointed at a *different checkout* of the same project, and they did their job
+precisely: they reported exactly which claims did not hold on the tree they
+were given.
+
+Nothing in the report said which tree the sweep saw, so nothing could catch
+this. Now something does: every sweep records the commit it reviewed (old
+reports without one still load), and merging sweeps that reviewed different
+commits prints a warning naming them. The false-fabrication episode is the
+argument: a finding is a claim about one exact version of the code, and a
+report that omits the version invites exactly this mis-grade.
+
 ### Severity was wrong 6 times in 14, in both directions
 
 Worse than the rate is the direction. Two of the most serious defects were

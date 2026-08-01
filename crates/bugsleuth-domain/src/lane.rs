@@ -157,6 +157,16 @@ is swallowed so the user sees nothing, a state the user can reach and cannot \
 get out of, an action reachable only by mouse with no keyboard path, and \
 focus/announcement gaps that make a flow unusable with a screen reader.
 
+Before claiming an action is mouse-only, check WHAT ELEMENT the handler is \
+attached to. A native focusable control — a real <button>, a link, anything \
+with tabindex — gets keyboard paths from the platform itself: Enter and Space \
+fire click, and Shift+F10 or the Menu key fires contextmenu, reaching the very \
+listener you are looking at. 'No keyboard path' is only true when the target \
+is a non-focusable element (a plain div with no tabindex) or the handler \
+filters to a pointer device. One graded report got this exactly half right: \
+context-menu actions on plain <div> rows really were unreachable, and the \
+identical claim about native <button> folder rows was false.
+
 HARD RULE: every finding must name the specific code that has to change. \
 Aesthetic opinions — spacing, colour, wording, 'this should be bigger', \
 'this could be more modern' — are OUT OF SCOPE and actively harmful to this \
@@ -193,6 +203,25 @@ mod tests {
         assert!(
             mandate.contains("what is missing"),
             "nothing tells the reviewer to read for absence rather than for error"
+        );
+    }
+
+    #[test]
+    fn the_ux_mandate_warns_about_native_keyboard_paths_it_measurably_missed() {
+        // Independently graded on a real mail client, the one false positive in
+        // thirteen findings claimed folder actions were mouse-only — but the
+        // rows were native <button> elements, which the platform already gives
+        // Enter/Space activation and a Shift+F10 context-menu path. The sibling
+        // finding about plain <div> rows was correct. The difference is what
+        // element the handler targets, so the mandate now says to check it.
+        let mandate = Lane::Ux.mandate();
+        assert!(
+            mandate.contains("WHAT ELEMENT"),
+            "nothing tells the reviewer to check the handler's target element"
+        );
+        assert!(
+            mandate.contains("Shift+F10"),
+            "nothing names the platform's own keyboard path to a context menu"
         );
     }
 }

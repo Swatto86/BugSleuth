@@ -13,6 +13,16 @@ use serde::{Deserialize, Serialize};
 pub struct LaneReport {
     pub lane: String,
     pub model: String,
+    /// The commit the reviewed tree was at, when the repository is git-backed.
+    ///
+    /// Exists because of a real mistake it would have prevented: a set of
+    /// findings was later re-graded against a *different checkout* of the same
+    /// project, and three correct findings were condemned as fabricated because
+    /// the code they cited genuinely was not there. A report that says what it
+    /// reviewed cannot be mis-graded that way — and `#[serde(default)]` keeps
+    /// every report written before this existed loadable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
     pub status: Status,
     pub findings: Vec<Finding>,
     /// Findings the model reported that failed anchor verification, with the
@@ -148,6 +158,7 @@ mod tests {
         let report = LaneReport {
             lane: "Security".into(),
             model: "claude:sonnet".into(),
+            commit: None,
             status: Status::NotSwept {
                 reason: "no model assigned".into(),
             },
@@ -164,6 +175,7 @@ mod tests {
         let report = LaneReport {
             lane: "Security".into(),
             model: "claude:sonnet".into(),
+            commit: None,
             status: Status::Swept { turns: Some(4) },
             findings: vec![],
             rejected: vec![],

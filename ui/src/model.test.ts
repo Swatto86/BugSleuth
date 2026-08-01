@@ -186,3 +186,24 @@ test("settings saved before passes existed still estimate as one pass each", () 
   // whose only mistake was having used the app last week.
   assert.equal(unitCount([{ id: "sonnet", lanes: ["correctness"] }]), 1);
 });
+
+test("a model listed twice with different passes counts like the engine: max, not sum", () => {
+  // plan.rs enumerates (model, lane, effort, pass) tuples and drops exact
+  // duplicates, so a second row for the same model+lane at 3 passes adds
+  // passes 2 and 3 - its pass 1 collides with the first row's. Summing rows
+  // shows "4 sweeps" for a run the engine executes as 3.
+  const models = [
+    { id: "sonnet", lanes: ["correctness"], passes: 1 },
+    { id: "sonnet", lanes: ["correctness"], passes: 3 },
+  ];
+  assert.equal(unitCount(models), 3);
+  assert.equal(batchCount(models), 3);
+});
+
+test("an identical duplicate row adds nothing, exactly like the engine", () => {
+  const models = [
+    { id: "sonnet", lanes: ["correctness"] },
+    { id: "sonnet", lanes: ["correctness"] },
+  ];
+  assert.equal(unitCount(models), 1);
+});

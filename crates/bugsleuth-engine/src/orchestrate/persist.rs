@@ -30,26 +30,24 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
 }
 
 pub(super) fn file_name_for(unit: &Unit) -> String {
-    // Effort and pass are part of the name only when they are set to something
-    // other than the default, so every report written before either existed
-    // keeps its filename and stays resumable.
-    let effort = if unit.effort.trim().is_empty() {
-        String::new()
-    } else {
-        format!("-{}", safe(unit.effort.trim()))
-    };
-    // Without this, a second pass would overwrite the first one's report and
-    // the repetition would buy nothing at all — the whole point is keeping both
-    // so the union is wider than either.
-    let pass = if unit.pass <= 1 {
-        String::new()
-    } else {
-        format!("-pass{}", unit.pass)
-    };
+    // A default unit — no effort, first pass — keeps the original name, so
+    // every report written before efforts or passes existed stays resumable.
+    if unit.effort.trim().is_empty() && unit.pass <= 1 {
+        return format!("{}-{}.json", unit.lane.slug(), safe(&unit.model));
+    }
+    // Anything else appends BOTH fields, delimited by `~` — a character
+    // `safe()` can never emit, so no effort or model text can spell a pass
+    // marker and no pass marker can spell an effort. Plain `-` concatenation
+    // could: effort `pass2` and a real second pass produced byte-identical
+    // names, whichever sweep finished last silently overwrote the other, and
+    // resume then handed one unit the other unit's report. Both fields always
+    // present (even empty) so the split is positional, not guessed.
     format!(
-        "{}-{}{effort}{pass}.json",
+        "{}-{}~{}~p{}.json",
         unit.lane.slug(),
-        safe(&unit.model)
+        safe(&unit.model),
+        safe(unit.effort.trim()),
+        unit.pass.max(1)
     )
 }
 
@@ -142,6 +140,7 @@ mod tests {
         let a = LaneReport {
             lane: "Correctness".into(),
             model: "claude:sonnet".into(),
+            commit: None,
             status: Status::Swept { turns: None },
             findings: vec![],
             rejected: vec![],
@@ -189,6 +188,7 @@ mod tests {
         LaneReport {
             lane: "Correctness".into(),
             model: "claude:sonnet".into(),
+            commit: None,
             status,
             findings: vec![],
             rejected: vec![],
@@ -203,9 +203,30 @@ mod tests {
         let first = file_name_for(&unit());
         let second = file_name_for(&Unit { pass: 2, ..unit() });
         assert_ne!(first, second);
-        assert!(second.contains("pass2"), "got {second}");
+        assert!(second.contains("~p2"), "got {second}");
         // A first pass keeps the historical name, so reports written before
         // passes existed still resume.
         assert!(!first.contains("pass"), "got {first}");
+    }
+
+    #[test]
+    fn an_effort_spelling_the_pass_suffix_cannot_collide_with_a_real_second_pass() {
+        // Both of these are reachable from ordinary config values: effort is
+        // free text at every entry point. Under plain concatenation they were
+        // byte-identical, so whichever sweep finished last silently overwrote
+        // the other and resume handed one unit the other's report.
+        let second_pass = file_name_for(&Unit { pass: 2, ..unit() });
+        let odd_effort = file_name_for(&Unit {
+            effort: "pass2".into(),
+            ..unit()
+        });
+        assert_ne!(second_pass, odd_effort);
+        // The same trap from the other side: an effort of "p2" against the
+        // new-style pass marker.
+        let p2_effort = file_name_for(&Unit {
+            effort: "p2".into(),
+            ..unit()
+        });
+        assert_ne!(second_pass, p2_effort);
     }
 }
