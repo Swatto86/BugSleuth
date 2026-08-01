@@ -48,6 +48,7 @@ looking, not by inference:
 | 5 | **Run review** | Progress streams into the result pane as it happens |
 | 6 | Wait for it | Status reaches Finished and findings are listed |
 | 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
+| 7b | Check a finding's `fix` | It has an approach, at least one edit naming a symbol, a verification command, and risks. An empty plan renders as "no fix plan" rather than as nothing |
 | 8 | Check the reviewed repo | Unchanged: `git status` clean, no `.bugsleuth-worktrees` left behind |
 | 9 | Switch theme light and dark | Both readable; "Match system" follows the OS |
 | 10 | Close the window | It hides; the process is still alive |
