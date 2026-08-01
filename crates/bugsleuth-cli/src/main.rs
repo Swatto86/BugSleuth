@@ -45,6 +45,7 @@ async fn run_all(args: RunArgs) -> Result<()> {
             api_key: api_key(args.use_api_key)?.as_deref(),
             out_dir: args.out_dir.as_deref(),
             resume: args.resume,
+            triage_model: &args.triage_model,
             progress: Some(progress),
         },
     )

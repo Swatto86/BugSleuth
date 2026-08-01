@@ -68,6 +68,17 @@
               <input id="scope" type="text" spellcheck="false" placeholder="crates/core/src" />
             </label>
           </div>
+          <div class="row" style="margin-top: 12px">
+            <label class="checkline">
+              <input id="triage-severities" type="checkbox" checked />
+              <span>
+                Re-grade every severity once the sweeps are merged, with the
+                whole list in view. Each model otherwise grades its own findings
+                in isolation, which decides the order of the report. Costs one
+                extra cheap call.
+              </span>
+            </label>
+          </div>
         </section>
 
         <section class="panel">

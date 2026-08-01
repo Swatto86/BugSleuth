@@ -20,17 +20,19 @@ use discover::resolve_binary;
 mod discover;
 mod envelope;
 mod prove;
+mod triage;
 
 pub use envelope::Usage;
 pub use prove::{ProveRequest, ProveResult, prove};
+pub use triage::{TriageRequest, triage};
 
 /// Tools a read-only review may use. An explicit allowlist rather than
 /// `--dangerously-skip-permissions`: a sweep that *cannot* write is a far
 /// stronger guarantee than one merely asked not to.
 pub(crate) const VENDOR: &str = "claude";
 
-const READ_ONLY_TOOLS: &str = "Read,Glob,Grep";
-const READ_ONLY_DENIED: &str = "Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch";
+pub(crate) const READ_ONLY_TOOLS: &str = "Read,Glob,Grep";
+pub(crate) const READ_ONLY_DENIED: &str = "Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch";
 
 /// One (model x lane x repository) unit of work.
 pub struct ClaudeSweep<'a> {

@@ -173,6 +173,7 @@ mod tests {
             out_dir: Some(dir),
             resume,
             progress: None,
+            triage_model: "",
         }
     }
 

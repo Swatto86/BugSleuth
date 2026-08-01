@@ -457,12 +457,46 @@ defect looks worse than its label it should be treated as worse.
   that way in one day, each after the expensive part was finished. A malformed
   reply now gets one cheap reshape attempt that reads no code and is told to
   invent nothing; the anchor check still runs on whatever comes back.
-- **Severity is now the only ranking key, and it is self-assigned.** Retiring
-  agreement had that consequence: the report orders by severity, then by file
-  path, and severity is whatever the model that found the defect chose to call
-  it. Nothing validates it. If severity is noise then "worst first" is a claim
-  the tool cannot support — which makes this the most load-bearing unchecked
-  assumption left.
+- ~~Severity is now the only ranking key, and it is self-assigned.~~ **Now
+  graded once more with the whole report in view.** Retiring agreement left
+  severity ordering everything, and severity was whatever the model that found
+  the defect happened to call it — graded by hand against a real run, 6 of 14
+  were wrong, in both directions.
+
+  The reason is structural rather than any model being bad at it. A sweep grades
+  each defect in isolation with no reference class, so a lane whose worst find is
+  an unhandled edge case still crowns one of them "high". "Worst first" is a
+  claim about a total order, and a total order can only come from comparison. So
+  one cheap call now grades every merged defect together against a written
+  rubric — the same rubric the sweeps were given, from a single constant, so the
+  two cannot drift apart.
+
+  **What it actually buys, measured on 13 real defects, three runs: 1, 2 and 3
+  changes.** Small, and worth being plain about. What it changed is more
+  interesting than how much: the moves brought *sibling defects into agreement* —
+  two accounts of the same missing confirmation dialog that clustering had failed
+  to merge were graded high and medium, and triage made them agree. That is
+  precisely the failure isolation causes.
+
+  It never invents, removes or re-words a defect, a verdict for an id that was
+  never offered is dropped, and a pass that fails leaves every original grade
+  alone and says so in the report. Each defect that moved is printed with what it
+  moved from.
+
+- **Getting there cost four wrong diagnoses, and the last one was mine.** The
+  pass kept dying with `error_max_turns`. First reading: too few turns — raised
+  12 to 30, still died. Second: the file reads were burning the budget — took
+  the tools away, still died. Third: the reviewed repo's own agent instructions
+  were leaking in, as they once did for Kilo — disproved by running the CLI by
+  hand from that directory, which worked fine.
+
+  The actual cause was that a `cargo fmt` reflow had silently defeated the edit
+  that removed *"you may read the files named"* from the prompt. Every run after
+  that was ordering a model with no tools to go and read files. Two lessons, both
+  cheap: an edit that "did not apply" fails silently and looks exactly like a
+  behaviour bug, and dumping the real prompt found in one minute what three
+  rounds of plausible reasoning had not. There is now a test asserting the prompt
+  never offers a tool the pass does not have.
 - **No cross-lane severity pass.** A multi-lane report warns that severities are
   not comparable across lanes, but does not yet rank within each lane separately.
 - ~~Same model, same input, different answers — unquantified.~~ **Measured, and

@@ -64,6 +64,12 @@ pub(crate) struct RunArgs {
     pub(crate) resume: bool,
     #[arg(long)]
     pub(crate) use_api_key: bool,
+    /// Model that re-grades every severity once the sweeps are merged, seeing
+    /// the whole list at once. Each sweep otherwise grades its own findings in
+    /// isolation, which measured wrong 6 times in 14. Pass an empty string to
+    /// skip the pass and keep each model's own grade.
+    #[arg(long, default_value = "haiku")]
+    pub(crate) triage_model: String,
     /// Attempt to prove the top N merged defects with a failing test. 0 (the
     /// default) proves nothing. Each attempt costs a model invocation and a full
     /// test run, so this is the expensive part of a run.

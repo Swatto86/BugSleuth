@@ -83,6 +83,7 @@ mod tests {
         Cluster {
             findings,
             agreement,
+            triaged: None,
         }
     }
 

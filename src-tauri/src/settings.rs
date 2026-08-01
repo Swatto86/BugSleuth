@@ -35,6 +35,20 @@ pub struct Settings {
     /// time is the surprising outcome, not reusing them.
     #[serde(default = "yes")]
     pub reuse_completed: bool,
+    /// Model that re-grades every severity once the sweeps are merged, with the
+    /// whole list in view.
+    ///
+    /// On by default with the cheapest model, because severity is the only
+    /// thing that orders the report and each sweep grades its own findings in
+    /// isolation — measured wrong 6 times in 14. Empty turns the pass off and
+    /// keeps whatever each model called its own finding.
+    #[serde(default = "cheapest")]
+    pub triage_model: String,
+}
+
+/// Serde needs a function; a bare string default is not expressible.
+fn cheapest() -> String {
+    "haiku".to_string()
 }
 
 /// Serde needs a function; a bare `true` default is not expressible.
@@ -96,6 +110,7 @@ impl Default for Settings {
             prove_top: 0,
             test_command: String::new(),
             reuse_completed: true,
+            triage_model: cheapest(),
         }
     }
 }

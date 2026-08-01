@@ -78,6 +78,14 @@ export interface Settings {
   prove_top: number;
   test_command: string;
   reuse_completed: boolean;
+  /**
+   * Model that re-grades every severity once the sweeps are merged, seeing the
+   * whole list at once. Empty turns the pass off.
+   *
+   * Severity is the only thing that orders the report, and each sweep grades
+   * its own findings in isolation — measured wrong 6 times in 14.
+   */
+  triage_model: string;
 }
 
 /**

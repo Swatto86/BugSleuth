@@ -79,10 +79,16 @@ pub struct RunOptions<'a> {
     /// Receives events as the run proceeds. Sends are best-effort: a front end
     /// that has gone away must not stop the run it started.
     pub progress: Progress,
+    /// Model that re-grades every severity with the whole report in view.
+    /// Empty turns the pass off, leaving each severity as whichever model found
+    /// the defect graded it — in isolation, which is measurably unreliable.
+    pub triage_model: &'a str,
 }
 
 pub struct RunReport {
     pub ranked: Vec<Ranked>,
+    /// What the severity triage pass did, including when it did not run.
+    pub triage: crate::triage::Outcome,
     pub swept: Vec<(String, Lane, usize)>,
     /// Every hole, with why. Both kinds: no model assigned, and sweep failed.
     pub gaps: Vec<Gap>,
@@ -191,8 +197,14 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         }
     }
 
+    // Severity is the only thing that orders the report, so it is graded once
+    // more with everything in view before anything is ranked on it.
+    let mut clusters = cluster(findings);
+    let triage = crate::triage::grade(&mut clusters, &options).await;
+
     Ok(RunReport {
-        ranked: rank(cluster(findings)),
+        ranked: rank(clusters),
+        triage,
         swept,
         gaps,
     })
@@ -366,6 +378,7 @@ mod tests {
             RunOptions {
                 repo: Path::new("."),
                 scope: None,
+                triage_model: "",
                 max_turns: 1,
                 timeout: Duration::from_secs(1),
                 api_key: None,

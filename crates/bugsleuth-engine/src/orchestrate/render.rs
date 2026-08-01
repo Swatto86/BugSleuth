@@ -48,6 +48,18 @@ impl RunReport {
             self.ranked.len()
         ));
 
+        // What ordered this list, in one line. The reader cannot check the code,
+        // so "worst first" has to say whose judgement that is.
+        if !self.triage.note.is_empty() {
+            out.push_str(&format!("\n  Note: {}.\n", self.triage.note));
+        } else if self.triage.graded > 0 {
+            out.push_str(&format!(
+                "\n  Severities were re-graded across the whole list, with every defect\n  \
+                 in view ({} of {} moved from what the model that found it said).\n",
+                self.triage.changed, self.triage.graded
+            ));
+        }
+
         // Severity means different things in different mandates. A "high" from
         // the security lane and a "high" from the correctness lane were assigned
         // by models answering different questions, so ordering one against the
@@ -114,6 +126,7 @@ mod tests {
     fn report(gaps: Vec<Gap>) -> RunReport {
         RunReport {
             ranked: vec![],
+            triage: Default::default(),
             swept: vec![("claude:sonnet".into(), Lane::Correctness, 0)],
             gaps,
         }
@@ -160,6 +173,7 @@ mod tests {
                 ("claude:sonnet".into(), Lane::Correctness, 1),
                 ("claude:sonnet".into(), Lane::Security, 1),
             ],
+            triage: Default::default(),
             gaps: vec![],
         };
         assert_eq!(multi.lanes_swept(), 2);
@@ -174,6 +188,7 @@ mod tests {
                 ("claude:sonnet".into(), Lane::Correctness, 1),
                 ("codex:".into(), Lane::Correctness, 1),
             ],
+            triage: Default::default(),
             gaps: vec![],
         };
         assert_eq!(same_lane.lanes_swept(), 1);
@@ -192,5 +207,45 @@ mod tests {
         let text = report(vec![]).to_text();
         assert!(text.contains("swept: Correctness lane"));
         assert!(text.contains("0 findings"));
+    }
+}
+
+#[cfg(test)]
+mod triage_tests {
+    use super::*;
+    use crate::triage::Outcome;
+
+    fn report(triage: Outcome) -> RunReport {
+        RunReport {
+            ranked: vec![],
+            triage,
+            swept: vec![("claude:sonnet".into(), Lane::Correctness, 0)],
+            gaps: vec![],
+        }
+    }
+
+    #[test]
+    fn a_report_says_when_its_severities_were_never_graded_together() {
+        // The order of the whole report rests on severity. A reader who cannot
+        // check the code has to be told whose judgement produced that order.
+        let text = report(Outcome {
+            note: "severities are each model's own assessment of its own finding, ungraded:                    the triage pass failed (claude CLI not found)"
+                .into(),
+            ..Default::default()
+        })
+        .to_text();
+        assert!(text.contains("ungraded"), "{text}");
+    }
+
+    #[test]
+    fn a_graded_report_says_how_much_moved() {
+        let text = report(Outcome {
+            graded: 9,
+            changed: 4,
+            note: String::new(),
+        })
+        .to_text();
+        assert!(text.contains("re-graded across the whole list"), "{text}");
+        assert!(text.contains("4 of 9"), "{text}");
     }
 }

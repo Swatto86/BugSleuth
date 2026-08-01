@@ -24,3 +24,4 @@ pub mod plan;
 pub mod prove;
 pub mod report;
 pub mod sweep;
+pub mod triage;

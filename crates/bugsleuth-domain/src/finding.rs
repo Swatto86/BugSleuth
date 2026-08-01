@@ -255,7 +255,7 @@ pub fn finding_schema() -> Value {
                         "severity": {
                             "type": "string",
                             "enum": ["critical", "high", "medium", "low"],
-                            "description": "Judge by the consequence to a user, NOT by how interesting the bug is or how hard it was to find. critical: data loss, a security breach, or the application unusable. high: a common action fails or misleads the user, or an accessibility barrier locks someone out of an outcome entirely. medium: a real problem that has a workaround, or one that only affects an uncommon path. low: minor, cosmetic, or very rare. Ask what happens to the person using this, and whether they have another way to get what they wanted."
+                            "description": crate::triage::SEVERITY_RUBRIC
                         },
                         "file": {
                             "type": "string",

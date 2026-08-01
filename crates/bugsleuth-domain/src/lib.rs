@@ -7,6 +7,7 @@ mod finding;
 mod ids;
 mod lane;
 mod proof;
+mod triage;
 
 pub use finding::{
     Finding, FixEdit, FixPlan, RawFinding, RawFindings, Severity, VerifiedAnchor, finding_schema,
@@ -14,3 +15,4 @@ pub use finding::{
 pub use ids::{FindingId, LaneId, ModelId, RunId};
 pub use lane::Lane;
 pub use proof::{ProofClaim, ProofVerdict, proof_schema};
+pub use triage::{SEVERITY_RUBRIC, SeverityVerdict, SeverityVerdicts, triage_schema};

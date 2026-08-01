@@ -123,6 +123,7 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
                 api_key: None,
                 out_dir: Some(&out_dir),
                 resume: settings.reuse_completed,
+                triage_model: &settings.triage_model,
                 progress: Some(progress),
             },
         )
@@ -372,6 +373,7 @@ mod tests {
         // complete one.
         let report = orchestrate::RunReport {
             ranked: vec![],
+            triage: Default::default(),
             swept: vec![],
             gaps: vec![
                 orchestrate::Gap {

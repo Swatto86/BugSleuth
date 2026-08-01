@@ -131,7 +131,7 @@ mod tests {
     /// so these tests cannot quietly drift from the threshold they protect —
     /// which is exactly what happened when the measure changed underneath them
     /// and a hardcoded 0.2 turned into a failing assertion about nothing.
-    use crate::cluster::MIN_WORDING_OVERLAP as MERGE_AT;
+    use crate::cluster::pairing::MIN_WORDING_OVERLAP as MERGE_AT;
 
     /// The pair that exposed the measure, kept verbatim from a real run.
     ///

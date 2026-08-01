@@ -50,6 +50,7 @@ const ui = {
   proveTop: el<HTMLInputElement>("prove-top"),
   testCommand: el<HTMLInputElement>("test-command"),
   reuseCompleted: el<HTMLInputElement>("reuse-completed"),
+  triageSeverities: el<HTMLInputElement>("triage-severities"),
   output: el<HTMLPreElement>("output"),
   status: el<HTMLSpanElement>("status"),
   spinner: el<HTMLSpanElement>("spinner"),
@@ -60,6 +61,12 @@ const ui = {
   promptPath: el<HTMLParagraphElement>("prompt-path"),
 };
 
+/**
+ * Which model re-grades severities. Cheapest available: the pass compares
+ * summaries against each other, it does not review code again.
+ */
+const TRIAGE_MODEL = "haiku";
+
 let settings: Settings = {
   repo: "",
   scope: "",
@@ -68,6 +75,7 @@ let settings: Settings = {
   prove_top: 0,
   test_command: "",
   reuse_completed: true,
+  triage_model: TRIAGE_MODEL,
 };
 /**
  * What the model and effort dropdowns offer, keyed by vendor.
@@ -273,6 +281,12 @@ function bind(): void {
     settings.reuse_completed = ui.reuseCompleted.checked;
     refresh();
   });
+  ui.triageSeverities.addEventListener("change", () => {
+    // Off is an empty model rather than a separate flag, so there is one thing
+    // to read on the Rust side and no way for the two to disagree.
+    settings.triage_model = ui.triageSeverities.checked ? TRIAGE_MODEL : "";
+    refresh();
+  });
 
   ui.browse.addEventListener("click", async () => {
     const picked = await invoke<string | null>("pick_directory");
@@ -358,6 +372,7 @@ async function boot(): Promise<void> {
   ui.proveTop.value = String(settings.prove_top);
   ui.testCommand.value = settings.test_command;
   ui.reuseCompleted.checked = settings.reuse_completed;
+  ui.triageSeverities.checked = settings.triage_model.trim() !== "";
   render();
 
   // Reveal as soon as the shell is painted and themed. Deliberately before the

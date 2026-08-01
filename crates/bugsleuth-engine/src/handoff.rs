@@ -321,6 +321,7 @@ mod tests {
             cluster: bugsleuth_judge::Cluster {
                 findings: vec![finding(Default::default())],
                 agreement: 1,
+                triaged: None,
             },
         }
     }
