@@ -126,6 +126,13 @@ fn remove(repo: &Path, path: &Path) {
     if path.exists() {
         let _ = std::fs::remove_dir_all(long_path(path));
     }
+    // Take the `.bugsleuth-worktrees` parent too once it is empty. Git does not
+    // track empty directories so it is harmless, but leaving one behind still
+    // means litter in a repository we promised not to touch, and `remove_dir`
+    // refuses if anything is still in there.
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::remove_dir(long_path(parent));
+    }
     // Whether or not the directory went, git's registry must not keep pointing
     // at it, or the next run cannot reuse the same worktree name.
     let _ = git(repo, &["worktree", "prune"]);
@@ -271,6 +278,10 @@ mod tests {
             !path.exists(),
             "the worktree survived its own drop at {}; it would dirty the reviewed repository",
             path.display()
+        );
+        assert!(
+            !repo.join(".bugsleuth-worktrees").exists(),
+            "the container directory was left behind in the reviewed repository"
         );
         let _ = std::fs::remove_dir_all(long_path(&repo));
     }
