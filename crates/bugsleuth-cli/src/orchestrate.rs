@@ -279,6 +279,95 @@ mod tests {
         assert!(text.contains("exited with code 1"));
     }
 
+    /// The whole orchestration path, end to end, with no model involved.
+    ///
+    /// Every unit is pre-seeded as a completed sweep and resumed, so this
+    /// exercises planning, reuse, merging and reporting for real while costing
+    /// nothing. Without it, the only proof `run` works would be having watched
+    /// it once.
+    #[tokio::test]
+    async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() {
+        use crate::plan::{Config, ModelPlan};
+
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-run-tests")
+            .join(format!("{}-resumed", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // Two vendors reporting the same defect in different words.
+        let seed = |model: &str, title: &str, explanation: &str| {
+            let report = format!(
+                r#"{{"lane":"Correctness","model":"{model}","status":{{"state":"swept"}},
+                    "findings":[{{"id":"x","lane":"correctness","model":"{model}",
+                      "title":"{title}","severity":"high",
+                      "anchor":{{"file":"src/a.rs","line":10,"claimed_line":10,"snippet":"code"}},
+                      "explanation":"{explanation}","failure_scenario":"f"}}],
+                    "rejected":[]}}"#
+            );
+            let unit = Unit {
+                model: model.to_string(),
+                lane: Lane::Correctness,
+            };
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(dir.join(file_name_for(&unit)), report);
+        };
+        seed(
+            "claude:sonnet",
+            "average_price divides by zero on an empty inventory",
+            "No check for an empty inventory before dividing by the item count.",
+        );
+        seed(
+            "codex:",
+            "Calculating the average price of an empty inventory panics",
+            "An empty inventory has length zero so this integer division panics.",
+        );
+
+        let plan = crate::plan::plan(&Config {
+            models: vec![
+                ModelPlan {
+                    id: "claude:sonnet".into(),
+                    lanes: vec!["correctness".into()],
+                },
+                ModelPlan {
+                    id: "codex:".into(),
+                    lanes: vec!["correctness".into()],
+                },
+            ],
+        })
+        .unwrap_or_else(|e| panic!("plan failed: {e}"));
+
+        let report = run(
+            &plan,
+            RunOptions {
+                repo: Path::new("."),
+                scope: None,
+                max_turns: 1,
+                timeout: Duration::from_secs(1),
+                api_key: None,
+                out_dir: Some(&dir),
+                resume: true,
+            },
+        )
+        .await
+        .unwrap_or_else(|e| panic!("run failed: {e}"));
+
+        assert_eq!(report.swept.len(), 2, "both sweeps should have been reused");
+        assert_eq!(
+            report.ranked.len(),
+            1,
+            "the same defect from two vendors should merge into one"
+        );
+        assert_eq!(report.ranked[0].cluster.agreement, 2);
+
+        // Three lanes had no model, and must be visible as holes.
+        assert_eq!(report.gaps.len(), 3);
+        let text = report.to_text();
+        assert!(text.contains("NOT SWEPT"));
+        assert!(text.contains("found by 2 of 2 models"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_complete_run_says_nothing_about_unswept_lanes() {
         let text = report(vec![]).to_text();
