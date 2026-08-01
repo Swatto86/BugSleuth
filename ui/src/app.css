@@ -218,6 +218,30 @@ td.model-id {
   user-select: text;
 }
 
+/*
+  The model menu is the widest control on the row and the one with the longest
+  values — Kilo ids run to `openrouter/anthropic/claude-opus-5`. Given room it
+  would stretch the table past the window, so it is capped and allowed to
+  truncate; the full id is still readable once the menu is open.
+*/
+td.model-id select,
+td.model-id input.model-text {
+  width: 100%;
+  max-width: 320px;
+  font-family: inherit;
+}
+
+table.matrix td.effort-cell {
+  width: 110px;
+}
+
+/* A vendor that takes no effort setting shows the control greyed, not missing,
+   so its absence reads as a fact about the vendor rather than a layout slip. */
+table.matrix select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* A lane nobody covers is the one thing the UI must never let pass quietly. */
 th.lane-cell.uncovered {
   color: var(--warn);

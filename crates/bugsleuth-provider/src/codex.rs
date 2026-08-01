@@ -32,6 +32,8 @@ pub struct CodexSweep<'a> {
     pub repo: &'a Path,
     /// Model id, e.g. `gpt-5.6-codex`. Empty means the CLI's own default.
     pub model: &'a str,
+    /// Reasoning effort. Empty means the CLI's own default.
+    pub effort: &'a str,
     pub brief: &'a str,
     pub timeout: Duration,
     pub binary: Option<&'a str>,
@@ -76,6 +78,7 @@ pub async fn prove(
     invoke(Invoke {
         dir: worktree,
         model,
+        effort: "",
         brief,
         timeout,
         binary: None,
@@ -90,6 +93,7 @@ pub async fn sweep(spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
     let findings = invoke(Invoke {
         dir: spec.repo,
         model: spec.model,
+        effort: spec.effort,
         brief: spec.brief,
         timeout: spec.timeout,
         binary: spec.binary,
@@ -103,6 +107,8 @@ pub async fn sweep(spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
 pub(crate) struct Invoke<'a> {
     pub(crate) dir: &'a Path,
     pub(crate) model: &'a str,
+    /// Reasoning effort. Empty means the CLI's own default.
+    pub(crate) effort: &'a str,
     pub(crate) brief: &'a str,
     pub(crate) timeout: Duration,
     pub(crate) binary: Option<&'a str>,
@@ -218,6 +224,14 @@ fn build_args(spec: &Invoke<'_>, schema: &Path, answer: &Path) -> Vec<String> {
         args.push("-m".into());
         args.push(model.to_string());
     }
+    // Codex has no effort flag; it is a config key set for this invocation
+    // only. `--ignore-user-config` is already set, so this is the sole source
+    // of the value rather than an override of whatever the machine had.
+    let effort = spec.effort.trim();
+    if !effort.is_empty() {
+        args.push("-c".into());
+        args.push(format!("model_reasoning_effort=\"{effort}\""));
+    }
     // A bare `-` tells Codex to read the prompt from stdin, so a long brief
     // cannot hit the command-line length limit.
     args.push("-".into());
@@ -254,6 +268,7 @@ mod tests {
 
     fn spec<'a>(model: &'a str, sandbox: Sandbox) -> Invoke<'a> {
         Invoke {
+            effort: "",
             dir: Path::new("."),
             model,
             brief: "",

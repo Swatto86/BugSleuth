@@ -43,6 +43,7 @@ pub struct ProveResult {
 
 pub async fn prove(request: ProveRequest<'_>) -> Result<ProveResult, ProviderError> {
     let outcome = invoke(Run {
+        effort: "",
         repo: request.worktree,
         model: request.model,
         prompt: request.brief,

@@ -15,7 +15,9 @@ import {
   LANE_TITLES,
   batchCount,
   canRun,
+  joinId,
   preset,
+  splitId,
   toggleLane,
   uncoveredLanes,
   unitCount,
@@ -116,4 +118,55 @@ test("lane titles match the engine's own names, including UX", () => {
   for (const lane of LANES) {
     assert.ok(LANE_TITLES[lane], `${lane} has no display title`);
   }
+});
+
+test("splitting a model spec and rejoining it settles on one spelling", () => {
+  // Not byte-identity: `claude:opus` and `opus` are the same model to the
+  // engine, and the round trip deliberately collapses them onto the bare form.
+  // What must hold is that it settles — a second pass changes nothing, so a
+  // model cannot drift each time the table is redrawn.
+  for (const id of [
+    "sonnet",
+    "claude:opus",
+    "codex:gpt-5.6-codex",
+    "kilo:openrouter/z-ai/glm-4.6",
+    "kilo:kilo/anthropic/claude-opus-5",
+    "codex:",
+    "kilo:",
+  ]) {
+    const once = joinId(splitId(id).vendor, splitId(id).model);
+    const twice = joinId(splitId(once).vendor, splitId(once).model);
+    assert.equal(twice, once, `${id} keeps changing: ${once} then ${twice}`);
+    assert.equal(splitId(once).vendor, splitId(id).vendor, `${id} changed vendor`);
+  }
+  // The one normalisation this performs, stated outright.
+  assert.equal(joinId(splitId("claude:opus").vendor, splitId("claude:opus").model), "opus");
+  // Everything else is left exactly as written.
+  assert.equal(
+    joinId(splitId("kilo:openrouter/z-ai/glm-4.6").vendor, splitId("kilo:openrouter/z-ai/glm-4.6").model),
+    "kilo:openrouter/z-ai/glm-4.6",
+  );
+});
+
+test("a bare Claude model never gains a redundant prefix", () => {
+  // `sonnet` and `claude:sonnet` are the same model to the engine but different
+  // strings here, so a run configured with both would sweep twice and report as
+  // two models. The UI must only ever produce the bare form.
+  assert.equal(joinId("claude", "sonnet"), "sonnet");
+  assert.equal(joinId("claude", "  sonnet  "), "sonnet");
+});
+
+test("splitId agrees with vendorOf on every shape", () => {
+  // Two functions deciding vendor differently is how a row shows one provider
+  // and bills another.
+  for (const id of ["sonnet", "claude:opus", "codex:x", "kilo:a/b", "gpt:weird", ""]) {
+    assert.equal(splitId(id).vendor, vendorOf(id), `disagreement on ${id}`);
+  }
+});
+
+test("an unknown prefix is treated as a Claude model, colon and all", () => {
+  // `gpt:weird` is not a vendor prefix, so the whole string is the model — the
+  // same reading the engine uses. Dropping the prefix would review a different
+  // model than the one written down.
+  assert.deepEqual(splitId("gpt:weird"), { vendor: "claude", model: "gpt:weird" });
 });

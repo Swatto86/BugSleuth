@@ -18,6 +18,7 @@ mod error;
 mod find;
 mod json;
 pub mod kilo;
+pub mod models;
 pub mod process;
 
 pub use claude::{ClaudeSweep, SweepResult, Usage};

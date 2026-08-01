@@ -30,14 +30,22 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
 }
 
 pub(super) fn file_name_for(unit: &Unit) -> String {
-    format!(
-        "{}-{}.json",
-        unit.lane.slug(),
-        unit.model
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-            .collect::<String>()
-    )
+    // The effort is part of the name only when it is set, so every report
+    // written before efforts existed keeps its filename and stays resumable.
+    let effort = if unit.effort.trim().is_empty() {
+        String::new()
+    } else {
+        format!("-{}", safe(unit.effort.trim()))
+    };
+    format!("{}-{}{effort}.json", unit.lane.slug(), safe(&unit.model))
+}
+
+/// Anything that is not a letter or digit becomes a dash, so a model id can
+/// never escape the run directory or collide with a path separator.
+fn safe(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
 }
 
 pub(super) fn write_report(dir: &Path, name: &str, report: &LaneReport) -> Result<()> {
@@ -103,10 +111,12 @@ mod tests {
         let b = file_name_for(&Unit {
             model: "codex:".into(),
             lane: Lane::Correctness,
+            effort: String::new(),
         });
         let c = file_name_for(&Unit {
             model: "claude:sonnet".into(),
             lane: Lane::Security,
+            effort: String::new(),
         });
         assert_ne!(a, b);
         assert_ne!(a, c);
@@ -133,6 +143,7 @@ mod tests {
         Unit {
             model: "claude:sonnet".into(),
             lane: Lane::Correctness,
+            effort: String::new(),
         }
     }
 

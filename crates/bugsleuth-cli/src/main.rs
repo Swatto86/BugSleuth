@@ -189,6 +189,7 @@ async fn run_sweep(args: SweepArgs) -> Result<()> {
         lane: args.lane,
         model: &args.model,
         scope: args.scope.as_deref(),
+        effort: &args.effort,
         max_turns: args.max_turns,
         timeout: Duration::from_secs(args.timeout_secs),
         api_key: api_key.as_deref(),

@@ -25,6 +25,40 @@ export const LANE_TITLES: Record<Lane, string> = {
 export interface ModelSetting {
   id: string;
   lanes: string[];
+  /** Reasoning effort. Empty means the vendor's own default. */
+  effort: string;
+}
+
+/** The vendors that can be picked, in the order they are offered. */
+export const VENDORS = ["claude", "codex", "kilo"] as const;
+export type Vendor = (typeof VENDORS)[number];
+
+/**
+ * Split a stored spec into the two things the UI lets you choose separately.
+ *
+ * The stored form stays `vendor:model` because that is what the engine parses;
+ * splitting it is a display concern and must not change what is written back.
+ * A bare name means Claude, exactly as the engine reads it.
+ */
+export function splitId(id: string): { vendor: Vendor; model: string } {
+  const at = id.indexOf(":");
+  if (at === -1) return { vendor: "claude", model: id };
+  const prefix = id.slice(0, at);
+  return (VENDORS as readonly string[]).includes(prefix)
+    ? { vendor: prefix as Vendor, model: id.slice(at + 1) }
+    : { vendor: "claude", model: id };
+}
+
+/**
+ * Put a vendor and model back together.
+ *
+ * Claude keeps the bare form so an existing settings file and a freshly-picked
+ * `sonnet` are the same string, rather than two spellings of one model that
+ * would sweep twice and report as two.
+ */
+export function joinId(vendor: Vendor, model: string): string {
+  const trimmed = model.trim();
+  return vendor === "claude" ? trimmed : `${vendor}:${trimmed}`;
 }
 
 export interface Settings {
@@ -103,20 +137,20 @@ export function preset(name: Preset): ModelSetting[] {
   switch (name) {
     case "cheap":
       // One vendor, every lane. Fewest invocations that still reviews everything.
-      return [{ id: "haiku", lanes: [...LANES] }];
+      return [{ id: "haiku", lanes: [...LANES], effort: "" }];
     case "deep":
       // Every vendor on every lane it can do. Kilo is excluded from nothing here
       // because sweeping is the one thing it does as well as the others.
       return [
-        { id: "opus", lanes: [...LANES] },
-        { id: "codex:", lanes: [...LANES] },
-        { id: "kilo:", lanes: ["correctness", "security"] },
+        { id: "opus", lanes: [...LANES], effort: "" },
+        { id: "codex:", lanes: [...LANES], effort: "" },
+        { id: "kilo:", lanes: ["correctness", "security"], effort: "" },
       ];
     case "balanced":
     default:
       return [
-        { id: "sonnet", lanes: [...LANES] },
-        { id: "codex:", lanes: ["correctness", "security"] },
+        { id: "sonnet", lanes: [...LANES], effort: "" },
+        { id: "codex:", lanes: ["correctness", "security"], effort: "" },
       ];
   }
 }

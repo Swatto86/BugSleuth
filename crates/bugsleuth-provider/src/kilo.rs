@@ -65,6 +65,15 @@ impl Route {
     }
 }
 
+/// Where the Kilo CLI lives, if it is installed.
+///
+/// Exposed so the model catalogue can be fetched without `models.rs` having to
+/// know how this vendor is discovered.
+#[must_use]
+pub fn binary_path() -> Option<std::path::PathBuf> {
+    discover::resolve_binary()
+}
+
 /// Read the billing route out of a Kilo model id.
 pub fn route_of(model: &str) -> Route {
     match model.trim().split('/').next().unwrap_or_default() {
@@ -82,6 +91,10 @@ pub struct KiloSweep<'a> {
     pub worktree: &'a Path,
     /// Model in Kilo's `provider/model` form. Empty means its configured default.
     pub model: &'a str,
+    /// Reasoning effort. Kilo calls this a model *variant* and passes it
+    /// straight through to the provider, so the accepted values depend on the
+    /// model rather than on Kilo. Empty means whatever the model does by default.
+    pub effort: &'a str,
     /// The brief. Must already describe the required JSON shape, because this
     /// CLI cannot be given a schema to enforce.
     pub brief: &'a str,
@@ -163,6 +176,11 @@ fn build_args(spec: &KiloSweep<'_>) -> Vec<String> {
     if !model.is_empty() {
         args.push("-m".into());
         args.push(model.to_string());
+    }
+    let effort = spec.effort.trim();
+    if !effort.is_empty() {
+        args.push("--variant".into());
+        args.push(effort.to_string());
     }
     args
 }
@@ -270,6 +288,7 @@ mod tests {
 
     fn spec<'a>(model: &'a str) -> KiloSweep<'a> {
         KiloSweep {
+            effort: "",
             worktree: Path::new("/tmp/wt"),
             model,
             brief: "",

@@ -41,6 +41,8 @@ pub struct ClaudeSweep<'a> {
     pub lane: Lane,
     /// Model alias (`sonnet`, `opus`, `haiku`) or a full model id.
     pub model: &'a str,
+    /// Reasoning effort. Empty means the CLI's own default.
+    pub effort: &'a str,
     /// The assembled review brief, delivered on stdin so a long brief cannot hit
     /// the command-line length limit.
     pub brief: &'a str,
@@ -70,6 +72,7 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
     let outcome = invoke(Run {
         repo: spec.repo,
         model: spec.model,
+        effort: spec.effort,
         prompt: spec.brief,
         schema: finding_schema(),
         allowed: READ_ONLY_TOOLS,
@@ -96,6 +99,7 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
 pub(crate) struct Run<'a> {
     pub(crate) repo: &'a Path,
     pub(crate) model: &'a str,
+    pub(crate) effort: &'a str,
     pub(crate) prompt: &'a str,
     pub(crate) schema: Value,
     pub(crate) allowed: &'a str,
@@ -225,6 +229,10 @@ fn build_args(run: &Run<'_>) -> Vec<String> {
         args.push("--model".into());
         args.push(run.model.trim().to_string());
     }
+    if !run.effort.trim().is_empty() {
+        args.push("--effort".into());
+        args.push(run.effort.trim().to_string());
+    }
     args
 }
 
@@ -251,6 +259,7 @@ mod tests {
 
     fn run<'a>(model: &'a str) -> Run<'a> {
         Run {
+            effort: "",
             repo: Path::new("."),
             model,
             prompt: "",

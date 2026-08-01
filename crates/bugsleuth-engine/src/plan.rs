@@ -24,6 +24,9 @@ pub struct ModelPlan {
     pub id: String,
     /// Lane slugs this model sweeps.
     pub lanes: Vec<String>,
+    /// Reasoning effort for this model. Empty means the vendor's own default.
+    #[serde(default)]
+    pub effort: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -36,6 +39,9 @@ pub struct Config {
 pub struct Unit {
     pub model: String,
     pub lane: Lane,
+    /// Reasoning effort. Part of the unit because two efforts of the same model
+    /// on the same lane are two different sweeps, not one run twice.
+    pub effort: String,
 }
 
 /// A run, with the gaps made explicit.
@@ -114,6 +120,7 @@ pub fn plan(config: &Config) -> Result<Plan> {
             let unit = Unit {
                 model: model.id.trim().to_string(),
                 lane,
+                effort: model.effort.trim().to_string(),
             };
             // The same model assigned a lane twice is a config slip, not a
             // request to pay for the same sweep twice.
@@ -146,6 +153,7 @@ mod tests {
                 .map(|(id, lanes)| ModelPlan {
                     id: (*id).to_string(),
                     lanes: lanes.iter().map(|l| (*l).to_string()).collect(),
+                    effort: String::new(),
                 })
                 .collect(),
         }

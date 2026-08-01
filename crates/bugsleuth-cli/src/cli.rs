@@ -135,6 +135,10 @@ pub(crate) struct SweepArgs {
     /// Model alias or id, e.g. sonnet, opus, haiku.
     #[arg(long, default_value = "sonnet")]
     pub(crate) model: String,
+    /// Reasoning effort. Accepted values depend on the vendor; omitting it
+    /// leaves the vendor's own default in place.
+    #[arg(long, default_value = "")]
+    pub(crate) effort: String,
     /// Limit the review to these paths (passed to the model as guidance).
     #[arg(long)]
     pub(crate) scope: Option<String>,

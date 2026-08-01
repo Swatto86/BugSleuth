@@ -9,6 +9,7 @@
 //! and no `fs` or `shell` permission is granted to the frontend at all — the
 //! only way to touch the disk is through a command that validates first.
 
+mod catalogue;
 mod commands;
 mod settings;
 mod tray;
@@ -52,6 +53,7 @@ pub fn run() {
             commands::frontend_ready,
             commands::quit,
             commands::billing_routes,
+            catalogue::available_models,
         ])
         .run(tauri::generate_context!())
         // The only failure here is the webview runtime refusing to start, at

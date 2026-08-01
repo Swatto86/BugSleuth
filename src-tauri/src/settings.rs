@@ -31,6 +31,12 @@ pub struct Settings {
 pub struct ModelSetting {
     pub id: String,
     pub lanes: Vec<String>,
+    /// Reasoning effort. Empty means the vendor's own default.
+    ///
+    /// Defaulted on read so a settings file written before efforts existed
+    /// still loads, rather than being discarded back to the shipped preset.
+    #[serde(default)]
+    pub effort: String,
 }
 
 impl Default for Settings {
@@ -47,6 +53,7 @@ impl Default for Settings {
             models: vec![
                 ModelSetting {
                     id: "sonnet".into(),
+                    effort: String::new(),
                     lanes: vec![
                         "correctness".into(),
                         "security".into(),
@@ -57,6 +64,7 @@ impl Default for Settings {
                 ModelSetting {
                     id: "codex:".into(),
                     lanes: vec!["correctness".into(), "security".into()],
+                    effort: String::new(),
                 },
             ],
             theme: "system".into(),

@@ -22,7 +22,13 @@ import {
   unitCount,
 } from "./model";
 import { type RunEvent, describe, listOf } from "./format";
-import { type VendorStatus, vendorPills, matrixRows } from "./view";
+import {
+  type Catalogue,
+  type VendorModels,
+  type VendorStatus,
+  vendorPills,
+  matrixRows,
+} from "./view";
 
 
 
@@ -60,6 +66,15 @@ let settings: Settings = {
   prove_top: 0,
   test_command: "",
 };
+/**
+ * What the model and effort dropdowns offer, keyed by vendor.
+ *
+ * Starts empty so the table renders immediately with typed-model fallbacks,
+ * and is filled in when the vendors answer. Waiting for it would make the whole
+ * window wait on three CLIs.
+ */
+let catalogue: Catalogue = {};
+
 let running = false;
 const NEWLINE = String.fromCharCode(10);
 
@@ -121,10 +136,22 @@ function renderPlanSummary(): void {
 
 function render(): void {
   ui.matrixBody.replaceChildren(
-    ...matrixRows(settings.models, {
+    ...matrixRows(settings.models, catalogue, {
       onRename: (index, id) => {
         const existing = settings.models[index];
         if (existing) settings.models[index] = { ...existing, id };
+        refresh();
+      },
+      onVendor: (index, id) => {
+        const existing = settings.models[index];
+        // The effort goes with the old vendor: the levels differ between them,
+        // and carrying one over would send a value the new CLI may reject.
+        if (existing) settings.models[index] = { ...existing, id, effort: "" };
+        render();
+      },
+      onEffort: (index, effort) => {
+        const existing = settings.models[index];
+        if (existing) settings.models[index] = { ...existing, effort };
         refresh();
       },
       onToggle: (index, lane, on) => {
@@ -241,7 +268,7 @@ function bind(): void {
   });
 
   ui.addModel.addEventListener("click", () => {
-    settings.models = [...settings.models, { id: "", lanes: [] }];
+    settings.models = [...settings.models, { id: "", lanes: [], effort: "" }];
     render();
   });
 
@@ -257,6 +284,18 @@ function bind(): void {
   // Closing the window only hides it. This is the reachable, keyboard-navigable
   // way to actually exit, so the tray is not the single point of failure.
   ui.quit.addEventListener("click", () => void invoke("quit"));
+}
+
+/** Fill the model and effort menus, then redraw the table with them. */
+async function loadCatalogue(): Promise<void> {
+  try {
+    const vendors = await invoke<VendorModels[]>("available_models");
+    catalogue = Object.fromEntries(vendors.map((v) => [v.vendor, v]));
+    render();
+  } catch {
+    // The table already works with typed model ids, so a catalogue that cannot
+    // be fetched costs convenience rather than capability.
+  }
 }
 
 async function boot(): Promise<void> {
@@ -295,6 +334,10 @@ async function boot(): Promise<void> {
     setStatus(event.payload.ok ? "Finished" : "Run failed", event.payload.ok ? "" : "error");
     renderPlanSummary();
   });
+
+  // After the reveal on purpose: filling the menus asks Kilo for its catalogue,
+  // and the window must not wait on a CLI to appear.
+  void loadCatalogue();
 
   setStatus("Checking providers…", "running");
   try {

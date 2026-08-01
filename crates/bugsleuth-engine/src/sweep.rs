@@ -86,6 +86,8 @@ pub struct Request<'a> {
     /// `vendor:model`, or a bare model name for Claude.
     pub model: &'a str,
     pub scope: Option<&'a str>,
+    /// Reasoning effort. Empty means the vendor's own default.
+    pub effort: &'a str,
     pub max_turns: u32,
     pub timeout: Duration,
     pub api_key: Option<&'a str>,
@@ -134,6 +136,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
             repo: reviewed,
             lane: request.lane,
             model,
+            effort: request.effort,
             brief: &brief,
             timeout: request.timeout,
             max_turns: request.max_turns,
@@ -145,6 +148,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         Vendor::Codex => codex::sweep(CodexSweep {
             repo: reviewed,
             model,
+            effort: request.effort,
             brief: &brief,
             timeout: request.timeout,
             binary: None,
@@ -154,6 +158,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         Vendor::Kilo => kilo::sweep(KiloSweep {
             worktree: reviewed,
             model,
+            effort: request.effort,
             brief: &brief,
             timeout: request.timeout,
             binary: None,

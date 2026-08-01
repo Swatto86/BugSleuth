@@ -223,6 +223,7 @@ fn to_config(settings: &Settings) -> plan::Config {
             .map(|m| plan::ModelPlan {
                 id: m.id.clone(),
                 lanes: m.lanes.clone(),
+                effort: m.effort.clone(),
             })
             .collect(),
     }

@@ -267,6 +267,7 @@ async fn run_batch(batch: &[Unit], options: &RunOptions<'_>) -> Vec<SweepOutcome
                 lane: unit.lane,
                 model: &unit.model,
                 scope: scope.as_deref(),
+                effort: &unit.effort,
                 max_turns,
                 timeout,
                 api_key: api_key.as_deref(),
@@ -325,6 +326,7 @@ mod tests {
             let unit = Unit {
                 model: model.to_string(),
                 lane: Lane::Correctness,
+                effort: String::new(),
             };
             let _ = std::fs::create_dir_all(&dir);
             let _ = std::fs::write(dir.join(file_name_for(&unit)), report);
@@ -345,10 +347,12 @@ mod tests {
                 ModelPlan {
                     id: "claude:sonnet".into(),
                     lanes: vec!["correctness".into()],
+                    effort: String::new(),
                 },
                 ModelPlan {
                     id: "codex:".into(),
                     lanes: vec!["correctness".into()],
+                    effort: String::new(),
                 },
             ],
         })

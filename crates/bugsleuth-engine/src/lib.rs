@@ -12,6 +12,12 @@
 
 pub mod brief;
 pub mod merge;
+/// What each vendor can be asked to run, and how hard.
+///
+/// Re-exported so the desktop shell keeps its single dependency on this crate:
+/// the front ends talk to the engine, and the engine talks to the providers.
+pub use bugsleuth_provider::models;
+
 pub mod orchestrate;
 pub mod plan;
 pub mod prove;
