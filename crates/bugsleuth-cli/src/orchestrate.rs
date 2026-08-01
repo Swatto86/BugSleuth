@@ -70,6 +70,24 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         })
         .collect();
 
+    // Vendors that must run in a worktree read HEAD; the others read the working
+    // tree. On a dirty repository those are different code, so one run would be
+    // reviewing two versions at once and the merged report would silently mix
+    // them. Say so rather than let the reader assume one consistent review.
+    if crate::orchestrate::proving::has_uncommitted_changes(options.repo)
+        && plan
+            .units
+            .iter()
+            .any(|unit| crate::sweep::Vendor::parse(&unit.model).0.needs_isolation())
+    {
+        eprintln!(
+            "warning: the repository has uncommitted changes, and this run includes a\n         \
+             vendor that must review a throwaway checkout of HEAD. Those vendors will\n         \
+             not see your uncommitted work while the others will, so the merged report\n         \
+             would span two versions of the code. Commit or stash first."
+        );
+    }
+
     // Reuse whatever a previous attempt already paid for.
     let mut outstanding: Vec<Unit> = Vec::new();
     for unit in &plan.units {
