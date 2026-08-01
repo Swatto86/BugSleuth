@@ -67,6 +67,17 @@ struct RunArgs {
     resume: bool,
     #[arg(long)]
     use_api_key: bool,
+    /// Attempt to prove the top N merged defects with a failing test. 0 (the
+    /// default) proves nothing. Each attempt costs a model invocation and a full
+    /// test run, so this is the expensive part of a run.
+    #[arg(long, default_value_t = 0, requires = "test_command")]
+    prove_top: usize,
+    /// Command that runs the target's tests, e.g. "cargo test".
+    #[arg(long)]
+    test_command: Option<String>,
+    /// Model used for proof attempts. Kilo cannot prove.
+    #[arg(long, default_value = "sonnet")]
+    prove_model: String,
 }
 
 #[derive(Parser)]
@@ -176,6 +187,30 @@ async fn run_all(args: RunArgs) -> Result<()> {
     .await?;
 
     print!("{}", report.to_text());
+
+    // Proving is the expensive half, so it only runs when explicitly asked for.
+    if args.prove_top > 0
+        && let Some(test_command) = args.test_command.as_deref()
+    {
+        let proved = orchestrate::proving::prove_top(
+            &report.ranked,
+            &orchestrate::proving::ProveOptions {
+                repo: &repo,
+                model: &args.prove_model,
+                test_command,
+                top: args.prove_top,
+                max_turns: args.max_turns,
+                timeout: Duration::from_secs(args.timeout_secs),
+                test_timeout: Duration::from_secs(600),
+                api_key: api_key(args.use_api_key)?.as_deref(),
+            },
+        )
+        .await;
+        print!(
+            "{}",
+            orchestrate::proving::to_text(&proved, report.ranked.len())
+        );
+    }
 
     // A run with a hole in it must not look like a clean pass to a script.
     if !report.gaps.is_empty() {
