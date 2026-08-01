@@ -145,6 +145,7 @@ mod tests {
             api_key: None,
             out_dir: Some(dir),
             resume,
+            progress: None,
         }
     }
 

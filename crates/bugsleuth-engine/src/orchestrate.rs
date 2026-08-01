@@ -16,14 +16,48 @@ use anyhow::Result;
 use bugsleuth_domain::{Finding, Lane};
 use bugsleuth_judge::{Ranked, cluster, rank};
 
+use serde::Serialize;
+
 use crate::plan::{Plan, Unit};
 use crate::report::Status;
 use crate::sweep;
 
 mod persist;
 pub mod proving;
-mod render;
+pub mod render;
 use persist::{file_name_for, reusable, write_report};
+
+/// Something that happened during a run, as it happens.
+///
+/// A sweep takes tens of minutes and a run is several of them, so a front end
+/// that only learns the outcome at the end shows a spinner for half an hour.
+/// These are emitted as they occur; the command line prints them and the
+/// desktop app forwards them to the window.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RunEvent {
+    /// A round of sweeps is starting. One per vendor at most, so `units` is
+    /// what will run concurrently.
+    BatchStarted {
+        index: usize,
+        total: usize,
+        units: Vec<String>,
+    },
+    /// A sweep already paid for by an earlier run was reused rather than repeated.
+    Reused { model: String, lane: String },
+    /// A sweep finished. `swept` false means it did not run — `reason` says why,
+    /// and it must never be presented as "found nothing".
+    SweepFinished {
+        model: String,
+        lane: String,
+        findings: usize,
+        swept: bool,
+        reason: String,
+    },
+}
+
+/// Where run events go. `None` means nobody is listening.
+pub type Progress = Option<tokio::sync::mpsc::UnboundedSender<RunEvent>>;
 
 pub struct RunOptions<'a> {
     pub repo: &'a Path,
@@ -42,6 +76,9 @@ pub struct RunOptions<'a> {
     /// which is the whole point — the usual reason a run died is that something
     /// was rate-limited, and that is exactly what should be attempted again.
     pub resume: bool,
+    /// Receives events as the run proceeds. Sends are best-effort: a front end
+    /// that has gone away must not stop the run it started.
+    pub progress: Progress,
 }
 
 pub struct RunReport {
@@ -88,22 +125,7 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         );
     }
 
-    // Reuse whatever a previous attempt already paid for.
-    let mut outstanding: Vec<Unit> = Vec::new();
-    for unit in &plan.units {
-        match reusable(unit, &options) {
-            Some(previous) => {
-                eprintln!(
-                    "reusing {} x {} from a previous run",
-                    unit.model,
-                    unit.lane.slug()
-                );
-                swept.push((previous.model.clone(), unit.lane, previous.findings.len()));
-                findings.extend(previous.findings);
-            }
-            None => outstanding.push(unit.clone()),
-        }
-    }
+    let outstanding = take_reusable(plan, &options, &mut findings, &mut swept);
 
     let remaining = Plan {
         units: outstanding,
@@ -111,15 +133,16 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
     };
     let batches = remaining.batches();
     for (index, batch) in batches.iter().enumerate() {
-        eprintln!(
-            "batch {}/{}: {}",
-            index + 1,
-            batches.len(),
-            batch
-                .iter()
-                .map(|u| format!("{} x {}", u.model, u.lane.slug()))
-                .collect::<Vec<_>>()
-                .join(", ")
+        emit(
+            &options.progress,
+            RunEvent::BatchStarted {
+                index: index + 1,
+                total: batches.len(),
+                units: batch
+                    .iter()
+                    .map(|u| format!("{} x {}", u.model, u.lane.title()))
+                    .collect(),
+            },
         );
 
         // Everything in a batch is a different vendor, so these run at once.
@@ -129,6 +152,26 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
             {
                 eprintln!("warning: {error}");
             }
+
+            emit(
+                &options.progress,
+                match &report.lane_report.status {
+                    Status::Swept { .. } => RunEvent::SweepFinished {
+                        model: report.lane_report.model.clone(),
+                        lane: report.lane.title().to_string(),
+                        findings: report.lane_report.findings.len(),
+                        swept: true,
+                        reason: String::new(),
+                    },
+                    Status::NotSwept { reason } => RunEvent::SweepFinished {
+                        model: report.lane_report.model.clone(),
+                        lane: report.lane.title().to_string(),
+                        findings: 0,
+                        swept: false,
+                        reason: reason.clone(),
+                    },
+                },
+            );
 
             match &report.lane_report.status {
                 Status::Swept { .. } => {
@@ -153,6 +196,44 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         swept,
         gaps,
     })
+}
+
+/// Consume whatever an earlier run already paid for, returning what is left.
+///
+/// Pulled out of `run` because reuse and execution are separate phases and
+/// reading them together obscures both.
+fn take_reusable(
+    plan: &Plan,
+    options: &RunOptions<'_>,
+    findings: &mut Vec<Finding>,
+    swept: &mut Vec<(String, Lane, usize)>,
+) -> Vec<Unit> {
+    let mut outstanding = Vec::new();
+    for unit in &plan.units {
+        match reusable(unit, options) {
+            Some(previous) => {
+                emit(
+                    &options.progress,
+                    RunEvent::Reused {
+                        model: unit.model.clone(),
+                        lane: unit.lane.title().to_string(),
+                    },
+                );
+                swept.push((previous.model.clone(), unit.lane, previous.findings.len()));
+                findings.extend(previous.findings);
+            }
+            None => outstanding.push(unit.clone()),
+        }
+    }
+    outstanding
+}
+
+/// Best-effort send. A closed channel means the front end went away, which is
+/// not a reason to abandon a run that is already being paid for.
+fn emit(progress: &Progress, event: RunEvent) {
+    if let Some(sender) = progress {
+        let _ = sender.send(event);
+    }
 }
 
 struct SweepOutcome {
@@ -283,6 +364,7 @@ mod tests {
                 api_key: None,
                 out_dir: Some(&dir),
                 resume: true,
+                progress: None,
             },
         )
         .await

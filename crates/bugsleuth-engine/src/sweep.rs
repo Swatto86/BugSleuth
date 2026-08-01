@@ -241,8 +241,10 @@ pub async fn preflight() -> Result<()> {
             Err(error) => println!("{name}: UNAVAILABLE - {error}"),
         }
     }
-    println!("
-{usable} of {total} provider CLIs can be started.");
+    println!(
+        "
+{usable} of {total} provider CLIs can be started."
+    );
     println!("This does not prove they are signed in; only a real sweep does that.");
     if usable == 0 {
         std::process::exit(2);

@@ -7,7 +7,7 @@
 
 use bugsleuth_domain::Lane;
 
-use super::RunReport;
+use super::{RunEvent, RunReport};
 
 impl RunReport {
     /// How many distinct lanes actually ran.
@@ -76,6 +76,33 @@ impl RunReport {
             ));
         }
         out
+    }
+}
+
+/// One line describing a run event, for a terminal.
+pub fn describe(event: &RunEvent) -> String {
+    match event {
+        RunEvent::BatchStarted {
+            index,
+            total,
+            units,
+        } => format!("round {index}/{total}: {}", units.join(", ")),
+        RunEvent::Reused { model, lane } => {
+            format!("reusing {model} x {lane} from a previous run")
+        }
+        RunEvent::SweepFinished {
+            model,
+            lane,
+            findings,
+            swept: true,
+            ..
+        } => format!("  {model} x {lane}: {findings} findings"),
+        RunEvent::SweepFinished {
+            model,
+            lane,
+            reason,
+            ..
+        } => format!("  {model} x {lane}: NOT SWEPT - {reason}"),
     }
 }
 

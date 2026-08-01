@@ -12,6 +12,7 @@ import { test } from "node:test";
 
 import {
   LANES,
+  LANE_TITLES,
   batchCount,
   canRun,
   preset,
@@ -106,4 +107,13 @@ test("toggling a lane off removes exactly it, and twice on is idempotent", () =>
   assert.deepEqual(toggleLane(models, 0, "security", false)[0]?.lanes, ["correctness"]);
   const twice = toggleLane(toggleLane(models, 0, "ux", true), 0, "ux", true);
   assert.equal(twice[0]?.lanes.filter((l) => l === "ux").length, 1);
+});
+
+test("lane titles match the engine's own names, including UX", () => {
+  // "ux" capitalised naively becomes "Ux". The engine writes "UX", and one lane
+  // named two ways in one product reads as carelessness.
+  assert.equal(LANE_TITLES.ux, "UX");
+  for (const lane of LANES) {
+    assert.ok(LANE_TITLES[lane], `${lane} has no display title`);
+  }
 });

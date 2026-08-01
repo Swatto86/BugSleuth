@@ -10,6 +10,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import {
   LANES,
+  LANE_TITLES,
   type Lane,
 
   type Preset,
@@ -21,6 +22,19 @@ import {
   uncoveredLanes,
   unitCount,
 } from "./model";
+
+/** Mirrors `RunEvent` in the engine. */
+type RunEvent =
+  | { kind: "batch_started"; index: number; total: number; units: string[] }
+  | { kind: "reused"; model: string; lane: string }
+  | {
+      kind: "sweep_finished";
+      model: string;
+      lane: string;
+      findings: number;
+      swept: boolean;
+      reason: string;
+    };
 
 interface VendorStatus {
   name: string;
@@ -61,6 +75,10 @@ let settings: Settings = {
   test_command: "",
 };
 let running = false;
+const NEWLINE = String.fromCharCode(10);
+
+/** Lines accumulated during a run, newest last. */
+let progressLog: string[] = [];
 
 // ── Theme ───────────────────────────────────────────────────────────────────
 
@@ -121,7 +139,10 @@ function renderMatrix(): void {
         const box = document.createElement("input");
         box.type = "checkbox";
         box.checked = model.lanes.includes(lane);
-        box.setAttribute("aria-label", `${model.id || "model"} covers the ${lane} lane`);
+        box.setAttribute(
+          "aria-label",
+          `${model.id || "model"} covers the ${LANE_TITLES[lane]} lane`,
+        );
         box.addEventListener("change", () => {
           settings.models = toggleLane(settings.models, index, lane as Lane, box.checked);
           render();
@@ -166,7 +187,7 @@ function renderCoverage(): void {
     ui.uncovered.textContent = "";
     return;
   }
-  const names = uncovered.map((lane) => lane[0]!.toUpperCase() + lane.slice(1));
+  const names = uncovered.map((lane) => LANE_TITLES[lane]);
   ui.uncovered.classList.remove("hidden");
   ui.uncovered.textContent =
     `No model covers ${listOf(names)}. ${uncovered.length === 1 ? "That lane" : "Those lanes"} ` +
@@ -219,11 +240,31 @@ function persist(): void {
   }, 400);
 }
 
+/**
+ * Turn one engine event into a line.
+ *
+ * A sweep that did not run says so and why. It is never rendered as a count of
+ * zero findings, which would read as "looked and found nothing".
+ */
+function describe(event: RunEvent): string {
+  switch (event.kind) {
+    case "batch_started":
+      return `Round ${event.index}/${event.total}: ${event.units.join(", ")}`;
+    case "reused":
+      return `  reused ${event.model} × ${event.lane} from an earlier run`;
+    case "sweep_finished":
+      return event.swept
+        ? `  ${event.model} × ${event.lane}: ${event.findings} finding${event.findings === 1 ? "" : "s"}`
+        : `  ${event.model} × ${event.lane}: NOT SWEPT — ${event.reason}`;
+  }
+}
+
 async function startRun(): Promise<void> {
   running = true;
+  progressLog = [];
   renderPlanSummary();
   setStatus("Running — this takes tens of minutes", "running");
-  ui.output.textContent = "Sweeping…";
+  ui.output.textContent = "Starting…";
   try {
     await invoke("start_run", { settings });
   } catch (error) {
@@ -301,16 +342,25 @@ async function boot(): Promise<void> {
   ui.testCommand.value = settings.test_command;
   render();
 
+  // Reveal as soon as the shell is painted and themed. Deliberately before the
+  // event subscriptions below: if one of those ever fails, the window must
+  // still appear. An app that starts invisible with no way to recover is the
+  // exact failure the UX lane exists to catch.
+  void invoke("frontend_ready");
+
+  await listen<RunEvent>("run-progress", (event) => {
+    progressLog.push(describe(event.payload));
+    ui.output.textContent = progressLog.join(NEWLINE);
+    // Keep the newest line in view without stealing focus.
+    ui.output.scrollTop = ui.output.scrollHeight;
+  });
+
   await listen<{ ok: boolean; text: string }>("run-finished", (event) => {
     running = false;
     ui.output.textContent = event.payload.text;
     setStatus(event.payload.ok ? "Finished" : "Run failed", event.payload.ok ? "" : "error");
     renderPlanSummary();
   });
-
-  // Reveal only now: the window starts hidden with a matching background so
-  // there is no unstyled flash before the theme is applied.
-  void invoke("frontend_ready");
 
   setStatus("Checking providers…", "running");
   try {
@@ -321,4 +371,9 @@ async function boot(): Promise<void> {
   }
 }
 
-void boot();
+// A failure anywhere in boot must not leave an invisible window behind. Rust
+// also reveals the window on a timer as a second line of defence.
+void boot().catch((error: unknown) => {
+  void invoke("frontend_ready");
+  setStatus(`Startup problem: ${String(error)}`, "error");
+});

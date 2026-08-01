@@ -1,0 +1,9 @@
+# Windows gives the main thread a 1 MB stack by default. That is not enough for
+# a Tauri app built with LTO: the generated context initialiser embeds the whole
+# frontend bundle, and with cross-crate inlining it becomes one very deep frame.
+#
+# This is not theoretical - the release build overflowed the stack on startup
+# and exited before showing a window, while the un-optimised debug build was
+# fine. 8 MB matches the default thread stack Rust uses elsewhere.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/STACK:8388608"]

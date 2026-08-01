@@ -20,6 +20,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             tray::install(app.handle())?;
+
+            // Safety net. The frontend reveals the window once it has painted,
+            // which avoids an unstyled flash — but if it ever fails to boot,
+            // that leaves a running process with no window and no way back.
+            // Showing it anyway after a moment is far better than an app the
+            // user can only end from the task manager.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                reveal(&handle);
+            });
             Ok(())
         })
         .on_window_event(|window, event| {

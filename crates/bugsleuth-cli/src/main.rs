@@ -27,6 +27,14 @@ async fn run_all(args: RunArgs) -> Result<()> {
     let repo = real_path(&args.repo)?;
     let plan = plan::load(&args.config)?;
 
+    // Print progress as it happens rather than after the fact.
+    let (progress, mut events) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+        while let Some(event) = events.recv().await {
+            eprintln!("{}", orchestrate::render::describe(&event));
+        }
+    });
+
     let report = orchestrate::run(
         &plan,
         orchestrate::RunOptions {
@@ -37,6 +45,7 @@ async fn run_all(args: RunArgs) -> Result<()> {
             api_key: api_key(args.use_api_key)?.as_deref(),
             out_dir: args.out_dir.as_deref(),
             resume: args.resume,
+            progress: Some(progress),
         },
     )
     .await?;

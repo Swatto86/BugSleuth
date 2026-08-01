@@ -137,6 +137,9 @@ mod tests {
         let parsed: Settings = serde_json::from_str(sparse).unwrap_or_default();
         assert_eq!(parsed.repo, "C:/x");
         assert_eq!(parsed.theme, "dark");
-        assert!(!parsed.models.is_empty(), "missing models fall back to default");
+        assert!(
+            !parsed.models.is_empty(),
+            "missing models fall back to default"
+        );
     }
 }

@@ -82,7 +82,11 @@ pub fn plan_run(settings: Settings) -> CommandResult<PlanPreview> {
             .iter()
             .map(|unit| format!("{} × {}", unit.model, unit.lane.title()))
             .collect(),
-        uncovered: plan.uncovered.iter().map(|l| l.title().to_string()).collect(),
+        uncovered: plan
+            .uncovered
+            .iter()
+            .map(|l| l.title().to_string())
+            .collect(),
         batches: plan.batches().len(),
     })
 }
@@ -94,9 +98,19 @@ pub fn plan_run(settings: Settings) -> CommandResult<PlanPreview> {
 #[tauri::command]
 pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResult<()> {
     let repo = checked_repo(&settings.repo)?;
-    let config = to_config(&settings);
-    let plan = plan::plan(&config).map_err(|e| e.to_string())?;
+    let plan = plan::plan(&to_config(&settings)).map_err(|e| e.to_string())?;
     let out_dir = run_output_dir(&repo);
+
+    // Forward engine progress to the window as it happens. A run is tens of
+    // minutes; a front end that only learns the outcome at the end shows a
+    // spinner for half an hour.
+    let (progress, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let forwarder = app.clone();
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = events.recv().await {
+            let _ = forwarder.emit("run-progress", event);
+        }
+    });
 
     tauri::async_runtime::spawn(async move {
         let report = orchestrate::run(
@@ -109,6 +123,7 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
                 api_key: None,
                 out_dir: Some(&out_dir),
                 resume: false,
+                progress: Some(progress),
             },
         )
         .await;
@@ -132,10 +147,7 @@ pub async fn pick_directory(app: tauri::AppHandle) -> Option<String> {
     app.dialog().file().pick_folder(move |picked| {
         let _ = tx.send(picked);
     });
-    rx.recv()
-        .ok()
-        .flatten()
-        .map(|folder| folder.to_string())
+    rx.recv().ok().flatten().map(|folder| folder.to_string())
 }
 
 /// Turn stored settings into the engine's configuration.

@@ -8,6 +8,20 @@
 export const LANES = ["correctness", "security", "contract", "ux"] as const;
 export type Lane = (typeof LANES)[number];
 
+/**
+ * How each lane is written for a person.
+ *
+ * A table rather than capitalising the first letter, because that turns "ux"
+ * into "Ux". These must match `Lane::title()` in the engine — the same lane
+ * named two ways in one product is a small thing that reads as carelessness.
+ */
+export const LANE_TITLES: Record<Lane, string> = {
+  correctness: "Correctness",
+  security: "Security",
+  contract: "Contract",
+  ux: "UX",
+};
+
 export interface ModelSetting {
   id: string;
   lanes: string[];
