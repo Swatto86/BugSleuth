@@ -182,14 +182,36 @@ function setStatus(text: string, kind: "" | "running" | "error" = ""): void {
 // ── Commands ────────────────────────────────────────────────────────────────
 
 let saveTimer: number | undefined;
+/** Whether the last save attempt failed, so recovery can be reported too. */
+let saveFailed = false;
 
-/** Persist settings, coalesced so typing does not write on every keystroke. */
+/**
+ * Persist settings, coalesced so typing does not write on every keystroke.
+ *
+ * A failure here used to be swallowed on the grounds that losing a preference
+ * is not worth interrupting anyone over. That reasoning was wrong in a way that
+ * took hours to unpick: saving failed for a whole session, the app looked
+ * perfectly normal, and every configuration made in it was lost on restart. The
+ * cost of a wrong preference is small; the cost of not knowing your settings
+ * are not being kept is not.
+ *
+ * So it is reported in the status bar — not a dialog, because it must not
+ * interrupt a run in progress — and only while nothing else is being said.
+ */
 function persist(): void {
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => {
-    void invoke("save_settings", { settings }).catch(() => {
-      // Losing a preference is not worth interrupting anyone over.
-    });
+    void invoke("save_settings", { settings })
+      .then(() => {
+        if (saveFailed) {
+          saveFailed = false;
+          if (!running) setStatus("Ready");
+        }
+      })
+      .catch((error: unknown) => {
+        saveFailed = true;
+        if (!running) setStatus(`Settings are not being saved: ${String(error)}`, "error");
+      });
   }, 400);
 }
 
@@ -279,10 +301,15 @@ async function loadCatalogue(): Promise<void> {
 async function boot(): Promise<void> {
   bind();
 
+  let loadFailed = "";
   try {
     settings = { ...settings, ...(await invoke<Settings>("load_settings")) };
-  } catch {
-    // Defaults are fine; a first launch has no settings file.
+  } catch (error) {
+    // A first launch genuinely has no settings, and Rust answers with defaults
+    // rather than an error for that case — so reaching here means the call
+    // itself failed, and starting from defaults would quietly discard whatever
+    // was saved. Say so instead.
+    loadFailed = String(error);
   }
 
   applyTheme(settings.theme);
@@ -328,7 +355,10 @@ async function boot(): Promise<void> {
   setStatus("Checking providers…", "running");
   try {
     ui.vendors.replaceChildren(...vendorPills(await invoke<VendorStatus[]>("preflight")));
-    setStatus("Ready");
+    setStatus(
+      loadFailed ? `Saved settings could not be read: ${loadFailed}` : "Ready",
+      loadFailed ? "error" : "",
+    );
   } catch (error) {
     setStatus(String(error), "error");
   }
