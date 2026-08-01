@@ -579,3 +579,35 @@ the start of this work and then not followed, because `cargo build --release`
 check for an effect the frontend causes — this app writes its settings file once
 the UI mounts, so the file appearing is proof the frontend ran. That check takes
 ten seconds and is worth more than every static inspection above combined.
+
+### 3.10 WebDriver drives the app but never sees its page
+
+**Status: unresolved, and recorded rather than papered over.**
+
+`tauri-driver` 2.0.6 with a version-matched Edge driver does create a session
+and does launch the app — the process appears about four seconds in. But the
+webview WebDriver attaches to is `about:blank` with an empty document, and the
+app's frontend never runs while automation is attached.
+
+What was ruled out, each by experiment rather than reasoning:
+
+- **Not a broken app.** Launched normally with no dev server, the frontend runs:
+  it writes its settings file, which only the mounted UI does.
+- **Not the hidden window.** Rebuilt with `visible: true` and the result was
+  identical, so the reveal path is not implicated.
+- **Not a stale or dev binary.** The same binary that fails under automation
+  passes the standalone behavioural check.
+- **Not a version mismatch.** The Edge driver is matched exactly to the
+  installed WebView2 runtime, read from the registry.
+- **Not the driver failing to find the app.** Feeding it a deliberately wrong
+  path produces a clear "no msedge binary at ..." error, so the path handling
+  works.
+
+The remaining suspects are in the automation layer: the browser arguments
+msedgedriver passes to a WebView2 *host* application, which are meant for Edge
+itself and can break environment creation.
+
+**What this means practically:** the WebDriver harness is committed and correct
+in shape, but it does not currently observe anything, so it must not be treated
+as passing evidence. The verification that does hold is behavioural — launching
+the real binary and checking effects only a mounted UI can produce.
