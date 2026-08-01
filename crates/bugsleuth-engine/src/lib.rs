@@ -19,6 +19,11 @@ pub mod merge;
 /// the front ends talk to the engine, and the engine talks to the providers.
 pub use bugsleuth_provider::models;
 
+/// Re-exported for the same reason as `models`: the desktop shell reads the
+/// judge's output types through the engine rather than depending on the judge
+/// crate itself.
+pub use bugsleuth_judge::{Cluster, Ranked};
+
 pub mod orchestrate;
 pub mod plan;
 pub mod prove;

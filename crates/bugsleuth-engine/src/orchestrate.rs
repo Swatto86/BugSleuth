@@ -23,6 +23,7 @@ use crate::report::Status;
 use crate::sweep;
 
 mod persist;
+pub mod progress;
 pub mod proving;
 pub mod render;
 use persist::{file_name_for, reusable, write_report};
@@ -89,9 +90,20 @@ pub struct RunReport {
     pub ranked: Vec<Ranked>,
     /// What the severity triage pass did, including when it did not run.
     pub triage: crate::triage::Outcome,
-    pub swept: Vec<(String, Lane, usize)>,
+    pub swept: Vec<Swept>,
     /// Every hole, with why. Both kinds: no model assigned, and sweep failed.
     pub gaps: Vec<Gap>,
+}
+
+/// One sweep that ran, and what came of it.
+pub struct Swept {
+    pub model: String,
+    pub lane: Lane,
+    pub findings: usize,
+    /// Findings the model reported whose quoted code could not be located.
+    /// Surfaced because the rate is the headline measure of whether a model's
+    /// claims about this repository can be trusted at all.
+    pub rejected: usize,
 }
 
 pub struct Gap {
@@ -181,11 +193,12 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
 
             match &report.lane_report.status {
                 Status::Swept { .. } => {
-                    swept.push((
-                        report.lane_report.model.clone(),
-                        report.lane,
-                        report.lane_report.findings.len(),
-                    ));
+                    swept.push(Swept {
+                        model: report.lane_report.model.clone(),
+                        lane: report.lane,
+                        findings: report.lane_report.findings.len(),
+                        rejected: report.lane_report.rejected.len(),
+                    });
                     findings.extend(report.lane_report.findings);
                 }
                 Status::NotSwept { reason } => gaps.push(Gap {
@@ -218,7 +231,7 @@ fn take_reusable(
     plan: &Plan,
     options: &RunOptions<'_>,
     findings: &mut Vec<Finding>,
-    swept: &mut Vec<(String, Lane, usize)>,
+    swept: &mut Vec<Swept>,
 ) -> Vec<Unit> {
     let mut outstanding = Vec::new();
     for unit in &plan.units {
@@ -231,7 +244,12 @@ fn take_reusable(
                         lane: unit.lane.title().to_string(),
                     },
                 );
-                swept.push((previous.model.clone(), unit.lane, previous.findings.len()));
+                swept.push(Swept {
+                    model: previous.model.clone(),
+                    lane: unit.lane,
+                    findings: previous.findings.len(),
+                    rejected: previous.rejected.len(),
+                });
                 findings.extend(previous.findings);
             }
             None => outstanding.push(unit.clone()),

@@ -390,6 +390,56 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## BugSleuth reviewed itself, and found three real defects
+
+The security and contract lanes had never been measured — correctness and UX
+had. So BugSleuth was pointed at its own code: a frozen worktree of HEAD with
+every project document removed first, so findings had to be discovered rather
+than read off `PROGRESS.md`. Two vendors, two lanes.
+
+Three findings, three real, one graded critical. All three are now fixed, each
+with a test that fails without the fix:
+
+1. **Anchor verification followed symlinks.** The path check ran on the path's
+   *components* — no `..`, no drive letter — which is a lexical test that says
+   nothing about where a path resolves. A reviewed repository containing a
+   symlink at an innocent name like `src/util.rs` could point it at a private
+   key or at the user's own settings, and BugSleuth would read that file, quote
+   it into the report, and hand it to whatever agent got the fix prompt. The
+   reviewed repository is untrusted input by design, so this was the real thing.
+   Containment is now checked against the resolved path.
+
+   Proven, not assumed: a test creates a directory link out of the repository
+   and asserts the quote is refused. With the guard removed it fails with "a
+   link out of the repository was followed and its contents quoted". (Windows
+   needs elevation for *file* symlinks, so that variant skips and says so; the
+   directory-junction variant runs on an ordinary machine.)
+
+2. **The Codex working directory was predictable and reusable.**
+   `bugsleuth-codex-<pid>` in the shared temp area, created with
+   `create_dir_all`, which succeeds on a directory that already exists. Anything
+   already sitting there was adopted: its `answer.json` would have been read
+   back as a review — a forged finding list — and the directory deleted
+   afterwards. Now created exclusively, so the directory is ours because
+   creating it is what proved it did not exist.
+
+3. **Report filenames were lossy.** Every non-alphanumeric character became a
+   dash, so `codex:a/b` and `codex:a-b` shared one file: one sweep overwrote the
+   other and a resumed run handed a model another model's findings while the
+   report stated the wrong provenance. The encoding is now injective. Reports
+   written under the old scheme are still reused — they cost tens of minutes
+   each — but only after the new name is tried, and only when the report inside
+   says it is that sweep.
+
+**What this says about the tool.** Two lanes that had never been measured found
+three real defects in a codebase already reviewed by hand many times this week,
+and one of them was a genuine security hole in the part of BugSleuth whose whole
+job is to be untrusting. Small sample, but it is the first evidence that the
+security and contract mandates do anything at all.
+
+One sweep of four failed (`error_max_turns` on Claude's contract lane) and the
+report says so rather than reading as three clean lanes.
+
 ## Precision: 78%, measured
 
 The claim the whole design rests on is that a confident wrong finding is worse

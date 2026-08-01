@@ -84,6 +84,7 @@ mod tests {
             findings,
             agreement,
             triaged: None,
+            triage_reason: None,
         }
     }
 

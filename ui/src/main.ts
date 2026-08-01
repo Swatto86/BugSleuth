@@ -6,7 +6,6 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 
 import {
   LANE_TITLES,
@@ -21,7 +20,8 @@ import {
   uncoveredLanes,
   unitCount,
 } from "./model";
-import { type RunEvent, describe, listOf } from "./format";
+import { listOf } from "./format";
+import { type RunDeps, currentFixPrompt, isRunning, listenForRunEvents, startRun } from "./run";
 import {
   type Catalogue,
   type VendorModels,
@@ -52,6 +52,7 @@ const ui = {
   reuseCompleted: el<HTMLInputElement>("reuse-completed"),
   triageSeverities: el<HTMLInputElement>("triage-severities"),
   output: el<HTMLPreElement>("output"),
+  findings: el<HTMLDivElement>("findings"),
   status: el<HTMLSpanElement>("status"),
   spinner: el<HTMLSpanElement>("spinner"),
   planSummary: el<HTMLSpanElement>("plan-summary"),
@@ -85,15 +86,6 @@ let settings: Settings = {
  * window wait on three CLIs.
  */
 let catalogue: Catalogue = {};
-
-let running = false;
-const NEWLINE = String.fromCharCode(10);
-
-/** Lines accumulated during a run, newest last. */
-let progressLog: string[] = [];
-
-/** The last run's fix prompt, held so the Copy button has something to give. */
-let fixPrompt = "";
 
 // ── Theme ───────────────────────────────────────────────────────────────────
 
@@ -145,7 +137,7 @@ function renderPlanSummary(): void {
   const rounds = batchCount(settings.models);
   ui.planSummary.textContent =
     units === 0 ? "" : `${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`;
-  ui.run.disabled = running || !canRun(settings);
+  ui.run.disabled = isRunning() || !canRun(settings);
 }
 
 function render(): void {
@@ -225,32 +217,26 @@ function persist(): void {
       .then(() => {
         if (saveFailed) {
           saveFailed = false;
-          if (!running) setStatus("Ready");
+          if (!isRunning()) setStatus("Ready");
         }
       })
       .catch((error: unknown) => {
         saveFailed = true;
-        if (!running) setStatus(`Settings are not being saved: ${String(error)}`, "error");
+        if (!isRunning()) setStatus(`Settings are not being saved: ${String(error)}`, "error");
       });
   }, 400);
 }
 
 
-async function startRun(): Promise<void> {
-  running = true;
-  progressLog = [];
-  renderPlanSummary();
-  setStatus("Running — this takes tens of minutes", "running");
-  ui.output.textContent = "Starting…";
-  try {
-    await invoke("start_run", { settings });
-  } catch (error) {
-    running = false;
-    setStatus(String(error), "error");
-    ui.output.textContent = String(error);
-    renderPlanSummary();
-  }
-}
+const runDeps = (): RunDeps => ({
+  output: ui.output,
+  findings: ui.findings,
+  copyPrompt: ui.copyPrompt,
+  promptPath: ui.promptPath,
+  setStatus,
+  renderPlanSummary,
+  settings: () => settings,
+});
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
@@ -312,14 +298,14 @@ function bind(): void {
     });
   }
 
-  ui.run.addEventListener("click", () => void startRun());
+  ui.run.addEventListener("click", () => void startRun(runDeps()));
 
   // Closing the window only hides it. This is the reachable, keyboard-navigable
   // way to actually exit, so the tray is not the single point of failure.
   ui.quit.addEventListener("click", () => void invoke("quit"));
 
   ui.copyPrompt.addEventListener("click", () => {
-    void navigator.clipboard.writeText(fixPrompt).then(
+    void navigator.clipboard.writeText(currentFixPrompt()).then(
       () => {
         // Confirm by changing the button, not with a dialog: you are about to
         // paste somewhere else, and a dialog would be one more thing to dismiss.
@@ -381,39 +367,7 @@ async function boot(): Promise<void> {
   // exact failure the UX lane exists to catch.
   void invoke("frontend_ready");
 
-  await listen<RunEvent>("run-progress", (event) => {
-    progressLog.push(describe(event.payload));
-    // Once the run has finished, the pane holds the report — the thing the whole
-    // run was for. A late progress event must not paint over it.
-    //
-    // This is not hypothetical: the last sweep's progress event and the
-    // finished event are emitted back to back, and on the first real run
-    // against a large repository the progress event arrived second and replaced
-    // twenty ranked defects with a log of what had just happened.
-    if (!running) return;
-    ui.output.textContent = progressLog.join(NEWLINE);
-    // Keep the newest line in view without stealing focus.
-    ui.output.scrollTop = ui.output.scrollHeight;
-  });
-
-  await listen<{ ok: boolean; text: string; prompt?: string; promptPath?: string | null }>(
-    "run-finished",
-    (event) => {
-      running = false;
-      ui.output.textContent = event.payload.text;
-      setStatus(event.payload.ok ? "Finished" : "Run failed", event.payload.ok ? "" : "error");
-
-      // The prompt is the point of the run, so it is offered the moment there
-      // is one — and its path is shown either way, because a window can be
-      // closed and tens of minutes of sweeping should not go with it.
-      fixPrompt = event.payload.prompt ?? "";
-      ui.copyPrompt.classList.toggle("hidden", fixPrompt === "");
-      const path = event.payload.promptPath;
-      ui.promptPath.classList.toggle("hidden", !path);
-      ui.promptPath.textContent = path ? `Also saved to ${path}` : "";
-      renderPlanSummary();
-    },
-  );
+  await listenForRunEvents(runDeps());
 
   // After the reveal on purpose: filling the menus asks Kilo for its catalogue,
   // and the window must not wait on a CLI to appear.

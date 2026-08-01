@@ -133,7 +133,7 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
     for (index, cluster) in clusters.iter_mut().enumerate() {
         // A verdict for an id that was never offered is dropped by construction:
         // only offered ids are looked up.
-        let Some((severity, _)) = by_id.get(&id_of(index)) else {
+        let Some((severity, reason)) = by_id.get(&id_of(index)) else {
             continue;
         };
         graded += 1;
@@ -141,6 +141,7 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
             changed += 1;
         }
         cluster.triaged = Some(*severity);
+        cluster.triage_reason = Some(reason.clone());
     }
 
     let missing = clusters.len() - graded;
@@ -244,6 +245,7 @@ mod tests {
             )],
             agreement: 1,
             triaged: None,
+            triage_reason: None,
         }
     }
 

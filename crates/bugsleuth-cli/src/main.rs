@@ -31,7 +31,7 @@ async fn run_all(args: RunArgs) -> Result<()> {
     let (progress, mut events) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
         while let Some(event) = events.recv().await {
-            eprintln!("{}", orchestrate::render::describe(&event));
+            eprintln!("{}", orchestrate::progress::describe(&event));
         }
     });
 

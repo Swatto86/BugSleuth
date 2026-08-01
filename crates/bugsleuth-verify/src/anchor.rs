@@ -16,6 +16,8 @@ pub enum Rejection {
     EmptySnippet,
     #[error("the quoted code does not appear anywhere in `{0}`")]
     SnippetNotInFile(String),
+    #[error("`{0}` resolves to a location outside the repository")]
+    ResolvesOutsideRepo(String),
 }
 
 /// Confirm that `raw`'s snippet appears in the file it names, and report where.
@@ -35,6 +37,15 @@ pub fn verify_anchor(repo: &Path, raw: &RawFinding) -> Result<VerifiedAnchor, Re
     let absolute = repo.join(&relative);
     if !absolute.is_file() {
         return Err(Rejection::NoSuchFile(raw.file.clone()));
+    }
+    // The component check above is lexical: it runs before the path touches the
+    // disk, so it says nothing about where the path *resolves*. A reviewed
+    // repository is untrusted input, and one containing a symlink at an
+    // innocent-looking path — `src/util.rs` pointing at a private key or at the
+    // user's own settings — would otherwise have its target read and quoted
+    // back into a report that gets copied into a prompt.
+    if !resolves_inside(repo, &absolute) {
+        return Err(Rejection::ResolvesOutsideRepo(raw.file.clone()));
     }
 
     let contents = std::fs::read_to_string(&absolute)
@@ -106,6 +117,24 @@ fn matches_at(file_lines: &[&str], needle: &[&str], start: usize) -> bool {
         }
     }
     true
+}
+
+/// Whether `candidate` is genuinely inside `repo` once symlinks are followed.
+///
+/// Both sides are canonicalised, because comparing a resolved path against an
+/// unresolved root is its own false negative: on Windows a temp directory is
+/// commonly reached through a symlinked user path, and on macOS `/tmp` is a
+/// symlink to `/private/tmp`, so the repository root itself resolves elsewhere.
+///
+/// A root that cannot be canonicalised means the repository is gone, and a
+/// candidate that cannot be canonicalised means the file vanished between the
+/// existence check and here. Both are refusals: this function only ever answers
+/// "yes, provably inside".
+fn resolves_inside(repo: &Path, candidate: &Path) -> bool {
+    match (repo.canonicalize(), candidate.canonicalize()) {
+        (Ok(root), Ok(target)) => target.starts_with(root),
+        _ => false,
+    }
 }
 
 /// Reject anything that would read outside the repository.
@@ -233,5 +262,166 @@ mod tests {
         let far = verify_anchor(&repo, &raw("src/lib.rs", 8, "let x = 1;"));
         // Both line 2 and line 8 hold `let x = 1;`; the claim points at the second.
         assert_eq!(far.map(|a| a.line).unwrap_or(0), 8);
+    }
+
+    /// A symlink inside a repository, or `None` when the OS refuses to make one.
+    ///
+    /// Windows needs Developer Mode or elevation for this, so the test that
+    /// uses it reports what it could not exercise rather than passing quietly.
+    #[cfg(windows)]
+    fn link(target: &std::path::Path, at: &std::path::Path) -> Option<()> {
+        std::os::windows::fs::symlink_file(target, at).ok()
+    }
+    #[cfg(unix)]
+    fn link(target: &std::path::Path, at: &std::path::Path) -> Option<()> {
+        std::os::unix::fs::symlink(target, at).ok()
+    }
+
+    #[test]
+    fn a_symlink_out_of_the_repository_is_refused_even_though_its_path_looks_innocent() {
+        // The reviewed repository is untrusted input. A committed symlink at
+        // `src/util.rs` pointing at a private key or the user's own settings
+        // passes every lexical check — no `..`, no absolute prefix — and would
+        // otherwise have its contents read and quoted into a report that gets
+        // pasted into a prompt.
+        let base = std::env::temp_dir()
+            .join("bugsleuth-anchor-symlink")
+            .join(format!("{}", std::process::id()));
+        let repo = base.join("repo");
+        let outside = base.join("outside");
+        let _ = std::fs::create_dir_all(&repo);
+        let _ = std::fs::create_dir_all(&outside);
+        let secret = outside.join("secret.txt");
+        let _ = std::fs::write(
+            &secret,
+            "SECRET LINE
+",
+        );
+
+        let planted = repo.join("util.rs");
+        let Some(()) = link(&secret, &planted) else {
+            eprintln!("skipped: this OS would not create a symlink for the test");
+            let _ = std::fs::remove_dir_all(&base);
+            return;
+        };
+
+        let raw = RawFinding {
+            title: "t".into(),
+            severity: bugsleuth_domain::Severity::Low,
+            file: "util.rs".into(),
+            line: 1,
+            snippet: "SECRET LINE".into(),
+            explanation: "e".into(),
+            failure_scenario: "f".into(),
+            fix: Default::default(),
+        };
+        assert!(
+            matches!(
+                verify_anchor(&repo, &raw),
+                Err(Rejection::ResolvesOutsideRepo(_))
+            ),
+            "a symlink out of the repository was followed and quoted"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn an_ordinary_file_inside_the_repository_still_verifies() {
+        // The containment check must not reject the normal case, which it would
+        // if it compared a resolved candidate against an unresolved root - on
+        // Windows the temp directory is commonly reached through a symlinked
+        // user path.
+        let repo = std::env::temp_dir()
+            .join("bugsleuth-anchor-inside")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::create_dir_all(repo.join("src"));
+        let _ = std::fs::write(
+            repo.join("src/lib.rs"),
+            "fn main() {}
+",
+        );
+        let raw = RawFinding {
+            title: "t".into(),
+            severity: bugsleuth_domain::Severity::Low,
+            file: "src/lib.rs".into(),
+            line: 1,
+            snippet: "fn main() {}".into(),
+            explanation: "e".into(),
+            failure_scenario: "f".into(),
+            fix: Default::default(),
+        };
+        assert!(
+            verify_anchor(&repo, &raw).is_ok(),
+            "a real file was refused"
+        );
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    /// A directory link inside a repository, or `None` when the OS refuses.
+    ///
+    /// Windows is the reason this exists separately from `link`: a *file*
+    /// symlink needs Developer Mode or elevation, but a directory junction
+    /// needs neither, so the escape can still be exercised on an ordinary
+    /// developer machine rather than skipped there.
+    #[cfg(windows)]
+    fn link_dir(target: &std::path::Path, at: &std::path::Path) -> Option<()> {
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(at)
+            .arg(target)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .ok()?;
+        status.success().then_some(())
+    }
+    #[cfg(unix)]
+    fn link_dir(target: &std::path::Path, at: &std::path::Path) -> Option<()> {
+        std::os::unix::fs::symlink(target, at).ok()
+    }
+
+    #[test]
+    fn a_directory_link_out_of_the_repository_is_refused() {
+        // The same escape as the symlink case, through a link the OS will make
+        // without elevation: `src/` itself is the link, so every path under it
+        // looks entirely ordinary while resolving somewhere else.
+        let base = std::env::temp_dir()
+            .join("bugsleuth-anchor-junction")
+            .join(format!("{}", std::process::id()));
+        let repo = base.join("repo");
+        let outside = base.join("outside");
+        let _ = std::fs::remove_dir_all(&base);
+        let _ = std::fs::create_dir_all(&repo);
+        let _ = std::fs::create_dir_all(&outside);
+        let _ = std::fs::write(
+            outside.join("secret.txt"),
+            "SECRET LINE
+",
+        );
+
+        let Some(()) = link_dir(&outside, &repo.join("src")) else {
+            eprintln!("skipped: this OS would not create a directory link");
+            let _ = std::fs::remove_dir_all(&base);
+            return;
+        };
+
+        let raw = RawFinding {
+            title: "t".into(),
+            severity: bugsleuth_domain::Severity::Low,
+            file: "src/secret.txt".into(),
+            line: 1,
+            snippet: "SECRET LINE".into(),
+            explanation: "e".into(),
+            failure_scenario: "f".into(),
+            fix: Default::default(),
+        };
+        assert!(
+            matches!(
+                verify_anchor(&repo, &raw),
+                Err(Rejection::ResolvesOutsideRepo(_))
+            ),
+            "a link out of the repository was followed and its contents quoted"
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

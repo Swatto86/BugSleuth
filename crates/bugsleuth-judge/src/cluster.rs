@@ -30,6 +30,11 @@ pub struct Cluster {
     /// check the code is owed the fact that it was changed, and to what from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub triaged: Option<Severity>,
+    /// The one-sentence consequence the triage pass gave for its grade. Shown
+    /// with a re-grade so a changed severity is a stated judgement, not a
+    /// silent contradiction of what the finding's own model said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub triage_reason: Option<String>,
 }
 
 impl Cluster {
@@ -102,6 +107,7 @@ pub fn cluster(findings: Vec<Finding>) -> Vec<Cluster> {
                 findings: vec![finding],
                 agreement: 0,
                 triaged: None,
+                triage_reason: None,
             }),
         }
     }
@@ -297,6 +303,7 @@ mod tests {
             findings: vec![silent, explained],
             agreement: 2,
             triaged: None,
+            triage_reason: None,
         };
         assert_eq!(
             cluster.representative().fix.approach,
@@ -336,6 +343,7 @@ mod triage_tests {
             )],
             agreement: 1,
             triaged: None,
+            triage_reason: None,
         }
     }
 

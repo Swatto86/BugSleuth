@@ -416,3 +416,108 @@ label.checkline input[type="checkbox"] {
   flex: none;
   cursor: pointer;
 }
+
+/* ── Findings cards ────────────────────────────────────────────────────── */
+
+.findings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.finding {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+}
+
+.finding summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.finding summary::-webkit-details-marker {
+  display: none;
+}
+
+.finding[open] summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.finding-title {
+  font-weight: 600;
+  /* A path or identifier with no spaces in it must wrap rather than push the
+     card wider than the window. Titles are sentences, but the file line under
+     them is a slash-separated path with nowhere natural to break. */
+  overflow-wrap: anywhere;
+}
+
+/* Severity is colour plus text, never colour alone: the label always says the
+   word, so the badge survives monochrome and colour-blindness. */
+.sev {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: transparent;
+}
+
+.sev-critical { color: var(--critical); }
+.sev-high     { color: var(--high); }
+.sev-medium   { color: var(--medium); }
+.sev-low      { color: var(--low); }
+
+.finding-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.finding-where {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.85rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.finding-meta,
+.finding-regrade {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.finding-regrade {
+  font-style: italic;
+}
+
+.finding-section h4 {
+  margin: 0 0 2px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+.finding-section p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.finding-snippet {
+  margin: 0;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-size: 0.8rem;
+  overflow-x: auto;
+}

@@ -21,12 +21,38 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
     if !options.resume {
         return None;
     }
-    let path = options.out_dir?.join(file_name_for(unit));
+    let dir = options.out_dir?;
+    read_swept(&dir.join(file_name_for(unit)))
+        // Reports written before the encoding changed are still worth tens of
+        // minutes each, so the old name is tried too — but only after the
+        // current one, and only if the report says it is the right sweep. The
+        // old encoding was lossy, which is exactly why it is not trusted to
+        // identify anything on its own.
+        .or_else(|| {
+            let legacy = read_swept(&dir.join(legacy_file_name_for(unit)))?;
+            let same_sweep =
+                legacy.lane == unit.lane.title() && legacy.model.ends_with(model_of(&unit.model));
+            same_sweep.then_some(legacy)
+        })
+}
+
+/// A report at `path`, if it parses and records a sweep that actually ran.
+///
+/// A file that cannot be read or parsed is treated as absent rather than as an
+/// error: the likeliest cause is a run killed mid-write, and the right response
+/// to a truncated report is to sweep again, not to refuse to start.
+fn read_swept(path: &Path) -> Option<LaneReport> {
     let text = std::fs::read_to_string(path).ok()?;
     let report: LaneReport = serde_json::from_str(&text).ok()?;
     // A failed sweep is retried. The usual reason a run died is a rate limit,
     // which is exactly the case worth attempting again.
     matches!(report.status, Status::Swept { .. }).then_some(report)
+}
+
+/// The model half of a `vendor:model` spec. A report records the resolved
+/// `vendor:model`, while a unit may hold a bare alias.
+fn model_of(spec: &str) -> &str {
+    spec.split_once(':').map_or(spec, |(_, model)| model)
 }
 
 pub(super) fn file_name_for(unit: &Unit) -> String {
@@ -51,12 +77,58 @@ pub(super) fn file_name_for(unit: &Unit) -> String {
     )
 }
 
-/// Anything that is not a letter or digit becomes a dash, so a model id can
-/// never escape the run directory or collide with a path separator.
+/// The name a report would have had under the old, lossy encoding.
+///
+/// Only ever read, never written. A sweep costs tens of minutes, so a run
+/// resumed after this changed should still find what it already paid for —
+/// but the old encoding could not tell `codex:a/b` from `codex:a-b`, which is
+/// why anything found here is checked against the report's own recorded lane
+/// and model before it is believed.
+fn legacy_file_name_for(unit: &Unit) -> String {
+    let lossy = |text: &str| -> String {
+        text.chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect()
+    };
+    if unit.effort.trim().is_empty() && unit.pass <= 1 {
+        return format!("{}-{}.json", unit.lane.slug(), lossy(&unit.model));
+    }
+    format!(
+        "{}-{}~{}~p{}.json",
+        unit.lane.slug(),
+        lossy(&unit.model),
+        lossy(unit.effort.trim()),
+        unit.pass.max(1)
+    )
+}
+
+/// A filename-safe encoding of one component, from which no two distinct
+/// inputs produce the same output.
+///
+/// Mapping every non-alphanumeric character to a dash was safe but *lossy*:
+/// `codex:a/b` and `codex:a-b` both became `codex-a-b`, so two configured
+/// models shared one report file. One sweep overwrote the other, and a resumed
+/// run handed a model the other model's findings while the merged report
+/// stated the wrong provenance.
+///
+/// Escaping keeps the property that matters — nothing here can be a path
+/// separator, a drive letter or `..` — while making the encoding injective:
+/// every dash in the output came from a literal dash in the input, and
+/// everything else is a hex escape that cannot be produced any other way.
 fn safe(text: &str) -> String {
-    text.chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect()
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c);
+        } else if c == '-' {
+            // A literal dash escapes too, or `a-b` and `a/b` would still meet.
+            out.push_str("_2d");
+        } else {
+            // Non-ASCII goes through as its code point, so this stays total.
+            out.push_str(&format!("_{:x}", c as u32));
+        }
+    }
+    out
 }
 
 pub(super) fn write_report(dir: &Path, name: &str, report: &LaneReport) -> Result<()> {
@@ -228,5 +300,76 @@ mod tests {
             ..unit()
         });
         assert_ne!(second_pass, p2_effort);
+    }
+
+    #[test]
+    fn two_model_ids_that_differ_only_in_punctuation_get_different_files() {
+        // `codex:a/b` and `codex:a-b` both used to render as `codex-a-b`: one
+        // sweep overwrote the other, and a resumed run handed a model the other
+        // model's findings while the report claimed the wrong provenance.
+        let slash = file_name_for(&Unit {
+            model: "codex:a/b".into(),
+            ..unit()
+        });
+        let dash = file_name_for(&Unit {
+            model: "codex:a-b".into(),
+            ..unit()
+        });
+        assert_ne!(slash, dash);
+    }
+
+    #[test]
+    fn an_encoded_name_can_never_reach_outside_the_run_directory() {
+        // The encoding exists to be injective, but it must not have bought that
+        // by letting a separator or a parent reference through.
+        for hostile in ["../../etc/passwd", r"C:\Windows\System32", r"a/b\c", ".."] {
+            let name = file_name_for(&Unit {
+                model: hostile.to_string(),
+                ..unit()
+            });
+            assert!(!name.contains('/'), "{name}");
+            assert!(!name.contains('\\'), "{name}");
+            assert!(!name.contains(".."), "{name}");
+            assert!(!name.contains(':'), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_report_written_under_the_old_naming_is_still_reused() {
+        // Every report on disk was written by the lossy encoding, and each cost
+        // tens of minutes. Changing the encoding must not silently throw them
+        // away and charge for the sweeps again.
+        let dir = scratch("legacy");
+        let report = lane_report(Status::Swept { turns: Some(2) });
+        assert!(write_report(&dir, &legacy_file_name_for(&unit()), &report).is_ok());
+        assert!(reusable(&unit(), &options(&dir, true)).is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_legacy_file_belonging_to_a_different_model_is_not_adopted() {
+        // The old encoding could not tell `codex:a/b` from `codex:a-b`, so a
+        // legacy file is only believed when the report inside it says it is
+        // this sweep. Otherwise resume would hand a model another's findings.
+        let dir = scratch("legacy-wrong");
+        let mut report = lane_report(Status::Swept { turns: Some(2) });
+        report.model = "codex:something-else".into();
+        assert!(write_report(&dir, &legacy_file_name_for(&unit()), &report).is_ok());
+        assert!(reusable(&unit(), &options(&dir, true)).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_current_name_wins_over_a_legacy_file_for_the_same_unit() {
+        let dir = scratch("legacy-precedence");
+        let mut current = lane_report(Status::Swept { turns: Some(1) });
+        current.commit = Some("current".into());
+        let mut legacy = lane_report(Status::Swept { turns: Some(9) });
+        legacy.commit = Some("legacy".into());
+        assert!(write_report(&dir, &file_name_for(&unit()), &current).is_ok());
+        assert!(write_report(&dir, &legacy_file_name_for(&unit()), &legacy).is_ok());
+        let found = reusable(&unit(), &options(&dir, true));
+        assert_eq!(found.and_then(|r| r.commit).as_deref(), Some("current"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

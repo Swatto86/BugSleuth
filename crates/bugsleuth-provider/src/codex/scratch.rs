@@ -24,13 +24,57 @@ pub(super) fn event_error(stdout: &str) -> Option<String> {
     })
 }
 
+/// A private directory for one Codex invocation.
+///
+/// **Created exclusively, never reused.** The old name was
+/// `bugsleuth-codex-<pid>` in the shared system temp area: entirely
+/// predictable, and `create_dir_all` succeeds on a directory that already
+/// exists. Any local process could pre-create that path — or leave a link
+/// there — and BugSleuth would then write its schema through it, read an
+/// `answer.json` it did not produce (forging an entire review), and finally
+/// delete whatever the link pointed at.
+///
+/// `create_dir` without `_all` fails when the path exists, which is what makes
+/// this a claim rather than a hope: the directory is ours because creating it
+/// is what proved it did not exist. A counter breaks ties within a process and
+/// between processes that share a pid across a reboot.
 pub(super) fn scratch_dir() -> Result<PathBuf, ProviderError> {
-    let dir = std::env::temp_dir().join(format!("bugsleuth-codex-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).map_err(|e| ProviderError::Scratch {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+
+    let base = std::env::temp_dir();
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+
+    let mut last = String::new();
+    for attempt in 0..64 {
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = base.join(format!("bugsleuth-codex-{pid}-{nanos:08x}-{n}-{attempt}"));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            // Taken, by another invocation or by someone who guessed. Both are
+            // answered the same way: try a name nobody has.
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                last = e.to_string();
+            }
+            Err(e) => {
+                return Err(ProviderError::Scratch {
+                    vendor: VENDOR,
+                    detail: e.to_string(),
+                });
+            }
+        }
+    }
+    Err(ProviderError::Scratch {
         vendor: VENDOR,
-        detail: e.to_string(),
-    })?;
-    Ok(dir)
+        detail: format!(
+            "could not create a private working directory in {}: {last}",
+            base.display()
+        ),
+    })
 }
 
 pub(super) fn write_file(path: &Path, contents: &str) -> Result<(), ProviderError> {
@@ -78,5 +122,35 @@ mod tests {
         let dir = scratch_dir().unwrap_or_default();
         assert!(dir.starts_with(std::env::temp_dir()));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn each_scratch_directory_is_new_rather_than_reused() {
+        // The old name was bugsleuth-codex-<pid> and create_dir_all accepts a
+        // directory that already exists, so anything already sitting at that
+        // path was silently adopted: its answer.json would have been read back
+        // as a review, and it would have been deleted afterwards.
+        let a = scratch_dir().unwrap_or_else(|e| panic!("first: {e}"));
+        let b = scratch_dir().unwrap_or_else(|e| panic!("second: {e}"));
+        assert_ne!(a, b, "two invocations shared a working directory");
+        assert!(a.is_dir() && b.is_dir());
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    #[test]
+    fn a_directory_already_sitting_at_the_chosen_name_is_never_adopted() {
+        // Proven by taking the name first: whatever scratch_dir returns, it
+        // cannot be the one that was already there.
+        let planted = scratch_dir().unwrap_or_else(|e| panic!("plant: {e}"));
+        let _ = std::fs::write(planted.join("answer.json"), "{\"findings\":[]}");
+        let fresh = scratch_dir().unwrap_or_else(|e| panic!("fresh: {e}"));
+        assert_ne!(fresh, planted);
+        assert!(
+            !fresh.join("answer.json").exists(),
+            "the new working directory inherited someone else's answer"
+        );
+        let _ = std::fs::remove_dir_all(&planted);
+        let _ = std::fs::remove_dir_all(&fresh);
     }
 }

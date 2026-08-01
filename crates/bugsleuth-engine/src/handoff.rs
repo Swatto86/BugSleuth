@@ -328,6 +328,7 @@ mod tests {
                 findings: vec![finding(Default::default())],
                 agreement: 1,
                 triaged: None,
+                triage_reason: None,
             },
         }
     }
