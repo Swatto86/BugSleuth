@@ -9,7 +9,7 @@ model to review another model's output has correlated blind spots — especially
 within the same family — so BugSleuth asks several different vendors, each with a
 different mandate, and then makes them prove it.
 
-**Status: early. Working harness, no user interface.** See
+**Status: early, but there is now a desktop app as well as a command line.** See
 [NIGHT-REPORT.md](NIGHT-REPORT.md) for what has actually been measured, and
 [PROGRESS.md](PROGRESS.md) for where to pick up.
 
@@ -25,7 +25,30 @@ defect. BugSleuth runs that test itself and only believes what it observes.
 narrow mandate with its own brief — because one generic "find bugs" prompt
 collapses toward the same handful of findings whichever model you ask.
 
-## Using it
+## The desktop app
+
+```bash
+cargo tauri dev
+```
+
+```bash
+cargo tauri build
+```
+
+It lives in the tray, because a sweep takes tens of minutes: start one, close
+the window, and get told when it lands. Closing hides to the tray; the tray's
+**Quit** is the only real exit.
+
+The app's job that the command line cannot do is catching an uncovered lane
+*before* you pay for the run. A lane with no model assigned still produces a
+report — it just says NOT SWEPT — and that is easy to skim past. The lane matrix
+marks the empty column and says so in as many words.
+
+Dark and light both, following the system by default, switchable in the title
+bar. Settings live in `%APPDATA%\BugSleuth\settings.json`, and each run's
+per-sweep JSON goes in `%APPDATA%\BugSleuthuns\<repo>`.
+
+## Using the command line
 
 ```bash
 cargo run -p bugsleuth-cli -- preflight
@@ -112,8 +135,11 @@ repository you care about:
 pwsh -File scripts/verify.ps1
 ```
 
-Formatting, clippy with warnings as errors, the full test suite, a release
-build, and a check that no source file exceeds 400 lines.
+Rust formatting, clippy with warnings as errors, the Rust tests, the frontend
+type-check and its tests, a check that no source file exceeds 400 lines, and a
+release build. Add `-Package` to include the full packaged Tauri build, which is
+minutes of link-time optimisation and belongs before a release rather than in
+the loop.
 
 ## Layout
 
@@ -123,7 +149,11 @@ build, and a check that no source file exceeds 400 lines.
 | `bugsleuth-provider` | One CLI adapter per vendor, plus shared subprocess handling |
 | `bugsleuth-verify` | Anchor checking, git worktrees, test execution |
 | `bugsleuth-judge` | Clustering, agreement counting, ranking |
-| `bugsleuth-cli` | The `bugsleuth` binary |
+| `bugsleuth-engine` | The crate that composes the others: briefs, planning, running, merging, proving |
+| `bugsleuth-cli` | The `bugsleuth` binary — argument parsing and printing |
+| `src-tauri` | The desktop shell. Commands are deserialize, call the engine, serialize |
 
 Dependencies point one way: everything may depend on `domain`, and `domain`
-depends on nothing. `judge` does not know `provider` exists.
+depends on nothing. `judge` does not know `provider` exists. Both front ends run
+the same engine rather than two implementations of it — the alternative is
+exactly the kind of quiet divergence this tool exists to catch elsewhere.

@@ -18,10 +18,9 @@ checks.
 ## Crates, and which way dependencies point
 
 ```
-domain  ←  provider
-        ←  verify
-        ←  judge
-        ←  cli  (composes all of them)
+domain  ←  provider  ┐
+        ←  verify    ├→  engine  ←  cli        (command line)
+        ←  judge     ┘           ←  src-tauri  (desktop app)
 ```
 
 Everything may depend on `domain`. `domain` depends on nothing of ours — no I/O,
@@ -34,7 +33,9 @@ no async. `judge` does not know `provider` exists; `provider` does not know
 | `bugsleuth-provider` | One subprocess adapter per vendor; shared spawn/timeout/kill | Know what a lane means, or what a run is |
 | `bugsleuth-verify` | Anchor checking, git worktrees, running tests | Know which model produced anything |
 | `bugsleuth-judge` | Clustering, agreement counting, ranking | Know how findings were produced |
-| `bugsleuth-cli` | Briefs, orchestration, reporting | Contain vendor-specific knowledge |
+| `bugsleuth-engine` | Briefs, planning, orchestration, reporting | Contain vendor-specific knowledge, or know which front end called it |
+| `bugsleuth-cli` | Argument parsing, printing | Decide anything |
+| `src-tauri` | Window, tray, settings, command surface | Contain logic — a command is a deserialize, a call, a serialize |
 
 ## The two-type rule
 
@@ -85,6 +86,29 @@ differences above are worth seeing rather than hiding behind one interface.
 6. **Prove** (optional) — the top N defects get a failing-test attempt in a
    throwaway worktree, judged by re-running the tests ourselves.
 
+## Two front ends, one engine
+
+The engine is a library rather than living inside the command-line binary
+specifically so the desktop app runs the same code. Two implementations of "is
+this lane swept or merely empty" would be exactly the quiet divergence this tool
+exists to catch in other people's code.
+
+The desktop shell adds only what a window needs:
+
+- **No filesystem or shell permission is granted to the frontend.** The only way
+  to touch disk is a command that canonicalizes and checks the path first. The
+  capability file lists the handful of window calls actually used, nothing more.
+- **The window starts hidden** with a background matching the dark theme, and
+  the frontend reveals it after mounting, so there is no unstyled flash.
+- **Closing hides to the tray**, and `prevent_close` runs before anything
+  fallible. The tray's Quit is the single real exit path.
+- **Theme "match system" removes the attribute** rather than resolving it in
+  JavaScript, so the app follows the OS live instead of freezing the choice at
+  startup.
+- **The tray icon is a different drawing from the app icon**, not a scaled copy.
+  At 16-24px the app icon's legs and highlight collapse into noise; an early
+  single-icon version read as an asterisk.
+
 ## The invariants that matter
 
 These are the ones to protect when changing anything:
@@ -107,12 +131,17 @@ These are the ones to protect when changing anything:
 
 - `scripts/check-file-size.ps1` — 400-line hard cap, 300 soft, on every `.rs`,
   `.ts`, `.tsx`. Part of `scripts/verify.ps1`.
+- `unsafe_code = "forbid"` workspace-wide; a crate needing it must opt out and
+  say why.
+- The frontend type-checks under `strict` with `noUncheckedIndexedAccess`, and
+  its state rules have their own tests, so the gate covers the app rather than
+  half of it.
 - `clippy` with warnings as errors, including `too_many_lines` and
   `cognitive_complexity`.
 - Crate boundaries, which the compiler enforces for free.
 
 ## Not built, deliberately
 
-No UI. No patch application, PRs, or CI integration. No persistence beyond
+No patch application, PRs, or CI integration. No persistence beyond
 per-sweep JSON files — `--resume` reads those rather than a database, which is
 the smallest thing that makes a dead run recoverable.
