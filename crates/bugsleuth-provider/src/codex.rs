@@ -22,6 +22,9 @@ use crate::error::ProviderError;
 use crate::process::{self, Invocation, preview};
 
 mod discover;
+mod scratch;
+
+use scratch::{event_error, not_found, scratch_dir, write_file};
 
 pub(crate) const VENDOR: &str = "codex";
 
@@ -221,43 +224,6 @@ fn build_args(spec: &Invoke<'_>, schema: &Path, answer: &Path) -> Vec<String> {
     args
 }
 
-/// First error carried by a Codex event, if any.
-fn event_error(stdout: &str) -> Option<String> {
-    stdout.lines().find_map(|line| {
-        let event: serde_json::Value = serde_json::from_str(line).ok()?;
-        match event["type"].as_str()? {
-            "turn.failed" => event["error"]["message"].as_str().map(|s| preview(s, 2000)),
-            "error" => event["message"].as_str().map(|s| preview(s, 2000)),
-            _ => None,
-        }
-    })
-}
-
-fn scratch_dir() -> Result<PathBuf, ProviderError> {
-    let dir = std::env::temp_dir().join(format!("bugsleuth-codex-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).map_err(|e| ProviderError::Scratch {
-        vendor: VENDOR,
-        detail: e.to_string(),
-    })?;
-    Ok(dir)
-}
-
-fn write_file(path: &Path, contents: &str) -> Result<(), ProviderError> {
-    std::fs::write(path, contents).map_err(|e| ProviderError::Scratch {
-        vendor: VENDOR,
-        detail: format!("{}: {e}", path.display()),
-    })
-}
-
-fn not_found() -> ProviderError {
-    ProviderError::NotFound {
-        vendor: VENDOR,
-        hint: "Install the Codex CLI and sign in with `codex login`, or pass an explicit binary \
-               path."
-            .to_string(),
-    }
-}
-
 /// Check the CLI exists and can run. Free — starts no model.
 pub async fn probe() -> Result<String, ProviderError> {
     let binary = discover::resolve_binary().ok_or_else(not_found)?;
@@ -345,12 +311,5 @@ mod tests {
         };
         assert_eq!(after("--output-schema"), Some("s.json"));
         assert_eq!(after("--output-last-message"), Some("a.json"));
-    }
-
-    #[test]
-    fn a_failure_event_on_stdout_is_preferred_over_empty_stderr() {
-        let stdout = r#"{"type":"turn.failed","error":{"message":"rate limited"}}"#;
-        assert_eq!(event_error(stdout).as_deref(), Some("rate limited"));
-        assert_eq!(event_error("not json at all"), None);
     }
 }
