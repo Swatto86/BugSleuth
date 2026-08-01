@@ -13,7 +13,7 @@ Last updated: 1 August 2026.
 | M0 — CLI harness, validated JSON with anchors | **Done, verified against real models** |
 | M1 — can a model produce a *failing test* for a bug it claims? | **Done. It can.** 4/4 correct across real and fabricated defects |
 | M2 — multi-model, multi-lane, judge | **Done.** Three vendors, deterministic judge, `run` orchestrates the whole product. Kill gate passed on weak evidence |
-| M3 — Tauri UI | **Not started**, deliberately |
+| M3 — Tauri UI | **Done.** Desktop app with tray, icon, dark/light, live progress |
 
 ## Model invocation budget
 
@@ -29,14 +29,17 @@ crates/
   bugsleuth-provider/  Claude, Codex and Kilo adapters + shared subprocess handling
   bugsleuth-verify/    anchor checking, git worktrees, test execution
   bugsleuth-judge/     clustering, agreement counting, ranking
+  bugsleuth-engine/    composes the above: plan, run, merge, prove
   bugsleuth-cli/       the `bugsleuth` binary
+src-tauri/             the desktop shell (thin: deserialize, call engine, serialize)
+ui/                    vanilla TypeScript frontend, no framework
 fixtures/seeded-repo/  a tiny crate with 6 known bugs (5 planted, 1 found by Codex)
 fixtures/SEEDED.md     the answer key, kept OUTSIDE the fixture repo on purpose
 eval/                  the M1 defect descriptions and what they measure
 ```
 
-Five commands: `preflight`, `sweep`, `run`, `judge`, `prove`. See
-[README.md](README.md).
+Five commands: `preflight`, `sweep`, `run`, `judge`, `prove`, plus a desktop
+app (`cargo tauri dev` / `cargo tauri build`). See [README.md](README.md).
 
 ## Verified, with evidence
 
@@ -105,6 +108,27 @@ decision.**
   timeout killed its child with no orphan left, and both failures were reported
   as `NOT SWEPT` with the reason and a non-zero exit rather than as clean lanes.
   A tool that had returned "no findings" for either would have been dangerous.
+
+## Desktop app: verified and not
+
+**Verified by observed effect on the packaged release binary:**
+
+- Launches, window appears, ~25 MB resident.
+- Closing the window hides it and the process stays alive (close-to-tray).
+- The icon extracted *from the executable* is the BugSleuth mark, not a default.
+- The lane matrix, presets, plan estimate and the uncovered-lane warning all
+  behave correctly, checked in the live page.
+- Both themes switch, and "match system" follows the OS rather than freezing.
+- The Quit button reaches the backend over the IPC and is keyboard reachable.
+
+**Not verified end to end:** clicking the tray menu, and a full click-through of
+Quit to process exit. Driving the packaged app's webview needs WebDriver or an
+installed app, and I did not install it. The Rust side of both is `app.exit(0)`
+behind a registered handler.
+
+**Also unexercised:** a real run started *from the app*. The engine underneath is
+the same code the CLI has run many times, and the command is a thin wrapper, but
+the app has not itself driven a sweep end to end.
 
 ## Known gaps
 
