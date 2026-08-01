@@ -16,3 +16,7 @@
 
 # Throwaway worktrees a sweep creates for proof-carrying findings.
 /.bugsleuth-worktrees/
+
+# Downloaded WebDriver binary, version-matched to the installed WebView2
+# runtime. A ~40 MB tool, not source. scripts/setup-e2e.ps1 fetches it.
+/.webdriver
