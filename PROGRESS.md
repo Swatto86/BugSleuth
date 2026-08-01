@@ -127,6 +127,46 @@ it does establish is that neither the coverage explanation nor the merge
 threshold accounts for the missing corroboration, and that a defect sitting in
 a file a vendor is actively reading can still be missed by all three.
 
+### Then: 3 of 3, after naming the two classes that were missed
+
+Both misses had the same shape. Every defect class the correctness brief listed
+was **visible in code that is present** — a wrong comparison, an unhandled case,
+a leak. Defect #1 is a *deleting before committing* ordering, and defect #4 is a
+field that arrives and is never acted on. Neither has a wrong line to spot. They
+are found by asking what is missing, and nothing was asking.
+
+So the brief now names them, in those words, with instructions to go looking:
+check every sequence that replaces stored state for a destroy-before-write
+window, and compare each incoming field against what is actually acted on.
+
+The identical experiment was then re-run — same repository, same three files,
+same three vendors, same settings, nothing changed but the brief:
+
+| Known defect | Found before | Found after |
+|---|---|---|
+| #1 rotated refresh token destroyed by non-atomic keyring write | No | **Yes — all three vendors** |
+| #4 `hasAttachments`-only delta silently dropped | No | **Yes — Codex and Claude** |
+| #5 load-images banner misses non-canonical markup | Yes — Codex | **Yes — Codex** |
+
+**Recall: 3 of 3, up from 1 of 3.** The fix plans match the real fix commits
+closely: Claude's plan for #4 names the domain enum, the graph classification,
+the sync consumer and the store — which is exactly the four-file change the
+actual fix made.
+
+This is one run per condition, so model-to-model variation contributes something.
+But defect #1 went from missed by every vendor to found by every vendor, and the
+variance measurement below says *what* gets found is the stable part of a sweep.
+A coincidence of that size is not the likeliest reading.
+
+**And agreement finally appeared.** Three vendors on defect #1, two on defect #4
+— the first real corroboration measured in this project, against 0 of 7 before.
+The earlier conclusion that vendors "see different things in the same place" was
+too strong. What is true is narrower: left to characterise a defect however they
+like, they describe it differently; told exactly which class to look for, they
+converge on it. Corroboration is not absent, it is *manufacturable* — by the
+brief. Not enough data yet to put agreement back into the ranking, but the
+earlier reading needs correcting rather than defending.
+
 ### A design gap that showed up with it
 
 The reverted bug is a *silent UI failure* — an image is stripped and no banner
