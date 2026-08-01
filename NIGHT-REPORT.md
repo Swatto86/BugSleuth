@@ -19,6 +19,11 @@ would have cost you 2 of the 11. Sections 4 and 5.
 I would not call that premise proven, and section 5 explains why I think the
 test was too easy.
 
+**Three: the number that should worry you.** On a *real* repository, with the
+lane pointed straight at the file, **two vendors both failed to find the bug the
+experiment was built around.** The toy fixture flatters this tool badly. Section
+5a.
+
 Nothing here is production-ready.
 
 ---
@@ -291,6 +296,50 @@ the next experiment, and it is cheap now that all three adapters work.
 I have not stopped building, because the gate did not fail. But I would not
 present the multi-model premise as proven on this basis.
 
+## 5a. Recall on real code: the result that matters most
+
+Everything above is measured on a fixture I wrote, whose bugs are blatant. This
+is what happened on real code.
+
+**Setup.** Alder, cloned to a scratch directory and rolled back to just before
+commit `REDACTED` — the point where the "load images" banner bug exists and all
+50 tests pass. The correctness lane, scoped to `crates/infrastructure/src`, the
+crate the bug lives in.
+
+| Vendor | Findings | Found the reverted bug? |
+|---|---|---|
+| Claude | 2 | **No** |
+| Codex | 2 | **No** |
+| Kilo | failed to run | — |
+
+**Neither vendor found it.** Not because they returned nothing — all four
+findings are real, anchored, and worth having:
+
+- an attachment filter that selects one field and filters on another, so real
+  file attachments are silently dropped;
+- a refresh-token write that can corrupt the previously stored token;
+- a timezone heuristic that puts all-day events on the wrong day in UTC+12 and
+  above — **found independently by both vendors**, which is exactly the
+  agreement signal the whole design is built to surface.
+
+But the defect the experiment was designed around was missed by both, on a
+27-file crate, with the search pointed at it.
+
+**What I think this means.** On the fixture, recall looks like 100%. On real
+code, for this one defect, it is 0 of 2. One defect is far too small a sample to
+conclude the tool has poor recall — but it is more than enough to conclude that
+**the fixture cannot tell you what recall is**, and that every encouraging number
+in sections 3 to 5 should be read in that light.
+
+**Part of it is a design gap, not just a miss.** The banner bug is a *silent UI
+failure* living in backend Rust. The UX lane's mandate covers exactly that
+("a failure that is swallowed so the user sees nothing") but its file filter
+rejects `.rs` outright; the correctness lane can see the file but its mandate
+does not point at user-visible consequences. So the defect currently falls
+between lanes. I have flagged this rather than patched it — widening the UX lane
+to all files risks precisely the aesthetic-opinion pollution the filter exists to
+prevent, and that is your call.
+
 ## 6. Bugs found in my own work
 
 Worth recording, because they are the kind you could not catch by reading a diff.
@@ -323,6 +372,12 @@ The last three were found only by *running* the thing, not by reading it.
    repository dirty — the one thing BugSleuth promises not to do. Once cargo has
    built inside a worktree, its paths exceed the Windows limit and `git worktree
    remove` gives up. Only visible by checking the repository afterwards.
+9. **The judge reported one defect as two, with no agreement.** Two vendors found
+   the same timezone bug but anchored it 5 lines apart; my clustering window was
+   3. The seeded fixture could never have caught this — all its findings land
+   within a line of each other — so the threshold looked fine until real output
+   went through it. This is the clearest argument in the whole report for testing
+   against real data: the *first* threshold to meet real code was wrong.
 
 ## 7. Notable things learned from Eir
 
