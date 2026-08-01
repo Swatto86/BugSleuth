@@ -3,6 +3,12 @@
 Unattended session, 31 July – 1 August 2026. Written for someone who does not
 read Rust.
 
+> **This is a record of that night, kept as written.** Several of its numbers
+> have since been superseded — recall in particular, which was the worry it ends
+> on and is now measured at 3 of 3 on the same experiment. Its section 11, "what
+> I would do next", is done. **`PROGRESS.md` is the current state**; read that
+> first and treat this as history.
+
 **Two headlines.**
 
 **One: the experiment that decides the project succeeded, and I have the
