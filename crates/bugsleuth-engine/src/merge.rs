@@ -139,6 +139,26 @@ impl Merged {
                 models.join(", "),
             ));
         }
+
+        // Everything above is a summary someone skims. Everything below is what
+        // an implementer works from, and it is in the same document on purpose:
+        // a fix plan filed separately is a fix plan nobody reads.
+        if !self.ranked.is_empty() {
+            out.push_str(
+                "
+## Fixing these
+",
+            );
+            out.push_str(crate::handoff::preamble());
+            for entry in &self.ranked {
+                out.push_str(&crate::handoff::work_order(
+                    entry.position,
+                    entry.cluster.representative(),
+                    entry.cluster.agreement,
+                    self.sources.len(),
+                ));
+            }
+        }
         out
     }
 }

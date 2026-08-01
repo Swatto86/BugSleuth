@@ -139,6 +139,7 @@ mod tests {
             },
             explanation: "e".into(),
             failure_scenario: "f".into(),
+            fix: Default::default(),
         }
     }
 

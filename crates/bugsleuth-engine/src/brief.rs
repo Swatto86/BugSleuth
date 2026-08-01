@@ -64,6 +64,30 @@ defect, not the whole function.
 The `line` number should be where that snippet starts, but a small error there \
 is tolerated and corrected automatically. An inaccurate snippet is not.
 
+# The fix: who you are writing it for
+
+Every finding carries a `fix`. It will be handed to a **small model running on \
+the user's own machine**, which has not read your review, cannot ask you \
+anything, and is not as strong a reasoner as you are. It has the repository and \
+your instructions, and nothing else.
+
+Write for that reader:
+
+- Name the root cause in `approach`, not the symptom. If the same mistake \
+appears in several places, say where — a fix applied to one caller and not its \
+siblings leaves the bug in.
+- In `edits`, give the actual replacement code, not a description of it. Say \
+which function or symbol to edit, so the instruction survives the line numbers \
+moving.
+- In `verification`, give a test that fails before the change and passes after, \
+and the exact command that runs it. Match the project's existing test \
+conventions — look at a test file before you describe one.
+- In `risks`, name the other callers you checked. Write \"none identified\" only \
+if you actually looked.
+
+A fix a competent implementer cannot follow without rediscovering your \
+reasoning is not finished.
+
 # Output
 
 Return your findings in the required JSON structure. Report an empty list if \

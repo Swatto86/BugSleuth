@@ -58,6 +58,55 @@ pub struct RawFinding {
     pub explanation: String,
     /// Concrete inputs or state that trigger it, and the resulting bad outcome.
     pub failure_scenario: String,
+    /// How to fix it, in enough detail for another model to do the work.
+    ///
+    /// The schema asks for this and the brief insists on it, but it is
+    /// **optional to deserialize** on purpose. Only Claude has its output
+    /// constrained by the schema; Codex and Kilo are merely asked. Making the
+    /// field mandatory here meant one omission threw away the entire sweep —
+    /// every finding in it, paid for and discarded, over a missing field the
+    /// report is perfectly able to render as absent.
+    #[serde(default)]
+    pub fix: FixPlan,
+}
+
+/// Implementation instructions for a defect.
+///
+/// The point of this type is a specific reader: a *local* model, running on the
+/// user's own machine, that will not have read the review, cannot ask a
+/// question, and may not be strong enough to rediscover the reasoning. So every
+/// field is written for someone starting from the file and nothing else.
+///
+/// Defaulted on deserialize so a sweep report written before fix plans existed
+/// still loads. An empty plan is visibly empty in the report rather than
+/// silently absent.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FixPlan {
+    /// The change to make, and why this is the right fix rather than a patch
+    /// over the symptom.
+    pub approach: String,
+    /// Per-file instructions, precise enough to apply without further analysis.
+    pub edits: Vec<FixEdit>,
+    /// How to prove the fix worked — the test to add and the command to run.
+    /// A fix nobody can check is a claim, not a fix.
+    pub verification: String,
+    /// What else this could break: other callers, callers' assumptions, data
+    /// already written in the old shape.
+    pub risks: String,
+}
+
+/// One file's worth of change.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FixEdit {
+    /// Repo-relative path, forward slashes.
+    pub file: String,
+    /// Where in the file, named so it survives the line numbers moving —
+    /// a function or symbol name rather than a bare offset.
+    pub location: String,
+    /// The change itself, concretely: what to replace with what.
+    pub change: String,
 }
 
 /// A finding whose anchor was confirmed against the real file.
@@ -71,6 +120,8 @@ pub struct Finding {
     pub anchor: VerifiedAnchor,
     pub explanation: String,
     pub failure_scenario: String,
+    #[serde(default)]
+    pub fix: FixPlan,
 }
 
 impl Finding {
@@ -93,6 +144,7 @@ impl Finding {
             anchor,
             explanation: raw.explanation,
             failure_scenario: raw.failure_scenario,
+            fix: raw.fix,
         }
     }
 }
@@ -117,6 +169,63 @@ impl VerifiedAnchor {
     }
 }
 
+/// Schema for [`FixPlan`], kept separate because `json!` hits its recursion
+/// limit when the whole thing is written as one literal.
+///
+/// The descriptions are the prompt. They name the reader explicitly — a smaller
+/// local model that has not read the review — because a fix plan written for a
+/// person who already understands the bug is not the same document.
+fn fix_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Instructions for fixing this, written for a smaller model running locally that has NOT read your review and cannot ask you anything. Assume it can open the files and nothing else.",
+        "required": ["approach", "edits", "verification", "risks"],
+        "properties": {
+            "approach": {
+                "type": "string",
+                "description": "What to change and why this is the right fix rather than a patch over the symptom. Name the root cause. If the same mistake appears in more than one place, say so here."
+            },
+            "edits": {
+                "type": "array",
+                "description": "One entry per file that must change, in the order they should be applied.",
+                "items": fix_edit_schema()
+            },
+            "verification": {
+                "type": "string",
+                "description": "How to prove the fix worked: the test to add and where it goes, plus the exact command to run. Prefer a test that fails before the fix and passes after."
+            },
+            "risks": {
+                "type": "string",
+                "description": "What this could break: other callers of the code being changed, assumptions they make, and any data already stored in the old shape. Say 'none identified' only if you actually checked the callers."
+            }
+        }
+    })
+}
+
+/// Schema for one [`FixEdit`].
+fn fix_edit_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "location", "change"],
+        "properties": {
+            "file": {
+                "type": "string",
+                "description": "Repository-relative path with forward slashes."
+            },
+            "location": {
+                "type": "string",
+                "description": "Where in the file, named so it still makes sense when line numbers move: the function, method, type or symbol to edit."
+            },
+            "change": {
+                "type": "string",
+                "description": "The edit itself, concretely enough to apply without further analysis: the code to replace and the code to replace it with. Include the replacement code, not a description of it."
+            }
+        }
+    })
+}
+
 /// JSON Schema describing [`RawFindings`], for CLIs that can constrain output to
 /// a schema (`claude --json-schema`). Hand-written rather than derived: adding a
 /// schema-generation dependency to buy one 40-line literal is a poor trade, and
@@ -136,7 +245,7 @@ pub fn finding_schema() -> Value {
                     "additionalProperties": false,
                     "required": [
                         "title", "severity", "file", "line",
-                        "snippet", "explanation", "failure_scenario"
+                        "snippet", "explanation", "failure_scenario", "fix"
                     ],
                     "properties": {
                         "title": {
@@ -167,7 +276,8 @@ pub fn finding_schema() -> Value {
                         "failure_scenario": {
                             "type": "string",
                             "description": "Concrete inputs or state that trigger the defect, and what goes wrong as a result."
-                        }
+                        },
+                        "fix": fix_schema()
                     }
                 }
             }
@@ -178,6 +288,32 @@ pub fn finding_schema() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build a minimal value satisfying a schema object's `required` set.
+    ///
+    /// Recursive so a nested object is filled the same way its parent is, which
+    /// is what lets the test keep checking schema-against-type as the shape
+    /// grows rather than needing a new hand-written literal each time.
+    fn required_shape(schema: &Value) -> Value {
+        match schema["type"].as_str() {
+            Some("array") => json!([required_shape(&schema["items"])]),
+            Some("object") => {
+                let mut object = serde_json::Map::new();
+                for name in schema["required"].as_array().into_iter().flatten() {
+                    let Some(name) = name.as_str() else { continue };
+                    object.insert(
+                        name.to_string(),
+                        required_shape(&schema["properties"][name]),
+                    );
+                }
+                Value::Object(object)
+            }
+            Some("integer") => json!(1),
+            // The one string field with a closed set of values.
+            _ if schema["enum"].is_array() => schema["enum"][0].clone(),
+            _ => json!("x"),
+        }
+    }
 
     #[test]
     fn schema_and_type_agree_on_required_field_names() {
@@ -194,6 +330,10 @@ mod tests {
             let value = match *name {
                 "line" => json!(1),
                 "severity" => json!("high"),
+                // Built from the schema's own nested required set rather than
+                // hand-written, so this keeps checking the two agree instead of
+                // freezing today's field names into the test.
+                "fix" => required_shape(&fix_schema()),
                 _ => json!("x"),
             };
             object.insert((*name).to_string(), value);
@@ -217,8 +357,23 @@ mod tests {
                     snippet: String::new(),
                     explanation: String::new(),
                     failure_scenario: String::new(),
+                    fix: Default::default(),
                 }],
             });
         assert!(parsed.findings.is_empty());
+    }
+
+    #[test]
+    fn a_finding_with_no_fix_plan_still_lands_rather_than_sinking_the_sweep() {
+        // Only Claude's output is schema-constrained; the others are asked
+        // nicely. A model that answers without `fix` must cost us that one
+        // field, not the whole sweep it came in.
+        let without = r#"{"findings":[{"title":"t","severity":"high","file":"a.rs",
+            "line":2,"snippet":"x","explanation":"e","failure_scenario":"f"}]}"#;
+        let parsed: RawFindings = serde_json::from_str(without)
+            .unwrap_or_else(|e| panic!("a finding without a fix plan was rejected: {e}"));
+        assert_eq!(parsed.findings.len(), 1);
+        assert!(parsed.findings[0].fix.approach.is_empty());
+        assert!(parsed.findings[0].fix.edits.is_empty());
     }
 }

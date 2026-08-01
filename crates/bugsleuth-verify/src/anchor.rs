@@ -146,6 +146,7 @@ mod tests {
             snippet: snippet.into(),
             explanation: "e".into(),
             failure_scenario: "f".into(),
+            fix: Default::default(),
         }
     }
 

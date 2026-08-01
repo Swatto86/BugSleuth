@@ -58,10 +58,16 @@ pub struct Cluster {
 impl Cluster {
     /// The report to show. The most severe one, so a cluster is never presented
     /// more mildly than its worst assessment.
+    /// The finding that speaks for the cluster.
+    ///
+    /// Most severe first, and among equals the one that actually came with a
+    /// fix plan. Two models finding the same defect and only one explaining how
+    /// to fix it is common; picking the silent one would throw away the only
+    /// instructions in the cluster while changing nothing else about the report.
     pub fn representative(&self) -> &Finding {
         self.findings
             .iter()
-            .min_by_key(|f| severity_order(f.severity))
+            .min_by_key(|f| (severity_order(f.severity), usize::from(!has_plan(f))))
             .unwrap_or(&self.findings[0])
     }
 
@@ -132,6 +138,11 @@ fn same_defect(left: &Finding, right: &Finding) -> bool {
     crate::similarity(&left_text, &right_text) >= MIN_WORDING_OVERLAP
 }
 
+/// Whether a finding carries usable fix instructions.
+fn has_plan(finding: &Finding) -> bool {
+    !finding.fix.approach.trim().is_empty() || !finding.fix.edits.is_empty()
+}
+
 pub(crate) fn severity_order(severity: Severity) -> u8 {
     match severity {
         Severity::Critical => 0,
@@ -161,6 +172,7 @@ mod tests {
             },
             explanation: explanation.into(),
             failure_scenario: "f".into(),
+            fix: Default::default(),
         }
     }
 
@@ -305,5 +317,30 @@ mod tests {
         let clusters = cluster(vec![low, critical]);
         assert_eq!(clusters.len(), 1);
         assert_eq!(clusters[0].severity(), Severity::Critical);
+    }
+
+    #[test]
+    fn the_cluster_speaks_through_whichever_finding_brought_a_fix_plan() {
+        // Two models finding the same defect and only one explaining how to fix
+        // it is the common case. Picking the silent one loses the only
+        // instructions in the cluster and changes nothing else, so it would go
+        // unnoticed.
+        let mut silent = finding("claude:sonnet", "a", 10, "the same defect", "why");
+        silent.fix = Default::default();
+        let mut explained = finding("codex:", "a", 10, "the same defect", "why");
+        explained.fix = bugsleuth_domain::FixPlan {
+            approach: "guard the empty case".into(),
+            ..Default::default()
+        };
+
+        let cluster = Cluster {
+            findings: vec![silent, explained],
+            agreement: 2,
+        };
+        assert_eq!(
+            cluster.representative().fix.approach,
+            "guard the empty case",
+            "the cluster picked the finding with no plan"
+        );
     }
 }
