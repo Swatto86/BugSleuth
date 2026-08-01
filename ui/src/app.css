@@ -193,6 +193,15 @@ table.matrix th.lane-cell {
   width: 92px;
 }
 
+/*
+  The warning marker must not be allowed to wrap. "CONTRACT ⚠" is just wide
+  enough to break onto a second line, which lifts that one heading above the
+  others and makes the row look crooked.
+*/
+table.matrix th.lane-cell {
+  white-space: nowrap;
+}
+
 table.matrix tr:last-child td {
   border-bottom: none;
 }
@@ -214,8 +223,17 @@ th.lane-cell.uncovered {
   color: var(--warn);
 }
 
-th.lane-cell.uncovered::after {
+/*
+  The marker's space is reserved whether or not it is showing, so ticking the
+  last box in a lane changes a colour rather than reflowing the whole header.
+*/
+th.lane-cell::after {
   content: " ⚠";
+  visibility: hidden;
+}
+
+th.lane-cell.uncovered::after {
+  visibility: visible;
 }
 
 .warning-banner {
