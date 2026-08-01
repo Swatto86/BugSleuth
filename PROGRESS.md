@@ -219,6 +219,35 @@ process and relaunching restores it. What came out of the hunt is worth having
 anyway — a failed save or load now says so in the status bar instead of being
 swallowed.
 
+### The re-run, with everything working
+
+Twelve sweeps, three vendors, four lanes, driven from the app.
+
+| | Correctness | Security | Contract | UX |
+|---|---|---|---|---|
+| claude:sonnet | 9 | failed | failed | 5 |
+| codex: | 2 | 1 | 0 | 1 |
+| kilo (kimi-for-coding) | failed | failed | failed | **7** |
+
+**7 of 12 swept, 25 findings, and every one of the 25 carries a usable fix
+plan** — approach, edits naming a symbol, a verification command and checked
+callers — from all three vendors.
+
+Two things worth keeping in view.
+
+**The failures are informative rather than silent, which is the design working.**
+Claude's two were a bare non-zero exit; that is what exposed the same
+stdout-versus-stderr gap Kilo had, now fixed for both. Kilo's three were schema
+drift — on the Security lane it said outright *"Before I emit the final JSON, I
+need the expected schema"*, having been given it. That is what the worked
+example in the brief now addresses, and the fix is verified: the Correctness
+lane that failed with `missing field 'title'` sweeps clean afterwards.
+
+**Overlap is still almost nil.** 25 findings merged to 24 distinct defects —
+one agreement, between Codex and Kilo, on a missing delete confirmation. Better
+than the previous run's zero out of twenty, but far too little for "found by N
+models" to rank anything. That remains the open question about the premise.
+
 ## Known gaps
 
 - **Kilo cannot prove.** Claude and Codex both can. Kilo is refused with a stated
