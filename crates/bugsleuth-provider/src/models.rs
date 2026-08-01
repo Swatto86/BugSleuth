@@ -7,10 +7,13 @@
 //! The three vendors differ in how much they will tell us, and this module is
 //! honest about that rather than pretending to a uniformity that is not there:
 //!
-//! - **Kilo** publishes its whole catalogue (`kilo models`), and the first
-//!   segment of every id is the billing route. That is the one list worth
-//!   fetching live, because it is long, it changes, and getting the route wrong
-//!   is the mistake that costs money.
+//! - **Kilo** publishes its whole catalogue, and it is the one list worth
+//!   fetching live: it is long, it changes, and getting the billing route wrong
+//!   is the mistake that costs money. The route is *mostly* the id's first
+//!   segment — but not entirely. A handful of `kilo/` models are reached
+//!   through Kilo and billed to a plan you bought from the provider directly
+//!   (Kimi Code, the Z.ai Coding Plan). Nothing in the id says so, which is why
+//!   this reads `--verbose` and takes the catalogue's own word for it.
 //! - **Claude and Codex** have no list command. Their aliases are few, stable
 //!   and documented in `--help`, so they are named here.
 //!
@@ -91,7 +94,12 @@ async fn kilo_models() -> Result<Vec<ModelGroup>, ProviderError> {
     })?;
     let output = process::run(process::Invocation {
         binary: &binary.to_string_lossy(),
-        args: &["models".to_string()],
+        // `--verbose` rather than the bare list, because the bare list cannot
+        // answer the question that matters. A handful of `kilo/` models are
+        // reached through Kilo but billed to your own plan with that vendor —
+        // Kimi Code, the Z.ai Coding Plan — and they look exactly like gateway
+        // models until you read the catalogue's own flag for them.
+        args: &["models".to_string(), "--verbose".to_string()],
         cwd: &std::env::temp_dir(),
         stdin: None,
         env: &[],
@@ -104,24 +112,31 @@ async fn kilo_models() -> Result<Vec<ModelGroup>, ProviderError> {
     Ok(group_by_route(&output.stdout))
 }
 
-/// Split `provider/model` lines into groups, one per billing route.
+/// Marker Kilo's catalogue puts on a model you can reach with your own plan.
+const BYOK_FLAG: &str = "\"hasUserByokAvailable\": true";
+
+/// Split `kilo models --verbose` into groups, one per billing route.
+///
+/// The output is a sequence of records: a bare `provider/model` line followed
+/// by that model's JSON. So each id owns everything up to the next id, and the
+/// BYOK flag is read out of that block.
 ///
 /// Kept separate from the process call so it can be tested against real
 /// captured output without running anything.
 #[must_use]
 pub fn group_by_route(listing: &str) -> Vec<ModelGroup> {
-    // Insertion-ordered so the routes come out in the order defined below
-    // rather than in whatever order the catalogue happens to list them.
+    // Insertion-ordered so the routes come out in the order the catalogue
+    // lists them rather than in hash order.
     let mut groups: Vec<ModelGroup> = Vec::new();
+    let mut pending: Option<(&str, bool)> = None;
 
-    for line in listing.lines() {
-        let id = line.trim();
-        // The CLI prints a banner before the list; only `provider/model` lines
-        // are models, and anything else is noise rather than an error.
-        if id.is_empty() || !id.contains('/') || id.contains(' ') {
-            continue;
-        }
-        let label = kilo::route_of(id).describe().to_string();
+    let flush = |entry: Option<(&str, bool)>, groups: &mut Vec<ModelGroup>| {
+        let Some((id, byok)) = entry else { return };
+        let route = match kilo::route_of(id) {
+            kilo::Route::Gateway if byok => kilo::Route::KiloByok,
+            other => other,
+        };
+        let label = route.describe().to_string();
         match groups.iter_mut().find(|g| g.label == label) {
             Some(group) => group.models.push(id.to_string()),
             None => groups.push(ModelGroup {
@@ -129,8 +144,35 @@ pub fn group_by_route(listing: &str) -> Vec<ModelGroup> {
                 models: vec![id.to_string()],
             }),
         }
+    };
+
+    for line in listing.lines() {
+        if is_model_id(line) {
+            flush(pending.take(), &mut groups);
+            pending = Some((line.trim(), false));
+        } else if line.contains(BYOK_FLAG)
+            && let Some(entry) = pending.as_mut()
+        {
+            entry.1 = true;
+        }
     }
+    flush(pending.take(), &mut groups);
     groups
+}
+
+/// Whether a line is a bare `provider/model` id rather than JSON or a banner.
+///
+/// The CLI prints ASCII art before the list and pretty-printed JSON after each
+/// id, so this has to reject both. An id sits at the left margin, contains a
+/// slash, and carries none of the punctuation JSON is made of.
+fn is_model_id(line: &str) -> bool {
+    !line.starts_with(char::is_whitespace)
+        && !line.trim().is_empty()
+        && line.contains('/')
+        && !line.contains(' ')
+        && !line.contains('"')
+        && !line.contains('{')
+        && !line.contains('}')
 }
 
 #[cfg(test)]
@@ -178,6 +220,88 @@ ollama/qwen3-coder
         let groups = group_by_route(listing);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].models, vec!["kilo/openai/gpt-latest"]);
+    }
+
+    /// Two records abridged from real `kilo models --verbose` output: one
+    /// coding-plan model and one ordinary gateway model. Trimmed to the fields
+    /// that matter, with the shape (id line, then its JSON) preserved.
+    const VERBOSE: &str = r#"
+kilo/ai21/jamba-large-1.7
+{
+  "id": "ai21/jamba-large-1.7",
+  "providerID": "kilo",
+  "cost": { "input": 2, "output": 8 },
+  "hasUserByokAvailable": false
+}
+kilo/zai-coding/glm-5.2
+{
+  "id": "zai-coding/glm-5.2",
+  "providerID": "kilo",
+  "cost": { "input": 0, "output": 0 },
+  "hasUserByokAvailable": true
+}
+kilo/kimi-coding/kimi-for-coding
+{
+  "id": "kimi-coding/kimi-for-coding",
+  "providerID": "kilo",
+  "hasUserByokAvailable": true
+}
+openrouter/z-ai/glm-4.6
+{
+  "id": "z-ai/glm-4.6",
+  "providerID": "openrouter"
+}
+"#;
+
+    #[test]
+    fn a_kilo_model_billed_to_your_own_plan_is_not_filed_under_the_subscription() {
+        // The whole reason this reads `--verbose`. `kilo/zai-coding/glm-5.2` and
+        // `kilo/ai21/jamba-large-1.7` are both `kilo/` ids, but one spends a
+        // plan you bought from Z.ai and the other spends Kilo Gateway credit.
+        // Filing them together tells you the wrong thing about what a sweep
+        // costs, and the id cannot distinguish them.
+        let groups = group_by_route(VERBOSE);
+
+        let byok = groups
+            .iter()
+            .find(|g| g.label.contains("BYOK"))
+            .unwrap_or_else(|| panic!("no BYOK group in {:?}", labels(&groups)));
+        assert_eq!(
+            byok.models,
+            vec![
+                "kilo/zai-coding/glm-5.2",
+                "kilo/kimi-coding/kimi-for-coding"
+            ]
+        );
+
+        let gateway = groups
+            .iter()
+            .find(|g| g.label.contains("Gateway"))
+            .unwrap_or_else(|| panic!("no gateway group in {:?}", labels(&groups)));
+        assert_eq!(gateway.models, vec!["kilo/ai21/jamba-large-1.7"]);
+    }
+
+    #[test]
+    fn the_flag_only_applies_to_the_model_it_was_printed_under() {
+        // The flag is read out of a JSON block that follows its id. If the scan
+        // ever leaked it forwards, every model after the first coding-plan entry
+        // would be mislabelled BYOK — and the list is alphabetical, so that
+        // would be most of the catalogue.
+        let groups = group_by_route(VERBOSE);
+        let openrouter = groups
+            .iter()
+            .find(|g| g.models.iter().any(|m| m.starts_with("openrouter/")))
+            .expect("no OpenRouter group");
+        assert!(
+            !openrouter.label.contains("BYOK via Kilo"),
+            "the flag leaked past its own record: {}",
+            openrouter.label
+        );
+        assert_eq!(openrouter.models.len(), 1);
+    }
+
+    fn labels(groups: &[ModelGroup]) -> Vec<&str> {
+        groups.iter().map(|g| g.label.as_str()).collect()
     }
 
     #[test]

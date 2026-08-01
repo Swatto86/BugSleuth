@@ -43,6 +43,13 @@ pub(crate) const VENDOR: &str = "kilo";
 pub enum Route {
     /// Kilo Gateway — the subscription/Kilo Pass route.
     Gateway,
+    /// Reached *through* Kilo but billed to your own plan with that vendor —
+    /// the coding-plan integrations, like Kimi Code and the Z.ai Coding Plan.
+    ///
+    /// These carry a `kilo/` prefix like any gateway model, so the id alone
+    /// cannot tell them apart. Only the catalogue's own `hasUserByokAvailable`
+    /// flag does.
+    KiloByok,
     /// Your own OpenRouter API key. Bring-your-own-key.
     OpenRouter,
     /// A signed-in OpenAI account.
@@ -57,6 +64,7 @@ impl Route {
     pub fn describe(self) -> &'static str {
         match self {
             Route::Gateway => "Kilo Gateway (subscription)",
+            Route::KiloByok => "Your own plan via Kilo (BYOK)",
             Route::OpenRouter => "OpenRouter (your own API key)",
             Route::OpenAi => "OpenAI account",
             Route::Ollama => "local via Ollama",
