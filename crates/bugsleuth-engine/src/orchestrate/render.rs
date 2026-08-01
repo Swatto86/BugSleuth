@@ -97,6 +97,11 @@ impl RunReport {
             );
         }
 
+        // Stated once, after the count and before the list, because it changes
+        // how the whole list should be read rather than any one entry of it.
+        out.push_str("\n  What this review could not see:\n");
+        out.push_str(&bugsleuth_domain::limits_list("  - "));
+
         for entry in &self.ranked {
             let cluster = &entry.cluster;
             let finding = cluster.representative();

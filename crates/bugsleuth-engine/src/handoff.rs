@@ -39,6 +39,13 @@ pub fn prompt(repo: &str, ranked: &[Ranked], not_reviewed: &[String], sweeps: us
         );
     }
 
+    // The gaps that remain even when every lane ran. Without these, a list of
+    // three defects reads as "the three problems" rather than "three of the
+    // problems a reader of source can find" — and the agent acting on it draws
+    // the same wrong conclusion the human would.
+    out.push_str("\n## What this review could not see\n\n");
+    out.push_str(&bugsleuth_domain::limits_list("- "));
+
     out.push_str(&format!(
         "\n## The defects, worst first ({})\n",
         ranked.len()
@@ -331,5 +338,14 @@ mod tests {
                 triage_reason: None,
             },
         }
+    }
+
+    #[test]
+    fn the_fix_prompt_tells_the_agent_what_the_review_could_not_see() {
+        // The agent draws the same wrong conclusion the human would: a list of
+        // three defects with no stated blind spots reads as the whole problem.
+        let text = prompt("C:/repo", &[ranked_of(1)], &[], 2);
+        assert!(text.contains("could not see"), "{text}");
+        assert!(text.contains("Only code inside this repository"), "{text}");
     }
 }

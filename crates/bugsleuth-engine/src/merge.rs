@@ -151,6 +151,16 @@ impl Merged {
             self.ranked.len()
         ));
 
+        // Both report renderers say this, because both are handed to someone
+        // deciding whether the code is in good shape. A list with no stated
+        // blind spots reads as the whole answer either way.
+        out.push_str(
+            "
+  What this review could not see:
+",
+        );
+        out.push_str(&bugsleuth_domain::limits_list("  - "));
+
         for entry in &self.ranked {
             let cluster = &entry.cluster;
             let finding = cluster.representative();
@@ -345,5 +355,23 @@ mod tests {
             .join(format!("{}-{name}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         dir
+    }
+
+    #[test]
+    fn the_merged_report_states_the_methods_blind_spots_too() {
+        // Both renderers reach someone deciding whether the code is in good
+        // shape, so both have to say what was structurally not looked for. This
+        // one was missed when the other gained it.
+        let dir = scratch_dir("limits");
+        let a = dir.join("a.json");
+        let _ = std::fs::write(
+            &a,
+            r#"{"lane":"Security","model":"claude:sonnet","status":{"state":"swept"},"findings":[]}"#,
+        );
+        let merged = merge(&[a]).unwrap_or_else(|e| panic!("merge failed: {e}"));
+        let text = merged.to_text();
+        assert!(text.contains("could not see"), "{text}");
+        assert!(text.contains("Nothing was run"), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

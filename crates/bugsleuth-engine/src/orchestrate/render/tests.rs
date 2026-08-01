@@ -290,3 +290,16 @@ fn rejected_findings_are_counted_in_the_sweep_line() {
 fn report_with_no_findings() -> RunReport {
     report(Vec::new())
 }
+
+#[test]
+fn a_report_says_what_the_method_could_not_see_even_when_every_lane_ran() {
+    // A clean-looking list of defects with nothing said about the method's own
+    // blind spots reads as "these are the problems". Two of these limits were
+    // learned rather than reasoned: a real contract defect turned out to be a
+    // disagreement with a remote server no reader of the code could see, and
+    // "dependency risk" was never a check against any published advisory.
+    let text = report(Vec::new()).to_text();
+    assert!(text.contains("could not see"), "{text}");
+    assert!(text.contains("Nothing was run"), "{text}");
+    assert!(text.contains("vulnerability database"), "{text}");
+}
