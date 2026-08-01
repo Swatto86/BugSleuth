@@ -109,7 +109,36 @@ decision.**
   as `NOT SWEPT` with the reason and a non-zero exit rather than as clean lanes.
   A tool that had returned "no findings" for either would have been dangerous.
 
-## Desktop app: verified and not
+## Desktop app: verified end to end
+
+**The full loop was driven through the real installed app**, by mouse and
+keyboard, and observed:
+
+1. Installed from the NSIS installer; Start-menu entry and desktop shortcut created.
+2. Window appeared with all three providers detected live — claude 2.1.214,
+   codex 0.146.0, kilo 7.4.16.
+3. Repository set, models and lanes configured down to one sweep. Unchecking
+   lanes raised the uncovered-lane warning immediately, with the Security,
+   Contract and UX columns marked.
+4. **A real review ran** — live progress streamed into the window
+   (`Round 1/1: haiku × Correctness`, then `6 findings`).
+5. The result landed on disk at
+   `%APPDATA%\BugSleuthuns\seeded-repo\correctness-haiku.json`: lane
+   Correctness, model `claude:haiku`, status swept, **6 findings, 0 rejected**,
+   every one anchored to a real line of the fixture.
+6. Both themes render and switch.
+
+That is the journey `~/.agents/tauri.md` asks for, asserting effects rather than
+calls: the JSON on disk naming the model and carrying anchored findings cannot
+be produced by anything but a real run.
+
+**Two defects it found that nothing cheaper could:**
+
+- The light theme was unreadable — hint text at ~3.4:1 on white. The app
+  compiled, rendered and behaved correctly while being unusable. Contrast is now
+  parsed out of the CSS and checked against WCAG AA in `theme.test.ts`, which
+  immediately found three more failures nobody had noticed.
+- The UI offered a "prove top N" control that `start_run` ignored entirely.
 
 **Verified by observed effect on the packaged release binary:**
 
@@ -121,14 +150,10 @@ decision.**
 - Both themes switch, and "match system" follows the OS rather than freezing.
 - The Quit button reaches the backend over the IPC and is keyboard reachable.
 
-**Not verified end to end:** clicking the tray menu, and a full click-through of
-Quit to process exit. Driving the packaged app's webview needs WebDriver or an
-installed app, and I did not install it. The Rust side of both is `app.exit(0)`
-behind a registered handler.
-
-**Also unexercised:** a real run started *from the app*. The engine underneath is
-the same code the CLI has run many times, and the command is a thin wrapper, but
-the app has not itself driven a sweep end to end.
+**Still not driven:** the tray menu, and a click-through of Quit to process
+exit. The `WebDriver` harness is committed but does not currently observe
+anything — see `DECISIONS.md` 3.10 — so those were checked by construction and
+by the in-app Quit reaching the backend over the IPC, not by clicking the tray.
 
 ## Known gaps
 
