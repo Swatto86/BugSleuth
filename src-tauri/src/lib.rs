@@ -52,7 +52,6 @@ pub fn run() {
             commands::pick_directory,
             commands::frontend_ready,
             commands::quit,
-            commands::billing_routes,
             catalogue::available_models,
         ])
         .run(tauri::generate_context!())

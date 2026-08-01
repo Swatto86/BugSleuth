@@ -55,7 +55,6 @@ const ui = {
   planSummary: el<HTMLSpanElement>("plan-summary"),
   run: el<HTMLButtonElement>("run"),
   quit: el<HTMLButtonElement>("quit"),
-  billing: el<HTMLParagraphElement>("billing"),
 };
 
 let settings: Settings = {
@@ -171,28 +170,7 @@ function render(): void {
 function refresh(): void {
   renderCoverage();
   renderPlanSummary();
-  void renderBilling();
   void persist();
-}
-
-/**
- * Say which account each model will spend from.
- *
- * Only Kilo can reach one model through several billing routes, and it encodes
- * which in the id — `kilo/z-ai/glm-5` spends Kilo Gateway credit while
- * `openrouter/z-ai/glm-5` spends your own OpenRouter key. Same model, different
- * bill, and nothing in the run output would tell you which. Better shown before
- * a run than worked out afterwards.
- */
-async function renderBilling(): Promise<void> {
-  try {
-    const routes = await invoke<[string, string][]>("billing_routes", { settings });
-    ui.billing.textContent = routes.length
-      ? routes.map(([model, route]) => `${model} → ${route}`).join(" · ")
-      : "";
-  } catch {
-    ui.billing.textContent = "";
-  }
 }
 
 function setStatus(text: string, kind: "" | "running" | "error" = ""): void {
@@ -323,6 +301,14 @@ async function boot(): Promise<void> {
 
   await listen<RunEvent>("run-progress", (event) => {
     progressLog.push(describe(event.payload));
+    // Once the run has finished, the pane holds the report — the thing the whole
+    // run was for. A late progress event must not paint over it.
+    //
+    // This is not hypothetical: the last sweep's progress event and the
+    // finished event are emitted back to back, and on the first real run
+    // against a large repository the progress event arrived second and replaced
+    // twenty ranked defects with a log of what had just happened.
+    if (!running) return;
     ui.output.textContent = progressLog.join(NEWLINE);
     // Keep the newest line in view without stealing focus.
     ui.output.scrollTop = ui.output.scrollHeight;

@@ -15,6 +15,7 @@ import {
   LANE_TITLES,
   batchCount,
   canRun,
+  filterGroups,
   joinId,
   preset,
   splitId,
@@ -169,4 +170,42 @@ test("an unknown prefix is treated as a Claude model, colon and all", () => {
   // same reading the engine uses. Dropping the prefix would review a different
   // model than the one written down.
   assert.deepEqual(splitId("gpt:weird"), { vendor: "claude", model: "gpt:weird" });
+});
+
+test("the model filter matches on any part of the id, including the route", () => {
+  // The id carries the route, the vendor and the model name, so one substring
+  // box covers every way someone might think of what they want.
+  const groups = [
+    { label: "Kilo Gateway (subscription)", models: ["kilo/z-ai/glm-5", "kilo/openai/gpt-latest"] },
+    { label: "OpenRouter (your key)", models: ["openrouter/z-ai/glm-5", "openrouter/x-ai/grok-4.5"] },
+  ];
+  assert.deepEqual(filterGroups(groups, "glm").flatMap((g) => g.models), [
+    "kilo/z-ai/glm-5",
+    "openrouter/z-ai/glm-5",
+  ]);
+  assert.deepEqual(filterGroups(groups, "openrouter").flatMap((g) => g.models), [
+    "openrouter/z-ai/glm-5",
+    "openrouter/x-ai/grok-4.5",
+  ]);
+});
+
+test("filter terms combine in any order, and empty groups disappear", () => {
+  // "glm openrouter" and "openrouter glm" are the same request. And a group
+  // heading left with nothing under it would claim models it no longer offers.
+  const groups = [
+    { label: "Kilo Gateway (subscription)", models: ["kilo/z-ai/glm-5"] },
+    { label: "OpenRouter (your key)", models: ["openrouter/z-ai/glm-5"] },
+  ];
+  for (const query of ["glm openrouter", "openrouter glm", "  OPENROUTER   GlM  "]) {
+    const filtered = filterGroups(groups, query);
+    assert.equal(filtered.length, 1, `${query} kept an empty group`);
+    assert.deepEqual(filtered[0]?.models, ["openrouter/z-ai/glm-5"]);
+  }
+});
+
+test("an empty filter is not a filter", () => {
+  // Blanking the box must restore the full list, not leave it showing nothing.
+  const groups = [{ label: "Claude", models: ["sonnet", "opus"] }];
+  assert.deepEqual(filterGroups(groups, ""), groups);
+  assert.deepEqual(filterGroups(groups, "   "), groups);
 });

@@ -262,22 +262,6 @@ fn non_empty(value: &str) -> Option<&str> {
     Some(value.trim()).filter(|v| !v.is_empty())
 }
 
-/// Which account each configured model will spend from, where that is knowable.
-///
-/// Only Kilo can reach one model through several billing routes, so only Kilo
-/// returns anything. Shown before a run, because afterwards is too late to care.
-#[tauri::command]
-pub fn billing_routes(settings: Settings) -> Vec<(String, String)> {
-    settings
-        .models
-        .iter()
-        .filter_map(|model| {
-            bugsleuth_engine::sweep::billing_route(&model.id)
-                .map(|route| (model.id.clone(), route.to_string()))
-        })
-        .collect()
-}
-
 /// Exit the application for real.
 ///
 /// The window's close button hides to the tray, so without this the only way

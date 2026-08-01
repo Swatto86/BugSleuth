@@ -66,20 +66,6 @@ impl Vendor {
     }
 }
 
-/// Which account a `vendor:model` spec will spend from, when that is knowable.
-///
-/// Only Kilo can reach the same model through several billing routes, and it
-/// encodes which in the model id. Worth surfacing before a run rather than
-/// after: `kilo:kilo/z-ai/glm-5` and `kilo:openrouter/z-ai/glm-5` are the same
-/// model billed to different places, and nothing in the output would say which.
-pub fn billing_route(spec: &str) -> Option<&'static str> {
-    let (vendor, model) = Vendor::parse(spec);
-    match vendor {
-        Vendor::Kilo => Some(kilo::route_of(model).describe()),
-        _ => None,
-    }
-}
-
 pub struct Request<'a> {
     pub repo: &'a Path,
     pub lane: Lane,
@@ -274,22 +260,6 @@ pub async fn preflight() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn only_kilo_reports_a_billing_route_because_only_kilo_has_a_choice() {
-        assert_eq!(billing_route("sonnet"), None);
-        assert_eq!(billing_route("codex:gpt-5.6"), None);
-        assert!(
-            billing_route("kilo:openrouter/z-ai/glm-5")
-                .unwrap_or_default()
-                .contains("OpenRouter")
-        );
-        assert!(
-            billing_route("kilo:kilo/z-ai/glm-5")
-                .unwrap_or_default()
-                .contains("Gateway")
-        );
-    }
 
     #[test]
     fn a_bare_model_name_means_claude_so_the_common_case_stays_short() {

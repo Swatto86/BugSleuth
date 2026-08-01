@@ -111,6 +111,7 @@ label.field > span {
 
 input[type="text"],
 input[type="number"],
+input[type="search"],
 select {
   background: var(--bg-sunken);
   color: var(--text);
@@ -124,6 +125,7 @@ select {
 
 input[type="text"]:focus-visible,
 input[type="number"]:focus-visible,
+input[type="search"]:focus-visible,
 select:focus-visible,
 button:focus-visible,
 [role="switch"]:focus-visible,
@@ -216,19 +218,6 @@ table.matrix input[type="checkbox"] {
 td.model-id {
   font-family: "Cascadia Mono", ui-monospace, "Consolas", monospace;
   user-select: text;
-}
-
-/*
-  The model menu is the widest control on the row and the one with the longest
-  values — Kilo ids run to `openrouter/anthropic/claude-opus-5`. Given room it
-  would stretch the table past the window, so it is capped and allowed to
-  truncate; the full id is still readable once the menu is open.
-*/
-td.model-id select,
-td.model-id input.model-text {
-  width: 100%;
-  max-width: 320px;
-  font-family: inherit;
 }
 
 table.matrix td.effort-cell {
@@ -387,4 +376,31 @@ footer .status.error {
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
+}
+
+/*
+  The model picker is a filter box above its menu.
+
+  Kilo offers 638 models, which is past what any menu presents usefully, so the
+  select keeps its route grouping and gains a search box rather than being
+  replaced by a flat combobox — grouping is what says which account a model
+  spends from, and that is worth more than the tidier control would be.
+*/
+.model-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 320px;
+}
+
+.model-picker select,
+.model-picker input.model-filter,
+td.model-id input.model-text {
+  width: 100%;
+  font-family: inherit;
+}
+
+.model-picker input.model-filter {
+  font-size: 12px;
+  padding: 3px 8px;
 }
