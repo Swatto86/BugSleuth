@@ -51,7 +51,7 @@ async fn run_all(args: RunArgs) -> Result<()> {
     .await?;
 
     print!("{}", report.to_text());
-    if let Some(path) = args.prompt_out.as_deref() {
+    if let Some(dir) = args.prompt_out.as_deref() {
         let skipped: Vec<String> = report
             .gaps
             .iter()
@@ -64,13 +64,13 @@ async fn run_all(args: RunArgs) -> Result<()> {
                 )
             })
             .collect();
-        let prompt = bugsleuth_engine::handoff::prompt(
+        write_prompts(
+            dir,
             &repo.display().to_string(),
             &report.ranked,
             &skipped,
             report.swept.len(),
-        );
-        write_prompt(path, &prompt)?;
+        )?;
     }
 
     // Proving is the expensive half, so it only runs when explicitly asked for.
@@ -104,19 +104,24 @@ async fn run_all(args: RunArgs) -> Result<()> {
     Ok(())
 }
 
-/// Write the fix prompt, if one was asked for.
+/// Write the bundle and the per-defect prompts.
 ///
 /// Reported on stderr rather than stdout so the report itself stays pipeable.
-fn write_prompt(path: &std::path::Path, prompt: &str) -> Result<()> {
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, prompt)
-        .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", path.display()))?;
+fn write_prompts(
+    dir: &std::path::Path,
+    repo: &str,
+    ranked: &[bugsleuth_judge::Ranked],
+    skipped: &[String],
+    sweeps: usize,
+) -> Result<()> {
+    let bundle = bugsleuth_engine::handoff::write_all(dir, repo, ranked, skipped, sweeps)
+        .map_err(|e| anyhow::anyhow!("cannot write prompts to {}: {e}", dir.display()))?;
     eprintln!(
         "
-wrote the fix prompt to {}",
-        path.display()
+wrote {} and {} per-defect prompt{}",
+        bundle.display(),
+        ranked.len(),
+        if ranked.len() == 1 { "" } else { "s" }
     );
     Ok(())
 }
@@ -124,10 +129,18 @@ wrote the fix prompt to {}",
 fn run_judge(args: JudgeArgs) -> Result<()> {
     let merged = merge::merge(&args.reports)?;
     print!("{}", merged.to_text());
-    if let Some(path) = args.prompt_out.as_deref() {
-        write_prompt(
-            path,
-            &merged.to_fix_prompt(&args.repo.display().to_string()),
+    if let Some(dir) = args.prompt_out.as_deref() {
+        let skipped: Vec<String> = merged
+            .unswept
+            .iter()
+            .map(|m| format!("{} lane, by {} — {}", m.lane, m.model, m.reason))
+            .collect();
+        write_prompts(
+            dir,
+            &args.repo.display().to_string(),
+            &merged.ranked,
+            &skipped,
+            merged.sources.len(),
         )?;
     }
 

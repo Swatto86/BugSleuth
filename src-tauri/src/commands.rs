@@ -141,13 +141,20 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
                 // minutes and the window can be closed; losing the output to a
                 // stray click would be the worst possible ending.
                 let prompt = fix_prompt(&repo, &report);
-                let path = out_dir.join("fix-prompt.md");
-                let saved = std::fs::write(&path, &prompt).is_ok();
+                let saved = bugsleuth_engine::handoff::write_all(
+                    &out_dir,
+                    &repo.display().to_string(),
+                    &report.ranked,
+                    &gap_lines(&report),
+                    report.swept.len(),
+                )
+                .ok();
                 serde_json::json!({
                     "ok": true,
                     "text": text,
                     "prompt": prompt,
-                    "promptPath": saved.then(|| path.display().to_string()),
+                    "promptPath": saved.map(|p| p.display().to_string()),
+                    "promptCount": report.ranked.len(),
                 })
             }
             Err(error) => serde_json::json!({ "ok": false, "text": error.to_string() }),
@@ -158,9 +165,9 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
     Ok(())
 }
 
-/// The defects as a prompt for a coding agent.
-fn fix_prompt(repo: &std::path::Path, report: &orchestrate::RunReport) -> String {
-    let skipped: Vec<String> = report
+/// Every lane nobody reviewed, as one line each.
+fn gap_lines(report: &orchestrate::RunReport) -> Vec<String> {
+    report
         .gaps
         .iter()
         .map(|gap| {
@@ -171,11 +178,15 @@ fn fix_prompt(repo: &std::path::Path, report: &orchestrate::RunReport) -> String
                 gap.reason
             )
         })
-        .collect();
+        .collect()
+}
+
+/// The defects as a prompt for a coding agent.
+fn fix_prompt(repo: &std::path::Path, report: &orchestrate::RunReport) -> String {
     bugsleuth_engine::handoff::prompt(
         &repo.display().to_string(),
         &report.ranked,
-        &skipped,
+        &gap_lines(report),
         report.swept.len(),
     )
 }

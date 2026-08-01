@@ -10,8 +10,10 @@
 //! each defect is a self-contained work order, because an implementer told to
 //! fix defect 7 should not have to reconstruct defects 1 to 6 to understand it.
 
-use bugsleuth_domain::Finding;
 use bugsleuth_judge::Ranked;
+
+mod work_order;
+pub use work_order::work_order;
 
 /// Assemble the whole prompt: instructions, what was skipped, then the work.
 ///
@@ -24,7 +26,7 @@ use bugsleuth_judge::Ranked;
 /// repository nobody looked at.
 #[must_use]
 pub fn prompt(repo: &str, ranked: &[Ranked], not_reviewed: &[String], sweeps: usize) -> String {
-    let mut out = preamble(repo);
+    let mut out = String::new();
 
     if !not_reviewed.is_empty() {
         out.push_str("\n## What was NOT reviewed\n\n");
@@ -49,86 +51,97 @@ pub fn prompt(repo: &str, ranked: &[Ranked], not_reviewed: &[String], sweeps: us
             sweeps,
         ));
     }
+
+    let mut full = preamble(repo);
+    full.push_str(&size_note(&out, ranked.len()));
+    full.push_str(&out);
+    full
+}
+
+/// A rough token count, and a warning about the failure it invites.
+///
+/// A local model given more than its context can hold does not refuse — it
+/// truncates and answers confidently about the part it received. Measured on a
+/// real repository this prompt reached ~23,700 tokens for 23 defects, which
+/// overruns a 32k model once file reads and output are added, and is cut to
+/// nothing useful by a runtime left at its 4,096 default. That failure is
+/// invisible from both ends, so the document states its own size and gives a
+/// check the reader can actually perform.
+///
+/// Characters over four is the usual rough ratio. It is approximate and says
+/// so: an estimate that prompts someone to check beats no estimate at all.
+fn size_note(body: &str, defects: usize) -> String {
+    let tokens = body.chars().count() / 4;
+    format!(
+        "\n## Before you start: is this whole document in your context?\n\n\
+         This prompt describes **{defects} defects** and is roughly \
+         **{tokens} tokens**.\n\n\
+         If your context window cannot hold all of it, you will not be told — \
+         you will simply receive the beginning and answer about that, which \
+         looks identical to answering about everything. So check: if you cannot \
+         see a heading numbered `{defects}.` near the end of this document, you \
+         have been truncated. Say so and stop.\n\n\
+         Each defect is also available as its own file, `fix-prompt-01.md` \
+         onward, next to this one. Those are self-contained and small. Use them \
+         rather than this if the whole thing does not fit.\n"
+    )
+}
+
+/// One defect on its own, as a complete standalone prompt.
+///
+/// The same work order with the same instructions around it, so a small model
+/// can be handed one defect at a time without losing the scepticism or the
+/// requirement to leave a test behind — which is also the workflow the bundle
+/// asks for, made structural rather than merely instructed.
+#[must_use]
+pub fn single(repo: &str, entry: &Ranked, total: usize, sweeps: usize) -> String {
+    let mut out = preamble(repo);
+    out.push_str(&format!(
+        "\n## This is defect {} of {}\n\n\
+         The others are in the files beside this one. Fix only this one, then \
+         stop and report.\n",
+        entry.position, total
+    ));
+    out.push_str(&work_order(
+        entry.position,
+        entry.cluster.representative(),
+        entry.cluster.agreement,
+        sweeps,
+    ));
     out
 }
 
-/// One defect, written as a work order.
+/// Write the bundle and one file per defect into `dir`.
 ///
-/// `position` is its rank in the merged report, so a person and a model reading
-/// the same document are talking about the same number.
-pub fn work_order(position: usize, finding: &Finding, agreement: usize, sources: usize) -> String {
-    let mut out = String::new();
-    let anchor = &finding.anchor;
+/// Returns the bundle's path. Per-defect files are best-effort: failing to
+/// write one is not a reason to lose the bundle, which is what most people use.
+pub fn write_all(
+    dir: &std::path::Path,
+    repo: &str,
+    ranked: &[Ranked],
+    not_reviewed: &[String],
+    sweeps: usize,
+) -> std::io::Result<std::path::PathBuf> {
+    std::fs::create_dir_all(dir)?;
 
-    out.push_str(&format!(
-        "\n### {position}. [{}] {}\n\n",
-        finding.severity.as_str().to_uppercase(),
-        finding.title
-    ));
-    out.push_str(&format!("- **Where:** `{}`:{}\n", anchor.file, anchor.line));
-    // Reported, but no longer called confidence and no longer ranked on.
-    // Measured cross-vendor agreement is near zero — 0 of 7 pairs in an
-    // experiment built to produce it — so "1 of 7" says almost nothing about
-    // whether a defect is real. It mostly says the other sweeps were reading
-    // something else. Labelling that "confidence" invited exactly the wrong
-    // inference.
-    out.push_str(&format!(
-        "- **Reported by:** {agreement} of {sources} sweeps that ran\n"
-    ));
-    if anchor.was_corrected() {
-        // Worth saying: the model's own line number was wrong, so an implementer
-        // searching for the quoted code should trust the corrected number.
-        out.push_str(&format!(
-            "- **Note:** the reviewer said line {}; the code was actually found at {}\n",
-            anchor.claimed_line, anchor.line
-        ));
-    }
-    out.push_str(&format!(
-        "\n**The code as it stands** (`{}`):\n\n",
-        anchor.file
-    ));
-    out.push_str("```\n");
-    out.push_str(anchor.snippet.trim_end());
-    out.push_str("\n```\n");
-    out.push_str(&format!("\n**Why it is wrong:** {}\n", finding.explanation));
-    out.push_str(&format!(
-        "\n**How it fails:** {}\n",
-        finding.failure_scenario
-    ));
-
-    let fix = &finding.fix;
-    // A finding with no plan says so. Silence here would read as "no fix
-    // needed", which is the opposite of what an empty plan means.
-    if fix.approach.trim().is_empty() && fix.edits.is_empty() {
-        out.push_str(
-            "\n**Fix:** the reviewer returned no fix plan for this defect. \
-             Diagnose it from the evidence above before changing anything.\n",
-        );
-        return out;
-    }
-
-    if !fix.approach.trim().is_empty() {
-        out.push_str(&format!("\n**Approach:** {}\n", fix.approach));
-    }
-    if !fix.edits.is_empty() {
-        out.push_str("\n**Edits, in order:**\n");
-        for (n, edit) in fix.edits.iter().enumerate() {
-            out.push_str(&format!(
-                "\n{}. `{}` — {}\n\n{}\n",
-                n + 1,
-                edit.file,
-                edit.location,
-                indent(&edit.change)
-            ));
+    // Per-defect files from a previous, longer run would otherwise sit beside
+    // the new ones and read as part of this report.
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            if name.starts_with("fix-prompt-") && name.ends_with(".md") {
+                let _ = std::fs::remove_file(entry.path());
+            }
         }
     }
-    if !fix.verification.trim().is_empty() {
-        out.push_str(&format!("\n**Prove it is fixed:** {}\n", fix.verification));
+
+    let bundle = dir.join("fix-prompt.md");
+    std::fs::write(&bundle, prompt(repo, ranked, not_reviewed, sweeps))?;
+    for entry in ranked {
+        let path = dir.join(format!("fix-prompt-{:02}.md", entry.position));
+        let _ = std::fs::write(path, single(repo, entry, ranked.len(), sweeps));
     }
-    if !fix.risks.trim().is_empty() {
-        out.push_str(&format!("\n**Watch out for:** {}\n", fix.risks));
-    }
-    out
+    Ok(bundle)
 }
 
 /// The opening of the prompt, addressed to whoever is going to do the work.
@@ -198,24 +211,10 @@ fn short_reason(gap: &str) -> String {
     format!("{short}…")
 }
 
-/// Indent a block so it renders as a fenced code chunk inside a list item.
-fn indent(text: &str) -> String {
-    text.lines()
-        .map(|line| {
-            if line.is_empty() {
-                String::new()
-            } else {
-                format!("   {line}")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bugsleuth_domain::{FindingId, LaneId, ModelId, Severity, VerifiedAnchor};
+    use bugsleuth_domain::{Finding, FindingId, LaneId, ModelId, Severity, VerifiedAnchor};
 
     fn finding(fix: bugsleuth_domain::FixPlan) -> Finding {
         Finding {
@@ -233,50 +232,6 @@ mod tests {
             explanation: "No check for an empty inventory.".into(),
             failure_scenario: "An empty inventory panics.".into(),
             fix,
-        }
-    }
-
-    #[test]
-    fn a_defect_with_no_fix_plan_says_so_rather_than_going_quiet() {
-        // Silence would read as "nothing to do here", which is the opposite of
-        // what a missing plan means — and this is the case that happens whenever
-        // an older sweep report is merged.
-        let text = work_order(1, &finding(Default::default()), 1, 3);
-        assert!(text.contains("no fix plan"), "{text}");
-    }
-
-    #[test]
-    fn a_corrected_line_number_is_called_out_so_the_right_one_is_used() {
-        // The implementer will go to a line. If the reviewer's number was wrong
-        // and we show both without comment, they may pick the wrong one.
-        let text = work_order(1, &finding(Default::default()), 1, 3);
-        assert!(text.contains("said line 40"), "{text}");
-        assert!(text.contains("actually found at 42"), "{text}");
-    }
-
-    #[test]
-    fn the_work_order_carries_every_part_of_the_plan() {
-        let plan = bugsleuth_domain::FixPlan {
-            approach: "Guard the empty case".into(),
-            edits: vec![bugsleuth_domain::FixEdit {
-                file: "src/price.rs".into(),
-                location: "fn average_price".into(),
-                change: "if items.is_empty() { return 0; }".into(),
-            }],
-            verification: "cargo test average_price_of_empty".into(),
-            risks: "checked both callers".into(),
-        };
-        let text = work_order(3, &finding(plan), 2, 3);
-        for expected in [
-            "Guard the empty case",
-            "fn average_price",
-            "items.is_empty()",
-            "cargo test average_price_of_empty",
-            "checked both callers",
-            "2 of 3 sweeps",
-            "src/price.rs",
-        ] {
-            assert!(text.contains(expected), "missing {expected:?} in\n{text}");
         }
     }
 
@@ -303,5 +258,70 @@ mod tests {
     fn a_gap_with_no_quoted_output_is_left_alone() {
         let gap = "Security lane, by claude:sonnet — the claude CLI exited with code 1";
         assert_eq!(short_reason(gap), gap);
+    }
+
+    #[test]
+    fn the_bundle_states_its_own_size_and_how_to_avoid_being_truncated() {
+        // The failure this guards against is invisible from both ends: a model
+        // given more than its context holds answers confidently about the part
+        // it received, and the reader cannot tell the difference.
+        let ranked = vec![ranked_of(1), ranked_of(2)];
+        let text = prompt("C:/x", &ranked, &[], 3);
+        assert!(
+            text.contains("**2 defects**"),
+            "the defect count is not stated"
+        );
+        assert!(text.contains("tokens"), "no size estimate");
+        assert!(
+            text.contains("you will not be told"),
+            "truncation is not warned about"
+        );
+        assert!(
+            text.contains("fix-prompt-01.md"),
+            "the fallback is not offered"
+        );
+    }
+
+    #[test]
+    fn a_single_defect_prompt_stands_on_its_own() {
+        // Handed to a small model alone it must still carry the scepticism and
+        // the leave-a-test rule, or the per-defect route is a downgrade.
+        let entry = ranked_of(2);
+        let text = single("C:/x", &entry, 5, 3);
+        assert!(text.contains("defect 2 of 5"));
+        assert!(text.contains("claim to verify"), "lost the scepticism");
+        assert!(text.contains("fail before"), "lost the test requirement");
+        assert!(text.contains("Divides by zero"), "lost the defect itself");
+    }
+
+    #[test]
+    fn writing_prompts_clears_a_previous_runs_per_defect_files() {
+        // A shorter run leaving fix-prompt-09.md behind would have it read as
+        // part of this report.
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-writeall-tests")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{e}"));
+        std::fs::write(dir.join("fix-prompt-09.md"), "stale").unwrap_or_else(|e| panic!("{e}"));
+
+        write_all(&dir, "C:/x", &[ranked_of(1)], &[], 1).unwrap_or_else(|e| panic!("{e}"));
+
+        assert!(dir.join("fix-prompt.md").exists());
+        assert!(dir.join("fix-prompt-01.md").exists());
+        assert!(
+            !dir.join("fix-prompt-09.md").exists(),
+            "a per-defect prompt from an earlier run survived"
+        );
+    }
+
+    fn ranked_of(position: usize) -> Ranked {
+        Ranked {
+            position,
+            cluster: bugsleuth_judge::Cluster {
+                findings: vec![finding(Default::default())],
+                agreement: 1,
+            },
+        }
     }
 }
