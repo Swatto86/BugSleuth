@@ -123,7 +123,8 @@ keyboard, and observed:
 4. **A real review ran** — live progress streamed into the window
    (`Round 1/1: haiku × Correctness`, then `6 findings`).
 5. The result landed on disk at
-   `%APPDATA%\BugSleuthuns\seeded-repo\correctness-haiku.json`: lane
+   `%APPDATA%\BugSleuth
+uns\seeded-repo\correctness-haiku.json`: lane
    Correctness, model `claude:haiku`, status swept, **6 findings, 0 rejected**,
    every one anchored to a real line of the fixture.
 6. Both themes render and switch.
@@ -134,10 +135,12 @@ be produced by anything but a real run.
 
 **Two defects it found that nothing cheaper could:**
 
-- The light theme was unreadable — hint text at ~3.4:1 on white. The app
-  compiled, rendered and behaved correctly while being unusable. Contrast is now
-  parsed out of the CSS and checked against WCAG AA in `theme.test.ts`, which
-  immediately found three more failures nobody had noticed.
+- Several colour pairs missed WCAG AA: light hint text at 3.4:1, dark hint text
+  at 3.58:1, the light primary button's own label at 3.68:1, and control borders
+  at 1.6:1 and 2.15:1 against the 3:1 a component boundary needs. None looked
+  broken enough to file a bug against — at native resolution the light theme
+  reads perfectly well — which is the point: an opinion cannot see a 3.4 that
+  should be a 4.5. `theme.test.ts` now parses the CSS and measures every pair.
 - The UI offered a "prove top N" control that `start_run` ignored entirely.
 
 **Verified by observed effect on the packaged release binary:**

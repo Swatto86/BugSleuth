@@ -1,10 +1,12 @@
 /**
  * Contrast, enforced rather than eyeballed.
  *
- * The light palette was originally chosen by eye and was genuinely unreadable:
- * hint text sat at roughly 3.4:1 on white, which looks acceptable in isolation
- * and washes out completely in a real window. Nothing in the build could see
- * it — the app compiled, rendered, and behaved correctly while being unusable.
+ * The palettes were originally chosen by eye, and several pairs quietly missed
+ * WCAG AA: light hint text at 3.4:1, dark hint text at 3.58:1, the light primary
+ * button's own label at 3.68:1, and control borders at 1.6:1 and 2.15:1 against
+ * the 3:1 a component boundary needs. None of them looked broken enough to file
+ * a bug against, which is the point — an opinion cannot see a 3.4 that should
+ * be a 4.5, and a measurement can.
  *
  * So the palette is parsed out of `theme.css` and every foreground/background
  * pair the UI actually uses is checked against WCAG AA. CSS stays the single

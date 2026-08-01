@@ -2,10 +2,12 @@
   Theming.
 
   Contrast is enforced, not eyeballed: `theme.test.ts` parses this file and
-  fails if any foreground/background pair drops below WCAG AA. The light palette
-  was originally set by eye and was genuinely unreadable — hint text sat at
-  about 3.4:1 on white, which looked fine in a mockup and washed out completely
-  in the real window.
+  fails if any foreground/background pair drops below WCAG AA. The palettes were
+  originally set by eye and several pairs missed it — light hint text at 3.4:1,
+  dark hint text at 3.58:1, the light primary button's own label at 3.68:1, and
+  control borders at 1.6:1 and 2.15:1 against the 3:1 a component boundary
+  needs. All were legible enough that nobody would have filed a bug, which is
+  exactly why a measurement beats an opinion here.
 
   Every colour is a custom property on :root, and dark is the default because
   the window is configured with a dark background to avoid a startup flash —
