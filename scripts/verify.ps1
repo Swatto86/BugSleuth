@@ -51,13 +51,23 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'a source file is over the hard line cap' }
 
     if ($Package) {
-        Write-Host '== packaged build ==' -ForegroundColor Cyan
+        # A full clean first, and this is not belt-and-braces. Tauri's own build
+        # script decides dev-vs-production and cargo caches that decision. Once a
+        # plain `cargo build --release` has recorded "dev", every later
+        # `tauri build` reuses it and silently produces an app whose window is
+        # blank without a dev server. `cargo clean -p bugsleuth-app` is not
+        # enough - the poisoned cache belongs to the *dependency*.
+        Write-Host '== packaged build (clean) ==' -ForegroundColor Cyan
+        cargo clean --release
         cargo tauri build
         if ($LASTEXITCODE -ne 0) { throw 'the packaged Tauri build failed' }
     }
     else {
-        Write-Host '== release build ==' -ForegroundColor Cyan
-        cargo build --release --workspace
+        # Everything EXCEPT the app crate. Building bugsleuth-app with plain
+        # cargo is what poisons the cache described above, so the fast gate does
+        # not do it; `-Package` is the way to build the app.
+        Write-Host '== release build (libraries and CLI) ==' -ForegroundColor Cyan
+        cargo build --release --workspace --exclude bugsleuth-app
         if ($LASTEXITCODE -ne 0) { throw 'release build failed' }
     }
 

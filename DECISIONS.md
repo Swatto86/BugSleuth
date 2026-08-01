@@ -555,9 +555,19 @@ the start of this work and then not followed, because `cargo build --release`
 
 **Three traps around it, all of which cost time:**
 
-1. **Cargo caches the wrong one.** Once a plain release build has produced a
-   dev-configured artefact, a later `tauri build` can see nothing changed and
-   reuse it. `cargo clean -p bugsleuth-app` first.
+1. **Cargo caches the decision, in the wrong package.** Tauri's *own* build
+   script decides dev-vs-production and emits `DEP_TAURI_DEV`. Once a plain
+   `cargo build --release` has recorded `true`, every later `cargo tauri build`
+   reuses it — the build log shows `DEP_TAURI_DEV=true` and
+   `cargo:rustc-cfg=dev` even with `PROFILE=release` and `DEBUG=false`.
+
+   **`cargo clean -p bugsleuth-app` does not fix it**, because the poisoned
+   cache belongs to the dependency, not to the app. It needs
+   `cargo clean --release`.
+
+   The gate now avoids creating the problem at all: the fast path builds the
+   workspace `--exclude bugsleuth-app`, and `-Package` does a full clean before
+   `cargo tauri build`.
 2. **`npx tauri build` is not the same command** as `cargo tauri build`. Without
    the npm CLI package installed it fails with "could not determine executable
    to run" — quietly enough to look like a successful no-op.
