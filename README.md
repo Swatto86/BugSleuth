@@ -42,11 +42,28 @@ cargo run -p bugsleuth-cli -- sweep --repo <path> --lane correctness --model son
 with nothing after them use each CLI's own default.
 
 ```bash
+cargo run -p bugsleuth-cli -- run --repo <path> --config bugsleuth.example.json --out-dir runs/ --resume
+```
+
+Runs every configured (model x lane) pair and merges the result. Models are
+configured once and assigned the lanes they cover. Each sweep is written out as
+it lands, so `--resume` picks up a run that died without paying for the sweeps
+it already completed.
+
+```bash
+cargo run -p bugsleuth-cli -- run --repo <path> --config c.json --prove-top 5 --test-command "cargo test"
+```
+
+The same, then attempts to prove the top five merged defects with a failing
+test. This is the expensive part — one model invocation and a full test run per
+attempt — so it is off by default.
+
+```bash
 cargo run -p bugsleuth-cli -- judge run-a.json run-b.json run-c.json
 ```
 
-Merges several sweeps into one ranked list of distinct defects, recording how
-many vendors independently found each one.
+Merges sweep files you already have into one ranked list of distinct defects,
+recording how many vendors independently found each one.
 
 ```bash
 cargo run -p bugsleuth-cli -- prove --repo <git repo> --defect-file defect.md --test-command "cargo test"
@@ -81,6 +98,13 @@ repository you care about:
   thrown out whatever the model claims.
 - **API keys are read from the environment only**, never accepted as arguments,
   so they cannot reach a shell history or a process listing.
+- **"Not attempted" is never reported as "not proven".** Defects below the
+  `--prove-top` cut are labelled unattempted, because "we did not try" and "we
+  tried and failed" are different facts and the second is much stronger.
+- **Severities are not compared across lanes.** A "high" from the security lane
+  and a "high" from the correctness lane were assigned by models answering
+  different questions, so a multi-lane report says so rather than implying a
+  ranking nobody made.
 
 ## Building
 

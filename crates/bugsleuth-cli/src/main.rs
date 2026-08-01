@@ -2,6 +2,7 @@
 //! every anchor, and print what survived.
 
 mod brief;
+mod cli;
 mod merge;
 mod orchestrate;
 mod plan;
@@ -13,149 +14,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Result;
-use bugsleuth_domain::Lane;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
-#[derive(Parser)]
-#[command(
-    name = "bugsleuth",
-    about = "Adversarial cross-vendor code review",
-    version
-)]
-struct Cli {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand)]
-enum Command {
-    /// Run one lane against a repository.
-    Sweep(SweepArgs),
-    /// Ask a model to demonstrate a defect with a failing test, then check the
-    /// attempt by running the tests independently.
-    Prove(ProveArgs),
-    /// Run every configured (model x lane) pair and produce one merged report.
-    Run(RunArgs),
-    /// Merge several sweep reports into one ranked list of distinct defects.
-    Judge(JudgeArgs),
-    /// Check that a configured provider CLI can be found and run.
-    Preflight,
-}
-
-#[derive(Parser)]
-struct RunArgs {
-    /// Repository to review.
-    #[arg(long)]
-    repo: PathBuf,
-    /// JSON file assigning lanes to models.
-    #[arg(long)]
-    config: PathBuf,
-    /// Limit the review to these paths.
-    #[arg(long)]
-    scope: Option<String>,
-    #[arg(long, default_value_t = 40)]
-    max_turns: u32,
-    #[arg(long, default_value_t = 1500)]
-    timeout_secs: u64,
-    /// Directory for each individual sweep's JSON, so a run that dies part way
-    /// through does not discard the sweeps already paid for.
-    #[arg(long)]
-    out_dir: Option<PathBuf>,
-    /// Reuse successful sweeps already in --out-dir instead of paying for them
-    /// again. Failed sweeps are retried.
-    #[arg(long, requires = "out_dir")]
-    resume: bool,
-    #[arg(long)]
-    use_api_key: bool,
-    /// Attempt to prove the top N merged defects with a failing test. 0 (the
-    /// default) proves nothing. Each attempt costs a model invocation and a full
-    /// test run, so this is the expensive part of a run.
-    #[arg(long, default_value_t = 0, requires = "test_command")]
-    prove_top: usize,
-    /// Command that runs the target's tests, e.g. "cargo test".
-    #[arg(long)]
-    test_command: Option<String>,
-    /// Model used for proof attempts. Kilo cannot prove.
-    #[arg(long, default_value = "sonnet")]
-    prove_model: String,
-}
-
-#[derive(Parser)]
-struct JudgeArgs {
-    /// Sweep report JSON files, as written by `sweep --json-out`.
-    #[arg(required = true)]
-    reports: Vec<PathBuf>,
-    /// Write the merged report here as JSON.
-    #[arg(long)]
-    json_out: Option<PathBuf>,
-}
-
-#[derive(Parser)]
-struct ProveArgs {
-    /// Repository containing the defect. It is never modified — the attempt runs
-    /// in a throwaway git worktree made from it.
-    #[arg(long)]
-    repo: PathBuf,
-    /// Commit to base the worktree on.
-    #[arg(long, default_value = "HEAD")]
-    commit: String,
-    /// Description of the defect to prove. Use `--defect-file` for a long one.
-    #[arg(long, conflicts_with = "defect_file")]
-    defect: Option<String>,
-    /// Read the defect description from a file.
-    #[arg(long)]
-    defect_file: Option<PathBuf>,
-    #[arg(long, default_value = "sonnet")]
-    model: String,
-    /// Command that runs the tests, e.g. "cargo test -p mycrate --lib".
-    #[arg(long, default_value = "cargo test")]
-    test_command: String,
-    /// Name for the throwaway branch and worktree directory.
-    #[arg(long, default_value = "proof")]
-    label: String,
-    #[arg(long, default_value_t = 40)]
-    max_turns: u32,
-    #[arg(long, default_value_t = 1200)]
-    timeout_secs: u64,
-    #[arg(long, default_value_t = 600)]
-    test_timeout_secs: u64,
-    /// Write the model's added test as a patch here, so it can be replayed
-    /// against fixed code.
-    #[arg(long)]
-    patch_out: Option<PathBuf>,
-    #[arg(long)]
-    use_api_key: bool,
-}
-
-#[derive(Parser)]
-struct SweepArgs {
-    /// Repository to review.
-    #[arg(long)]
-    repo: PathBuf,
-    /// Review mandate: correctness, security, contract, or ux.
-    #[arg(long)]
-    lane: Lane,
-    /// Model alias or id, e.g. sonnet, opus, haiku.
-    #[arg(long, default_value = "sonnet")]
-    model: String,
-    /// Limit the review to these paths (passed to the model as guidance).
-    #[arg(long)]
-    scope: Option<String>,
-    /// Hard ceiling on agent turns, the main guard against one lane consuming
-    /// the whole subscription quota.
-    #[arg(long, default_value_t = 30)]
-    max_turns: u32,
-    #[arg(long, default_value_t = 900)]
-    timeout_secs: u64,
-    /// Write the machine-readable report here in addition to printing text.
-    #[arg(long)]
-    json_out: Option<PathBuf>,
-    /// Use an API key instead of the signed-in subscription session. The key is
-    /// read from `ANTHROPIC_API_KEY`; it is never accepted as an argument, so it
-    /// cannot end up in a shell history or a process listing.
-    #[arg(long)]
-    use_api_key: bool,
-}
+use cli::{Cli, Command, JudgeArgs, ProveArgs, RunArgs, SweepArgs};
 
 #[tokio::main]
 async fn main() -> Result<()> {
