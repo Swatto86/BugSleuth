@@ -38,6 +38,10 @@ try {
     npm run --silent build
     if ($LASTEXITCODE -ne 0) { throw 'the frontend failed to type-check or build' }
 
+    Write-Host '== frontend assets ==' -ForegroundColor Cyan
+    & "$PSScriptRoot\check-frontend-assets.ps1"
+    if ($LASTEXITCODE -ne 0) { throw 'the built frontend is incomplete' }
+
     Write-Host '== frontend tests ==' -ForegroundColor Cyan
     npm test --silent
     if ($LASTEXITCODE -ne 0) { throw 'frontend tests failed' }
