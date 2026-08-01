@@ -17,7 +17,7 @@ Last updated: 1 August 2026.
 
 ## Model invocation budget
 
-**Used: 14.** No rate limit was hit, but one Kilo sweep died with the silent
+**Used: 16.** No rate limit was hit, but one Kilo sweep died with the silent
 non-zero exit these CLIs use for an overload when three ran concurrently — which
 is why sweeps are now batched one-per-vendor.
 
@@ -81,6 +81,20 @@ So this defect currently falls between lanes. That is a real design question, no
 a bug to quietly patch: widening the UX lane to all files risks exactly the
 aesthetic-opinion pollution the file filter exists to prevent. **This needs your
 decision.**
+
+## Operational facts learned by running it on a real repository
+
+- **Vendors differ enormously in speed.** On the same crate with the same brief,
+  Claude finished in about five minutes. Codex was still working at twenty-five
+  and was killed by the timeout. Kilo failed outright. Budget for the slow one.
+- **The default timeout was too short**, now raised to 45 minutes for `run`.
+- **Three CLIs started at once is too many.** One died with the silent non-zero
+  exit these tools use for an overload, which is why sweeps are now batched
+  one-per-vendor.
+- **The failure paths all behaved correctly**, which is the reassuring part: the
+  timeout killed its child with no orphan left, and both failures were reported
+  as `NOT SWEPT` with the reason and a non-zero exit rather than as clean lanes.
+  A tool that had returned "no findings" for either would have been dangerous.
 
 ## Known gaps
 

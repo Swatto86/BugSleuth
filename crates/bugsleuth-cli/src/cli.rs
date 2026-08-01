@@ -48,7 +48,11 @@ pub(crate) struct RunArgs {
     pub(crate) scope: Option<String>,
     #[arg(long, default_value_t = 40)]
     pub(crate) max_turns: u32,
-    #[arg(long, default_value_t = 1500)]
+    /// Per-sweep timeout. Generous on purpose: on a real crate, Claude finished
+    /// in about five minutes while Codex was still working at twenty-five and
+    /// was killed. Vendors differ by far more than seems reasonable, and a
+    /// too-short timeout throws away a sweep that was nearly done.
+    #[arg(long, default_value_t = 2700)]
     pub(crate) timeout_secs: u64,
     /// Directory for each individual sweep's JSON, so a run that dies part way
     /// through does not discard the sweeps already paid for.
