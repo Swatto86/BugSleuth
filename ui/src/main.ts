@@ -9,7 +9,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import {
-  LANES,
   LANE_TITLES,
   type Lane,
 
@@ -22,25 +21,10 @@ import {
   uncoveredLanes,
   unitCount,
 } from "./model";
+import { type RunEvent, describe, listOf } from "./format";
+import { type VendorStatus, vendorPills, matrixRows } from "./view";
 
-/** Mirrors `RunEvent` in the engine. */
-type RunEvent =
-  | { kind: "batch_started"; index: number; total: number; units: string[] }
-  | { kind: "reused"; model: string; lane: string }
-  | {
-      kind: "sweep_finished";
-      model: string;
-      lane: string;
-      findings: number;
-      swept: boolean;
-      reason: string;
-    };
 
-interface VendorStatus {
-  name: string;
-  available: boolean;
-  detail: string;
-}
 
 const el = <T extends HTMLElement>(id: string): T => {
   const found = document.getElementById(id);
@@ -96,78 +80,7 @@ function applyTheme(theme: Settings["theme"]): void {
 
 // ── Rendering ───────────────────────────────────────────────────────────────
 
-function renderVendors(statuses: VendorStatus[]): void {
-  ui.vendors.replaceChildren(
-    ...statuses.map((vendor) => {
-      const pill = document.createElement("span");
-      pill.className = `pill ${vendor.available ? "ok" : "bad"}`;
-      const dot = document.createElement("span");
-      dot.className = "dot";
-      const name = document.createElement("span");
-      name.textContent = vendor.name;
-      const detail = document.createElement("span");
-      detail.className = "detail";
-      detail.textContent = vendor.available ? vendor.detail : "unavailable";
-      pill.append(dot, name, detail);
-      pill.title = vendor.detail;
-      return pill;
-    }),
-  );
-}
 
-function renderMatrix(): void {
-  ui.matrixBody.replaceChildren(
-    ...settings.models.map((model, index) => {
-      const row = document.createElement("tr");
-
-      const idCell = document.createElement("td");
-      idCell.className = "model-id";
-      const idInput = document.createElement("input");
-      idInput.type = "text";
-      idInput.value = model.id;
-      idInput.spellcheck = false;
-      idInput.setAttribute("aria-label", `Model ${index + 1} identifier`);
-      idInput.addEventListener("input", () => {
-        settings.models[index] = { ...model, id: idInput.value };
-        refresh();
-      });
-      idCell.append(idInput);
-      row.append(idCell);
-
-      for (const lane of LANES) {
-        const cell = document.createElement("td");
-        cell.className = "lane-cell";
-        const box = document.createElement("input");
-        box.type = "checkbox";
-        box.checked = model.lanes.includes(lane);
-        box.setAttribute(
-          "aria-label",
-          `${model.id || "model"} covers the ${LANE_TITLES[lane]} lane`,
-        );
-        box.addEventListener("change", () => {
-          settings.models = toggleLane(settings.models, index, lane as Lane, box.checked);
-          render();
-        });
-        cell.append(box);
-        row.append(cell);
-      }
-
-      const removeCell = document.createElement("td");
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.textContent = "Remove";
-      remove.setAttribute("aria-label", `Remove ${model.id || "this model"}`);
-      remove.addEventListener("click", () => {
-        settings.models = settings.models.filter((_, i) => i !== index);
-        render();
-      });
-      removeCell.append(remove);
-      row.append(removeCell);
-
-      return row;
-    }),
-  );
-}
 
 /**
  * Surface uncovered lanes prominently, and mark the column heads.
@@ -196,10 +109,6 @@ function renderCoverage(): void {
     `the same as nothing being wrong.`;
 }
 
-function listOf(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
-}
 
 function renderPlanSummary(): void {
   const units = unitCount(settings.models);
@@ -210,7 +119,23 @@ function renderPlanSummary(): void {
 }
 
 function render(): void {
-  renderMatrix();
+  ui.matrixBody.replaceChildren(
+    ...matrixRows(settings.models, {
+      onRename: (index, id) => {
+        const existing = settings.models[index];
+        if (existing) settings.models[index] = { ...existing, id };
+        refresh();
+      },
+      onToggle: (index, lane, on) => {
+        settings.models = toggleLane(settings.models, index, lane, on);
+        render();
+      },
+      onRemove: (index) => {
+        settings.models = settings.models.filter((_, i) => i !== index);
+        render();
+      },
+    }),
+  );
   refresh();
 }
 
@@ -241,24 +166,6 @@ function persist(): void {
   }, 400);
 }
 
-/**
- * Turn one engine event into a line.
- *
- * A sweep that did not run says so and why. It is never rendered as a count of
- * zero findings, which would read as "looked and found nothing".
- */
-function describe(event: RunEvent): string {
-  switch (event.kind) {
-    case "batch_started":
-      return `Round ${event.index}/${event.total}: ${event.units.join(", ")}`;
-    case "reused":
-      return `  reused ${event.model} × ${event.lane} from an earlier run`;
-    case "sweep_finished":
-      return event.swept
-        ? `  ${event.model} × ${event.lane}: ${event.findings} finding${event.findings === 1 ? "" : "s"}`
-        : `  ${event.model} × ${event.lane}: NOT SWEPT — ${event.reason}`;
-  }
-}
 
 async function startRun(): Promise<void> {
   running = true;
@@ -369,7 +276,7 @@ async function boot(): Promise<void> {
 
   setStatus("Checking providers…", "running");
   try {
-    renderVendors(await invoke<VendorStatus[]>("preflight"));
+    ui.vendors.replaceChildren(...vendorPills(await invoke<VendorStatus[]>("preflight")));
     setStatus("Ready");
   } catch (error) {
     setStatus(String(error), "error");
