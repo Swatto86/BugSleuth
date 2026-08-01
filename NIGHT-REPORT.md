@@ -372,7 +372,15 @@ The last three were found only by *running* the thing, not by reading it.
    repository dirty — the one thing BugSleuth promises not to do. Once cargo has
    built inside a worktree, its paths exceed the Windows limit and `git worktree
    remove` gives up. Only visible by checking the repository afterwards.
-9. **The judge reported one defect as two, with no agreement.** Two vendors found
+9. **The packaged app shipped a blank window.** `ui/dist` contained the
+   stylesheet but not the JavaScript, while `index.html` referenced it. Every
+   check downstream passed — vite build, the Tauri build, the installer, and the
+   app itself, which launched and showed a window. The window was simply empty.
+   Nothing that looks at exit codes or at "did a window appear" could see it;
+   only the WebDriver run, by finding no elements on the page. There is now a
+   check that parses the built index.html and confirms every asset it names is
+   present.
+10. **The judge reported one defect as two, with no agreement.** Two vendors found
    the same timezone bug but anchored it 5 lines apart; my clustering window was
    3. The seeded fixture could never have caught this — all its findings land
    within a line of each other — so the threshold looked fine until real output
