@@ -11,7 +11,7 @@ so on both real defects it was given, and correctly refused on both fabricated
 ones. Section 2 — that is the part worth your attention.
 
 **Two: the cross-vendor premise holds, on weak evidence.** All three vendors —
-Claude, Codex and Kilo — now work. On the same code with the same instructions
+Claude, Codex and Kilo — work. On the same code with the same instructions
 they produced 23 findings that merge into 11 distinct defects, and **every
 vendor missed something another one found**. Running only the best single vendor
 would have cost you 2 of the 11. Sections 4 and 5.
@@ -25,8 +25,8 @@ Nothing here is production-ready.
 
 ## 1. What got built
 
-Four small Rust libraries and a command-line harness. No user interface — that
-was explicitly out of scope for an unattended night.
+Five small Rust libraries and a command-line harness. No user interface — that
+was out of scope, and remains where your input is worth most.
 
 | Piece | What it does |
 |---|---|
@@ -36,7 +36,10 @@ was explicitly out of scope for an unattended night.
 | `verify` | Checks findings against reality: does this code exist? Does this test really fail? |
 | `bugsleuth` | The command-line harness that ties them together |
 
-Four commands work today:
+Five commands work today. The one that matters is `run`, which does the whole
+job in a single step: sweep every configured model against every lane it covers,
+merge the results into one ranked list of distinct defects, and optionally prove
+the top few with failing tests.
 
 ```bash
 bugsleuth preflight
@@ -56,6 +59,14 @@ bugsleuth sweep --repo <path> --lane correctness --model kilo:
 
 ```bash
 bugsleuth prove --repo <path> --defect-file <file> --test-command "cargo test"
+```
+
+```bash
+bugsleuth run --repo <path> --config bugsleuth.example.json --out-dir runs/ --resume
+```
+
+```bash
+bugsleuth run --repo <path> --config c.json --prove-top 5 --test-command "cargo test"
 ```
 
 ```bash
@@ -331,16 +342,48 @@ Full detail is in `DECISIONS.md`. Three that changed what I built:
 
 ## 8. Quota
 
-Cap for the night was about 40 model invocations. **Used: 7.** One M0 sweep,
-four proof attempts, and two Codex sweeps — the first of which failed instantly
-on a bad model name and cost nothing. No rate limit was hit.
+**Used: 14.** No rate limit was hit, but one Kilo sweep died with the silent
+non-zero exit these CLIs use for an overload when three ran concurrently. That
+is why sweeps are now batched one-per-vendor rather than fired off together.
 
-## 9. What I did not do
+## 9. Built after the experiments
+
+Everything above is measurement. These are the parts built once the premise had
+survived, all covered by tests but **not yet exercised against real models**
+end to end — the individual pieces have been, the assembled `run` has not:
+
+- **A judge**, merging findings from several vendors into one ranked list with an
+  agreement count. Deterministic, not another model call — see `DECISIONS.md`
+  2.16 for why the cheap version had to be beaten first.
+- **`run`**, which enumerates the whole (model x lane) product. Sweeps are
+  batched so no two invocations of the same vendor run at once, which is the
+  quota governor in its simplest useful form.
+- **`--resume`**, because a sweep costs real quota and takes tens of minutes, so
+  a run that died at unit nine of twelve must not start over.
+- **`--prove-top N`**, which closes the loop: the top N merged defects get a
+  proof attempt automatically instead of proof being a separate manual step.
+- **The third vendor, Kilo**, at your request. It needed different handling —
+  see section 6.
+
+Three traps I built and then removed, all of the same shape: nothing crashes,
+the output just quietly means something other than it appears to.
+
+- Batches were awaited in a loop, which runs futures *sequentially*. The
+  batching would have looked correct and done nothing.
+- Proof attempts run against HEAD while sweeps read the working tree. On a dirty
+  repository a real defect in uncommitted code would have been reported as "the
+  test written for it passes, so it proves nothing".
+- The same mismatch one level up: Kilo reviews a checkout of HEAD while the other
+  vendors read the working tree, so a dirty repository meant one run reviewing
+  two versions of the code. Both now warn.
+
+## 10. What I did not do
 
 - **No user interface.** Out of scope by instruction.
-- **The proof step is Claude-only.** Codex and Kilo can sweep but cannot yet be
-  asked to prove a finding. That matters: proof is the feature the whole design
-  rests on, and it currently depends on one vendor.
+- **Kilo cannot prove.** Claude and Codex both can now. Kilo is refused with a
+  stated reason: it cannot be given an output schema to enforce, so its account
+  of what it did cannot be relied on, and a proof step whose self-report cannot
+  be trusted is worse than none.
 - **Only the correctness lane has ever been run.** Security, Contract and UX
   have written mandates and have never been pointed at anything.
 - **No cross-lane severity pass.** The judge merges within a lane only.
@@ -349,7 +392,7 @@ on a bad model name and cost nothing. No rate limit was hit.
 - **Detection rate on a real codebase is unmeasured.** I measured whether a
   claimed defect can be proved, not what fraction of real defects get found.
 
-## 10. What I would do next, in order
+## 11. What I would do next, in order
 
 1. **Re-run the kill gate on a real repository.** This is the single most
    valuable next step. The fixture was too easy to separate the vendors, so the
@@ -363,10 +406,10 @@ on a bad model name and cost nothing. No rate limit was hit.
 4. **Add the proof path for Codex and Kilo**, so proof does not depend on one
    vendor.
 
-## 11. State of the repository
+## 12. State of the repository
 
 Everything is committed and green. `scripts/verify.ps1` runs the full gate:
-formatting, linting with warnings as errors, 106 tests, a release build, and a
+formatting, linting with warnings as errors, ~130 tests, a release build, and a
 check that no source file exceeds 400 lines.
 
 ```bash
