@@ -211,10 +211,28 @@ fn verify_all(
 /// Eir has no equivalent: it discovers a missing or signed-out CLI only when a
 /// real call fails. For a sweep that is worth avoiding, because the failure
 /// would otherwise arrive after the user has waited for several lanes.
-pub async fn preflight() -> Result<()> {
+/// Probe every provider CLI, returning what each said.
+///
+/// Data rather than printed text, so the desktop app and the command line can
+/// share one implementation instead of drifting apart on what "available" means.
+///
+/// Note what a success here does **not** prove: `--version` works fine for a CLI
+/// that is installed but not signed in. Only a real sweep proves authentication.
+pub async fn probe_all() -> Vec<(&'static str, Result<String, String>)> {
     let (claude, codex, kilo) = tokio::join!(claude::probe(), codex::probe(), kilo::probe());
+    vec![
+        ("claude", claude.map_err(|e| e.to_string())),
+        ("codex", codex.map_err(|e| e.to_string())),
+        ("kilo", kilo.map_err(|e| e.to_string())),
+    ]
+}
+
+/// Confirm the provider CLIs can be started before a run commits to them.
+pub async fn preflight() -> Result<()> {
+    let probes = probe_all().await;
+    let total = probes.len();
     let mut usable = 0;
-    for (name, probe) in [("claude", claude), ("codex", codex), ("kilo", kilo)] {
+    for (name, probe) in probes {
         match probe {
             Ok(version) => {
                 println!("{name}: OK ({version})");
@@ -223,10 +241,8 @@ pub async fn preflight() -> Result<()> {
             Err(error) => println!("{name}: UNAVAILABLE - {error}"),
         }
     }
-    println!(
-        "
-{usable} of 3 provider CLIs can be started."
-    );
+    println!("
+{usable} of {total} provider CLIs can be started.");
     println!("This does not prove they are signed in; only a real sweep does that.");
     if usable == 0 {
         std::process::exit(2);

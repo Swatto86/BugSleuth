@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BugSleuth</title>
+    <link rel="stylesheet" href="/src/theme.css" />
+    <link rel="stylesheet" href="/src/app.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <!--
+          The mark, inlined rather than fetched: the packaged Content Security
+          Policy allows `img-src 'self' data:` but an inline SVG needs no
+          request at all, so the title bar cannot flash an empty box.
+        -->
+        <svg class="mark" viewBox="0 0 512 512" aria-hidden="true">
+          <g transform="rotate(45 216 200)">
+            <rect x="176" y="292" width="80" height="196" rx="40" fill="#64748b" />
+          </g>
+          <circle cx="216" cy="200" r="176" fill="#e6f4fb" />
+          <ellipse cx="216" cy="200" rx="104" ry="128" fill="#0b1220" />
+          <circle cx="216" cy="90" r="42" fill="#0b1220" />
+          <path d="M216 96 L216 316" stroke="#22d3ee" stroke-width="22" stroke-linecap="round" />
+          <circle cx="216" cy="200" r="176" fill="none" stroke="#22d3ee" stroke-width="52" />
+        </svg>
+        <h1>BugSleuth</h1>
+        <span class="spacer"></span>
+        <label class="field" style="flex: 0 0 auto">
+          <span class="visually-hidden">Theme</span>
+          <select id="theme" aria-label="Theme">
+            <option value="system">Match system</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+      </header>
+
+      <main id="main">
+        <section class="panel">
+          <h2>Providers</h2>
+          <p class="hint">
+            Whether each CLI can be started. This does not prove it is signed in —
+            only a real sweep does that.
+          </p>
+          <div class="vendors" id="vendors" aria-live="polite">
+            <span class="pill"><span class="dot"></span>checking…</span>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Repository</h2>
+          <p class="hint">The code to review. It is never modified.</p>
+          <div class="row">
+            <label class="field">
+              <span>Folder</span>
+              <input id="repo" type="text" spellcheck="false" placeholder="C:\\path\\to\\repo" />
+            </label>
+            <button id="browse" type="button" style="align-self: end">Browse…</button>
+          </div>
+          <div class="row">
+            <label class="field">
+              <span>Limit to paths (optional)</span>
+              <input id="scope" type="text" spellcheck="false" placeholder="crates/core/src" />
+            </label>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Models and lanes</h2>
+          <p class="hint">
+            Tick the lanes each model covers. Two models on one lane is the point,
+            not a mistake — lanes buy coverage, doubling up buys depth.
+          </p>
+          <table class="matrix" id="matrix">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th class="lane-cell" data-lane="correctness">Correctness</th>
+                <th class="lane-cell" data-lane="security">Security</th>
+                <th class="lane-cell" data-lane="contract">Contract</th>
+                <th class="lane-cell" data-lane="ux">UX</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="matrix-body"></tbody>
+          </table>
+          <div class="row" style="margin-top: 12px">
+            <button id="add-model" type="button">Add model</button>
+            <span class="spacer" style="flex: 1"></span>
+            <button id="preset-cheap" type="button">Cheap</button>
+            <button id="preset-balanced" type="button">Balanced</button>
+            <button id="preset-deep" type="button">Deep</button>
+          </div>
+          <div class="warning-banner hidden" id="uncovered-warning" role="status"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Proof</h2>
+          <p class="hint">
+            Ask a model to demonstrate the top defects with a failing test. This is
+            the expensive part — one model invocation and a full test run each — so
+            it is off unless you ask for it.
+          </p>
+          <div class="row">
+            <label class="field" style="flex: 0 0 190px">
+              <span>Prove top N defects</span>
+              <input id="prove-top" type="number" min="0" max="25" step="1" value="0" />
+            </label>
+            <label class="field">
+              <span>Test command</span>
+              <input id="test-command" type="text" spellcheck="false" placeholder="cargo test" />
+            </label>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Result</h2>
+          <pre class="output" id="output" tabindex="0" aria-live="polite">No run yet.</pre>
+        </section>
+      </main>
+
+      <footer>
+        <span class="spinner hidden" id="spinner"></span>
+        <span class="status" id="status">Ready</span>
+        <span class="spacer" style="flex: 1"></span>
+        <span id="plan-summary"></span>
+        <button class="primary" id="run" type="button">Run review</button>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

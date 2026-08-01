@@ -1,0 +1,101 @@
+/*
+  Theming.
+
+  Every colour is a custom property on :root, and dark is the default because
+  the window is configured with a dark background to avoid a startup flash —
+  if the two disagreed you would see the wrong colour for one frame.
+
+  `[data-theme]` on <html> wins over the media query in both directions, so an
+  explicit choice always beats the system setting rather than only overriding
+  it one way.
+*/
+
+:root {
+  color-scheme: dark;
+
+  --bg: #0b1220;
+  --bg-raised: #111c30;
+  --bg-sunken: #070d18;
+  --border: #1e2d45;
+  --border-strong: #2b3f5e;
+
+  --text: #e6edf7;
+  --text-dim: #93a4bd;
+  --text-faint: #64748b;
+
+  --accent: #22d3ee;
+  --accent-strong: #06b6d4;
+  --on-accent: #04222b;
+
+  --critical: #f87171;
+  --high: #fb923c;
+  --medium: #fbbf24;
+  --low: #94a3b8;
+  --good: #4ade80;
+  --warn: #fbbf24;
+
+  --shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --bg: #f6f8fc;
+    --bg-raised: #ffffff;
+    --bg-sunken: #eaeef6;
+    --border: #d8e0ee;
+    --border-strong: #b9c6da;
+
+    --text: #0f1b2d;
+    --text-dim: #4a5a72;
+    --text-faint: #7d8aa0;
+
+    --accent: #0891b2;
+    --accent-strong: #0e7490;
+    --on-accent: #ffffff;
+
+    --critical: #dc2626;
+    --high: #ea580c;
+    --medium: #b45309;
+    --low: #64748b;
+    --good: #15803d;
+    --warn: #b45309;
+
+    --shadow: 0 8px 24px rgb(15 27 45 / 12%);
+  }
+}
+
+/* An explicit choice beats the system setting, whichever way round. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f6f8fc;
+  --bg-raised: #ffffff;
+  --bg-sunken: #eaeef6;
+  --border: #d8e0ee;
+  --border-strong: #b9c6da;
+
+  --text: #0f1b2d;
+  --text-dim: #4a5a72;
+  --text-faint: #7d8aa0;
+
+  --accent: #0891b2;
+  --accent-strong: #0e7490;
+  --on-accent: #ffffff;
+
+  --critical: #dc2626;
+  --high: #ea580c;
+  --medium: #b45309;
+  --low: #64748b;
+  --good: #15803d;
+  --warn: #b45309;
+
+  --shadow: 0 8px 24px rgb(15 27 45 / 12%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
