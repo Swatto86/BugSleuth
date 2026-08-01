@@ -33,14 +33,22 @@ describe("BugSleuth desktop app", () => {
   });
 
   it("reports which provider CLIs can be started", async () => {
-    const pills = await $$(".vendors .pill");
-    await browser.waitUntil(async () => (await pills.length) >= 3, {
-      timeout: 60_000,
-      timeoutMsg: "provider pills never rendered",
-    });
+    await browser.waitUntil(
+      async () => {
+        const pills = await $$(".vendors .pill");
+        // WebdriverIO's element array reports its length asynchronously.
+        return (await pills.length) >= 3;
+      },
+      {
+        timeout: 60_000,
+        timeoutMsg: "provider pills never rendered",
+      },
+    );
     // Preflight runs real subprocesses; every configured vendor must be listed
     // whether or not it is available, because a missing one is information.
-    const names = await Promise.all((await $$(".vendors .pill")).map((p) => p.getText()));
+    const found = await $$(".vendors .pill");
+    const names: string[] = [];
+    for (const pill of found) names.push(await pill.getText());
     const joined = names.join(" ");
     for (const vendor of ["claude", "codex", "kilo"]) {
       assert.ok(joined.includes(vendor), `${vendor} missing from ${joined}`);
@@ -67,7 +75,8 @@ describe("BugSleuth desktop app", () => {
 
     // One model, one lane: the cheapest configuration that still does real work.
     const rows = await $$("#matrix-body tr");
-    for (let i = 1; i < (await rows.length); i += 1) {
+    const rowCount = await rows.length;
+    for (let i = 1; i < rowCount; i += 1) {
       await (await $$("#matrix-body tr"))[i]!.$("button").click();
     }
     await $("#matrix-body tr:first-child td.model-id input").setValue(MODEL);

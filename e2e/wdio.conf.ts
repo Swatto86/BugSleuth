@@ -14,14 +14,57 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 
-/** The release binary. Built by `cargo build --release -p bugsleuth-app`. */
+/** The packaged binary. Built by `npx tauri build` — see the check below. */
 const application = path.resolve(root, "target/release/bugsleuth-app.exe");
+
+/**
+ * Sanity-check the binary before spending a session on it.
+ *
+ * **`cargo build --release` does not produce a shippable app.** It embeds the
+ * dev-server URL rather than the frontend, so with Vite running it looks
+ * perfect and without it the window is blank — and every check that looks at
+ * exit codes, or at whether a window appeared, passes either way. Only
+ * `cargo tauri build` bundles the frontend in.
+ *
+ * Worse, cargo caches the result: once a plain release build has produced a
+ * dev-configured artefact, a later `tauri build` may see nothing changed and
+ * reuse it. `cargo clean -p bugsleuth-app` first if in doubt.
+ *
+ * Two further traps met while getting this working, recorded so nobody repeats
+ * them: `npx tauri build` fails with "could not determine executable to run"
+ * unless the npm CLI package is installed — the cargo subcommand is what works
+ * here — and it fails *quietly* enough to look like a successful no-op.
+ */
+function assertProductionBuild(exe: string): void {
+  if (!fs.existsSync(exe)) {
+    throw new Error(`no binary at ${exe} — build it with: npx tauri build`);
+  }
+  // Freshness, not build kind. Whether the frontend is embedded cannot be seen
+  // by inspection — Tauri compresses the bundled assets, so grepping the binary
+  // for markup finds nothing either way, and the config it embeds contains
+  // devUrl in *both* kinds. The reliable signal is behavioural, and the suite
+  // itself provides it: the first spec fails immediately on a dev binary,
+  // because a blank page has no elements.
+  //
+  // What is worth checking cheaply is that the binary is not older than the
+  // frontend it is supposed to contain, which is the mistake that actually
+  // happens: edit the UI, forget to rebuild, then debug the old one.
+  const built = fs.statSync(exe).mtimeMs;
+  const distIndex = path.resolve(root, "ui/dist/index.html");
+  if (fs.existsSync(distIndex) && fs.statSync(distIndex).mtimeMs > built) {
+    throw new Error(
+      `${exe} is older than ui/dist — it does not contain the current frontend. ` +
+        `Rebuild with: cargo tauri build`,
+    );
+  }
+}
 
 let tauriDriver: ChildProcess | undefined;
 
@@ -52,6 +95,7 @@ export const config: WebdriverIO.Config = {
   ],
 
   onPrepare: () => {
+    assertProductionBuild(application);
     tauriDriver = spawn(
       "tauri-driver",
       ["--native-driver", path.resolve(root, ".webdriver/msedgedriver.exe")],

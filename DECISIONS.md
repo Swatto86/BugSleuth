@@ -534,3 +534,38 @@ from an empty workspace and did not inherit it.
 
 **Still worth doing before a release:** run the portable exe on a machine without
 the redistributable. Absent imports are good evidence, not proof that it starts.
+
+### 3.9 `cargo build --release` does not produce a shippable Tauri app
+
+**Learned the hard way, and worth more than the fix.**
+
+A binary built with `cargo build --release` embeds the *dev-server URL* rather
+than the frontend. With Vite running it looks perfect. Without it the window is
+blank — and every check available short of looking at the pixels passes:
+
+- `cargo build` exits 0.
+- The process starts and stays up.
+- A window exists, is titled correctly, and is visible.
+- The icon extracted from the executable is right.
+
+Only `cargo tauri build` bundles the frontend in. `~/.agents/tauri.md` says this
+outright — "a direct Rust build is not a packaged-app check" — and it was read at
+the start of this work and then not followed, because `cargo build --release`
+*looked* like it was producing the same artefact.
+
+**Three traps around it, all of which cost time:**
+
+1. **Cargo caches the wrong one.** Once a plain release build has produced a
+   dev-configured artefact, a later `tauri build` can see nothing changed and
+   reuse it. `cargo clean -p bugsleuth-app` first.
+2. **`npx tauri build` is not the same command** as `cargo tauri build`. Without
+   the npm CLI package installed it fails with "could not determine executable
+   to run" — quietly enough to look like a successful no-op.
+3. **You cannot tell the two apart by inspection.** Tauri compresses the
+   embedded assets, so grepping the binary for markup finds nothing either way,
+   and the config it embeds contains `devUrl` in *both* kinds.
+
+**The reliable test is behavioural.** Launch the binary with no dev server and
+check for an effect the frontend causes — this app writes its settings file once
+the UI mounts, so the file appearing is proof the frontend ran. That check takes
+ten seconds and is worth more than every static inspection above combined.
