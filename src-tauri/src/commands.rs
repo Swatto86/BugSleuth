@@ -160,17 +160,18 @@ async fn prove_top(
     if settings.prove_top == 0 {
         return String::new();
     }
+    // These read as one paragraph on screen, so the continuations matter: a
+    // multi-line literal without them bakes the source indentation into the
+    // message, and both of these shipped with a run of spaces mid-sentence.
     let command = settings.test_command.trim();
     if command.is_empty() {
-        return "
-
-Proof was requested but no test command was given, so nothing was                 attempted. That is not the same as nothing being provable."
+        return "\n\nProof was requested but no test command was given, so nothing was \
+                attempted. That is not the same as nothing being provable."
             .to_string();
     }
     if !repo.join(".git").exists() {
-        return "
-
-Proof was requested but this is not a git repository. A proof attempt                 needs a throwaway worktree, so nothing was attempted."
+        return "\n\nProof was requested but this is not a git repository. A proof attempt \
+                needs a throwaway worktree, so nothing was attempted."
             .to_string();
     }
 
