@@ -243,10 +243,47 @@ need the expected schema"*, having been given it. That is what the worked
 example in the brief now addresses, and the fix is verified: the Correctness
 lane that failed with `missing field 'title'` sweeps clean afterwards.
 
-**Overlap is still almost nil.** 25 findings merged to 24 distinct defects —
-one agreement, between Codex and Kilo, on a missing delete confirmation. Better
-than the previous run's zero out of twenty, but far too little for "found by N
-models" to rank anything. That remains the open question about the premise.
+**Overlap is almost nil, and it was worth finding out why.** See below.
+
+### Why the vendors barely agree
+
+Measured rather than argued, over every same-file cross-vendor pair in three
+corpora. Two causes, and only one of them was a bug.
+
+**The judge's similarity measure was wrong, and had been all along.** It used
+Jaccard — shared words over the *union* — with a doc comment saying set overlap
+is not distorted when the same defect is described at very different lengths.
+That is precisely Jaccard's weakness. A short description fully contained in a
+long one is bounded by the ratio of their lengths: 22 words inside 77 cannot
+exceed 0.29 however perfectly they agree, and the merge threshold was 0.20.
+
+Two vendors reported the same missing-`aria-live` defect on the same line of
+the same file, in 22 words and 77. It scored 0.125 and was reported twice.
+
+It is now the overlap coefficient — shared words over the *smaller* set — which
+is immune to length asymmetry. Threshold re-measured on all three corpora at
+0.35. On the Alder run that takes 25 findings to 23 distinct defects with
+**two** cross-vendor agreements instead of one, both at the top of the ranking.
+The fixture was quietly losing merges to this too, at 0.12 and 0.16.
+
+**But the dominant cause is not the judge — it is that the vendors never read
+the same code.** Across the whole run, exactly **two files** received findings
+from more than one vendor. In the Correctness lane Claude reported in six files
+and Codex in one, overlapping on a single file; in UX, Claude two, Codex one and
+Kilo three, again overlapping on one.
+
+That reframes the question. Agreement requires co-location, and independent
+agents exploring a 956 KB repository mostly do not choose the same files. So
+"found by N models" cannot rank a broad sweep — not because the models disagree,
+but because they are rarely looking at the same thing. It would work on a
+*narrow* scope where every vendor must read the same code, which is a different
+product from the one being built.
+
+The honest position: cross-vendor review is demonstrably buying **coverage** —
+every vendor found real defects the others missed — and is not yet buying
+**corroboration**. Whether corroboration is reachable by scoping sweeps
+narrowly, or should be dropped as a ranking signal, is undecided and needs a
+deliberate experiment rather than another threshold.
 
 ## Known gaps
 

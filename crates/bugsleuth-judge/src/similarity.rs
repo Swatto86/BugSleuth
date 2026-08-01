@@ -19,12 +19,24 @@ const STOPWORDS: &[&str] = &[
     "was", "when", "which", "will", "with", "without", "would",
 ];
 
-/// Jaccard overlap of the significant words in two texts, from 0.0 to 1.0.
+/// How much of the *shorter* description appears in the longer one, 0.0 to 1.0.
 ///
-/// Jaccard rather than a substring or edit distance because the same defect
-/// gets described at very different lengths — "divides by zero on an empty
-/// inventory" against a three-sentence explanation — and set overlap is not
-/// distorted by that the way character-level measures are.
+/// The overlap coefficient, not Jaccard. This started as Jaccard, on the stated
+/// grounds that the same defect gets described at very different lengths and
+/// "set overlap is not distorted by that the way character-level measures are".
+/// That reasoning named exactly the right hazard and then picked the measure
+/// that suffers from it: Jaccard divides by the *union*, so a short description
+/// fully contained in a long one is bounded by the ratio of their lengths.
+///
+/// Measured, on real output rather than argued: two vendors reported the same
+/// missing-aria-live defect on the same line of the same file, in 22 words and
+/// 77 words. Every distinguishing word of the short one appeared in the long
+/// one, and Jaccard scored 0.125 — it could not have exceeded 0.29 however
+/// perfectly they agreed. Dividing by the smaller set instead scores 0.500.
+///
+/// The same flaw was already costing merges on the seeded fixture, where two
+/// pairs describing one defect scored 0.12 and 0.16, so this was never a
+/// property of one awkward repository.
 pub fn similarity(left: &str, right: &str) -> f32 {
     let left = significant_words(left);
     let right = significant_words(right);
@@ -33,11 +45,11 @@ pub fn similarity(left: &str, right: &str) -> f32 {
     }
 
     let shared = left.iter().filter(|word| right.contains(*word)).count();
-    let total = left.len() + right.len() - shared;
-    if total == 0 {
-        return 0.0;
-    }
-    shared as f32 / total as f32
+    // Divide by the smaller description. Two accounts of one defect agree on
+    // that defect's words; the longer one then goes on to say more, and saying
+    // more must not look like agreeing less.
+    let smaller = left.len().min(right.len());
+    shared as f32 / smaller as f32
 }
 
 /// Lowercased, de-punctuated, stopword-free, deduplicated words.
@@ -115,12 +127,64 @@ mod tests {
     const OVERFLOW_CODEX: &str = "Average price accumulation can overflow. \
         Summing prices into u64 is unchecked and can exceed the maximum value.";
 
+    /// The score the judge actually merges at. Referenced rather than repeated,
+    /// so these tests cannot quietly drift from the threshold they protect —
+    /// which is exactly what happened when the measure changed underneath them
+    /// and a hardcoded 0.2 turned into a failing assertion about nothing.
+    use crate::cluster::MIN_WORDING_OVERLAP as MERGE_AT;
+
+    /// The pair that exposed the measure, kept verbatim from a real run.
+    ///
+    /// Two vendors, same file, same line, same missing-aria-live defect — one
+    /// in 22 significant words, the other in 77. Under Jaccard this scored
+    /// 0.125 and the report carried the defect twice.
+    #[test]
+    fn one_terse_and_one_thorough_account_of_a_defect_still_merge() {
+        let terse = "Status bar updates are invisible to screen readers. \
+            The status bar at the bottom of the window is the primary feedback surface for \
+            errors, loading, and completion. It has no role or aria-live attribute, so screen \
+            readers do not announce any of its text changes.";
+        let thorough = "Status bar and inline dialog messages have no aria-live region, screen \
+            readers never hear them. `#status` is the single place the app reports the outcome \
+            of nearly every action: 'Deleted N messages', 'Message sent.', 'Send cancelled.', \
+            and every caught-error path. It is updated purely via `statusEl.textContent` \
+            throughout main.ts. A grep across the entire src/ tree for `aria-live`, \
+            `role=status`, or `role=alert` returns zero matches - there is no live region \
+            anywhere in the app, including the equivalent per-dialog message divs. A screen \
+            reader only announces content that either receives focus or lives in an ARIA live \
+            region; plain textContent changes to an unfocused div are silent.";
+
+        let score = similarity(terse, thorough);
+        assert!(
+            score >= MERGE_AT,
+            "scored {score}, below the {MERGE_AT} merge threshold — the same defect would be \
+             reported twice because one vendor wrote three times as much about it"
+        );
+    }
+
+    #[test]
+    fn a_longer_description_never_scores_worse_for_saying_more() {
+        // The property the overlap coefficient buys, stated directly: padding
+        // one side with extra detail must not push a real match below the
+        // threshold. Under Jaccard it did, which is the whole reason for the
+        // change.
+        let short = "parse_price panics on a malformed price string";
+        let long = "parse_price panics on a malformed price string. It calls unwrap on the \
+            result of splitting the input, so any value without a decimal point terminates \
+            the process instead of returning an error to the caller.";
+        assert!(similarity(short, long) >= similarity(short, short) * 0.5);
+        assert!(
+            similarity(short, long) >= MERGE_AT,
+            "elaboration pushed a genuine match below the threshold"
+        );
+    }
+
     #[test]
     fn the_same_defect_described_by_two_vendors_scores_high_enough_to_merge() {
         let score = similarity(DIVIDE_CLAUDE, DIVIDE_CODEX);
         assert!(
-            score > 0.3,
-            "scored {score}, so the same defect would not merge"
+            score >= MERGE_AT,
+            "scored {score}, below the {MERGE_AT} needed, so the same defect would not merge"
         );
     }
 
@@ -129,8 +193,9 @@ mod tests {
         let same = similarity(DIVIDE_CLAUDE, DIVIDE_CODEX);
         let different = similarity(DIVIDE_CLAUDE, OVERFLOW_CODEX);
         assert!(
-            different < 0.2,
-            "scored {different} — these must not be merged"
+            different < MERGE_AT,
+            "scored {different}, at or above the {MERGE_AT} merge threshold — \
+             these are different defects and must not be merged"
         );
         // The margin is what makes the threshold safe to pick, not the absolute
         // values. If this ratio ever narrows, the measure needs work before the

@@ -28,21 +28,32 @@ const MAX_LINE_GAP: u32 = 10;
 
 /// Minimum wording overlap for two nearby findings to be treated as one.
 ///
-/// **Measured, not guessed.** Against hand-labelled real cross-vendor output
-/// (`tests/data`, and the integration test that uses it), pairs that describe
-/// the same defect scored 0.24 to 0.32, and pairs that describe different
-/// defects on adjacent lines scored 0.07 to 0.08. 0.20 sits in that gap with
-/// roughly 2.4x margin on the wrong-merge side.
+/// **Measured, not guessed**, and re-measured when the measure itself changed.
+/// Every same-file, within-ten-line, cross-vendor pair from three real corpora —
+/// the seeded fixture, a real crate, and a full Alder run — was scored by
+/// hand. Under the overlap coefficient:
 ///
-/// Erring toward *not* merging is the right direction: a duplicate in the
+/// | | range |
+/// |---|---|
+/// | pairs describing the same defect | 0.39 – 0.65 |
+/// | pairs describing different defects in the same function | 0.06 – 0.33 |
+///
+/// 0.35 sits in that gap. The margin is thin — 0.02 on the wrong-merge side —
+/// and that is worth saying plainly rather than dressing up: the two
+/// populations nearly touch, because two defects in one function share its
+/// vocabulary almost as much as two accounts of one defect do.
+///
+/// Erring toward *not* merging remains the right direction: a duplicate in the
 /// report is an annoyance, while two distinct defects silently collapsed into
 /// one means the reader never learns about the second.
 ///
-/// Known limitation this leaves in place: when one model reports a compound
-/// finding — Codex described a panic *and* an arithmetic error as one defect —
-/// it scores 0.16 against each single-defect counterpart and stays separate. No
-/// threshold fixes that, because the two findings genuinely are not one-to-one.
-const MIN_WORDING_OVERLAP: f32 = 0.20;
+/// Two limitations this leaves in place, both real and neither fixable by a
+/// threshold. A compound finding — one model describing a panic *and* an
+/// arithmetic error as a single defect — is not one-to-one with either
+/// counterpart. And two pairs in the fixture that genuinely are one defect
+/// score 0.27 and 0.31, below this, because the two vendors chose almost
+/// disjoint vocabulary for the same bug.
+pub(crate) const MIN_WORDING_OVERLAP: f32 = 0.35;
 
 /// One defect, as reported by one or more models.
 #[derive(Debug, Clone, Serialize)]
