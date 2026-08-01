@@ -68,6 +68,7 @@ export interface Settings {
   theme: "system" | "light" | "dark";
   prove_top: number;
   test_command: string;
+  reuse_completed: boolean;
 }
 
 /**

@@ -49,6 +49,7 @@ const ui = {
   uncovered: el<HTMLDivElement>("uncovered-warning"),
   proveTop: el<HTMLInputElement>("prove-top"),
   testCommand: el<HTMLInputElement>("test-command"),
+  reuseCompleted: el<HTMLInputElement>("reuse-completed"),
   output: el<HTMLPreElement>("output"),
   status: el<HTMLSpanElement>("status"),
   spinner: el<HTMLSpanElement>("spinner"),
@@ -66,6 +67,7 @@ let settings: Settings = {
   theme: "system",
   prove_top: 0,
   test_command: "",
+  reuse_completed: true,
 };
 /**
  * What the model and effort dropdowns offer, keyed by vendor.
@@ -262,6 +264,10 @@ function bind(): void {
     settings.test_command = ui.testCommand.value;
     refresh();
   });
+  ui.reuseCompleted.addEventListener("change", () => {
+    settings.reuse_completed = ui.reuseCompleted.checked;
+    refresh();
+  });
 
   ui.browse.addEventListener("click", async () => {
     const picked = await invoke<string | null>("pick_directory");
@@ -343,6 +349,7 @@ async function boot(): Promise<void> {
   ui.scope.value = settings.scope;
   ui.proveTop.value = String(settings.prove_top);
   ui.testCommand.value = settings.test_command;
+  ui.reuseCompleted.checked = settings.reuse_completed;
   render();
 
   // Reveal as soon as the shell is painted and themed. Deliberately before the

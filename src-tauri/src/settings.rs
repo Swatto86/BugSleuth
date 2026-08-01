@@ -25,6 +25,21 @@ pub struct Settings {
     pub prove_top: usize,
     /// Command that runs the target's tests, needed only for proving.
     pub test_command: String,
+    /// Reuse sweeps already on disk for this repository instead of paying for
+    /// them again.
+    ///
+    /// On by default, which is the opposite of the command line's `--resume`.
+    /// A run is tens of minutes and the window can be closed, a CLI dies and
+    /// dropped, so the desktop case that actually happens is "that run died at
+    /// nine of twelve and I pressed Run again". Paying for nine sweeps a second
+    /// time is the surprising outcome, not reusing them.
+    #[serde(default = "yes")]
+    pub reuse_completed: bool,
+}
+
+/// Serde needs a function; a bare `true` default is not expressible.
+fn yes() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +85,7 @@ impl Default for Settings {
             theme: "system".into(),
             prove_top: 0,
             test_command: String::new(),
+            reuse_completed: true,
         }
     }
 }

@@ -122,7 +122,7 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
                 timeout: Duration::from_secs(2700),
                 api_key: None,
                 out_dir: Some(&out_dir),
-                resume: false,
+                resume: settings.reuse_completed,
                 progress: Some(progress),
             },
         )

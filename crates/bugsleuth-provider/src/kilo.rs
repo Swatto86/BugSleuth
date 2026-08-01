@@ -30,6 +30,7 @@ use crate::process::{self, Invocation, preview};
 
 mod discover;
 mod events;
+mod repair;
 
 pub(crate) const VENDOR: &str = "kilo";
 
@@ -162,9 +163,29 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
     if text.trim().is_empty() {
         return Err(ProviderError::Empty(VENDOR));
     }
-    Ok(KiloResult {
-        findings: crate::json::structured(&Value::String(text))?,
-    })
+
+    match crate::json::structured(&Value::String(text.clone())) {
+        Ok(findings) => Ok(KiloResult { findings }),
+        Err(schema_error) => {
+            // The sweep already did the expensive part — it read the repository
+            // and found the defects. Throwing that away over the shape of the
+            // reply is what happened three times in one day, so it gets one
+            // cheap attempt to say the same thing correctly.
+            match repair::binary(spec.binary) {
+                Some(binary) => {
+                    match repair::reshape(&text, &binary, spec.worktree, spec.model, spec.timeout)
+                        .await
+                    {
+                        Some(findings) => Ok(KiloResult { findings }),
+                        // Report the *first* error: it says what the model
+                        // actually got wrong, which a second failure would bury.
+                        None => Err(repair::original(schema_error)),
+                    }
+                }
+                None => Err(schema_error),
+            }
+        }
+    }
 }
 
 /// Build the non-interactive argv.
