@@ -40,9 +40,37 @@ pub struct Proved {
     pub detail: String,
 }
 
+/// Whether the repository has uncommitted changes.
+///
+/// This matters more than it looks. A sweep reads the **working tree**, but a
+/// proof attempt runs in a worktree checked out at **HEAD**. If those differ, a
+/// defect found in uncommitted code simply is not present in the tree the prover
+/// sees, so its test cannot fail — and the run would report a real defect as
+/// "the test written for it passes, so it proves nothing".
+///
+/// That is precisely the kind of confidently-wrong output this tool exists to
+/// avoid, so the mismatch is surfaced rather than left to be misread.
+pub fn has_uncommitted_changes(repo: &Path) -> bool {
+    std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(repo)
+        .output()
+        .map(|out| !out.stdout.is_empty())
+        .unwrap_or(false)
+}
+
 /// Try to prove the top `top` defects, in rank order.
 pub async fn prove_top(ranked: &[Ranked], options: &ProveOptions<'_>) -> Vec<Proved> {
     let mut results = Vec::new();
+
+    if !ranked.is_empty() && options.top > 0 && has_uncommitted_changes(options.repo) {
+        eprintln!(
+            "warning: the repository has uncommitted changes. Sweeps read the working\n         \
+             tree, but proof attempts run against HEAD, so a defect in uncommitted\n         \
+             code cannot be proved and will be reported as not proved. Commit or\n         \
+             stash before proving."
+        );
+    }
 
     for entry in ranked.iter().take(options.top) {
         let finding = entry.cluster.representative();
@@ -200,5 +228,41 @@ mod tests {
     #[test]
     fn proving_nothing_renders_nothing_rather_than_an_empty_heading() {
         assert_eq!(to_text(&[], 5), "");
+    }
+
+    #[test]
+    fn a_dirty_repository_is_detected_and_a_clean_one_is_not() {
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-dirty-tests")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .is_ok()
+        };
+        if !git(&["init", "-q"]) {
+            return; // no usable git here; the rest of the suite still covers the logic
+        }
+        let _ = git(&["config", "user.email", "t@example.invalid"]);
+        let _ = git(&["config", "user.name", "test"]);
+        let _ = std::fs::write(dir.join("a.txt"), "hello\n");
+        let _ = git(&["add", "-A"]);
+        let _ = git(&["commit", "-qm", "base"]);
+        assert!(
+            !has_uncommitted_changes(&dir),
+            "a freshly committed tree is clean"
+        );
+
+        let _ = std::fs::write(dir.join("a.txt"), "changed\n");
+        assert!(
+            has_uncommitted_changes(&dir),
+            "an edited working tree is dirty, and proving would silently miss it"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
