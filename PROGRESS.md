@@ -98,11 +98,15 @@ decision.**
 
 ## Known gaps
 
-- **The proof step is Claude-only.** Codex and Kilo can sweep but not prove. That
-  matters — proof is the feature the whole design rests on.
+- **Kilo cannot prove.** Claude and Codex both can. Kilo is refused with a stated
+  reason: it cannot be given an output schema to enforce, so its account of what
+  it did cannot be relied on.
 - **Only the correctness lane has ever been run.** Security, Contract and UX have
   written mandates and have never been pointed at anything.
-- **No cross-lane severity pass.** The judge merges within a lane only.
+- **No cross-lane severity pass.** A multi-lane report warns that severities are
+  not comparable across lanes, but does not yet rank within each lane separately.
+  Deferred until more than one lane has actually been run, so it can be designed
+  against real output.
 - **Same model, same input, different answers.** Two identical Claude sweeps of
   the fixture returned 5 findings and 7 findings. Run-to-run variance is real and
   unquantified.
