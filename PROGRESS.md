@@ -425,9 +425,27 @@ defect looks worse than its label it should be treated as worse.
   assumption left.
 - **No cross-lane severity pass.** A multi-lane report warns that severities are
   not comparable across lanes, but does not yet rank within each lane separately.
-- **Same model, same input, different answers.** Two identical Claude sweeps of
-  the fixture returned 5 findings and 7 findings. Run-to-run variance is real and
-  unquantified.
+- ~~Same model, same input, different answers — unquantified.~~ **Measured, and
+  the interesting part is not the count.** Three identical haiku sweeps of the
+  fixture returned 5 findings every time, four of them at the same line in all
+  three runs and the fifth within one line. So *what* gets found is stable.
+
+  *How it is described* is not. Those three sweeps characterised the same
+  `parse_price` weakness as "fails on pence values with fewer than 2 digits",
+  "panics on invalid input and accepts ambiguous formats without validation",
+  and "does not validate that pence are in the range 0-99" — three different
+  defects on the page, one defect in the code.
+
+  That probably explains the agreement result better than anything else here. If
+  one model describes one defect three different ways across three runs, two
+  *different* models arriving at the same description was never likely. The
+  merge threshold was being asked to do a job the inputs cannot support, and
+  retiring agreement as a ranking signal looks less like a concession and more
+  like the only honest reading.
+
+  (An earlier observation of 5 versus 7 findings stands as a separate data point
+  on a different model and configuration; this measurement is haiku on the
+  git-backed fixture and does not supersede it.)
 - **Clustering was tuned on data that could not stress it.** The seeded fixture's
   findings all land within a line or two of each other, so a 3-line anchor window
   looked fine; on a real crate two vendors anchored the same defect 5 lines apart
