@@ -136,7 +136,15 @@ pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ProviderError
 
     if !output.succeeded() {
         let code = output.code.unwrap_or(-1);
-        let message = preview(output.stderr.trim(), 2000);
+        // stderr first, then stdout. `--output-format json` means this CLI puts
+        // its own account of a failure in the envelope on stdout, and reading
+        // only stderr reported "produced no diagnostic output" for two real
+        // sweeps that had almost certainly explained themselves. Codex already
+        // did it this way round; Kilo was fixed for the same reason.
+        let message = match preview(output.stderr.trim(), 2000) {
+            text if !text.is_empty() => text,
+            _ => envelope::failure_text(&output.stdout),
+        };
         return Err(if message.is_empty() {
             ProviderError::FailedSilently {
                 vendor: VENDOR,
