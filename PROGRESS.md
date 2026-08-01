@@ -350,6 +350,45 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## Precision: 78%, measured
+
+The claim the whole design rests on is that a confident wrong finding is worse
+than no finding. Recall had been measured; precision never had.
+
+Every surviving finding from two real runs of Alder — the four-model UX sweep
+and the three-vendor correctness experiment, 18 in total — was given to **three
+independent sceptics each**, told to assume it was wrong, told to answer "not
+real" when unsure, and told that a style preference or a hypothetical with no
+concrete trigger does not count.
+
+**14 of 18 are real. All 14 unanimous. The 4 refuted were unanimous too** — no
+finding split its judges. Whatever else is true of these models, they are not
+producing a spread of half-defensible claims; findings tend to be clearly right
+or clearly wrong.
+
+That is a usable number. Roughly one finding in five is not worth acting on,
+which is why the prompt tells the implementer to verify before editing rather
+than to trust the list.
+
+### Severity was wrong 6 times in 14, in both directions
+
+Worse than the rate is the direction. Two of the most serious defects were
+*under*-ranked — a missing `aria-live` region covering some fifty call sites,
+and a sign-in path that fails permanently with no workaround — while two
+keyboard-convenience gaps were over-ranked. "Worst first" was not holding.
+
+The cause turned out to be embarrassing and easy: **the schema's `severity`
+field was a bare enum with no description**. Four words, no definition, no
+rubric. The models were assigning severity by instinct because nothing had ever
+told them what the levels meant.
+
+It now carries the same consequence-based rubric the judges were given — critical
+is data loss or an unusable app, high is a common action failing or an
+accessibility barrier with no way round it, medium has a workaround, low is
+minor — and the test asserts every level is defined. The fix prompt also now says
+outright that the ordering is a guide rather than an authority, and that if a
+defect looks worse than its label it should be treated as worse.
+
 ## Known gaps
 
 - **Kilo cannot prove.** Claude and Codex both can. Kilo is refused with a stated
@@ -361,16 +400,31 @@ deliberate experiment rather than another threshold.
   previously passing test still passes, and reported "1 proved, 0 not" while
   saying outright that the other five were *not attempted*, which is not the
   same as not provable.
-- **Nothing merged on real code.** Twenty findings from seven sweeps of Alder
-  became twenty distinct defects — the vendors overlapped on nothing at all. So
-  cross-vendor review bought coverage but no corroboration, and "found by N
-  models" ranked nothing. Whether the merge threshold is wrong for real code or
-  the vendors genuinely disagree is unknown, and it is a question about the
-  premise of the tool rather than about a threshold.
+- **Nothing merges on real code, and agreement has been retired because of it.**
+  Three attempts to produce cross-vendor agreement, each under better conditions
+  than the last: a full multi-lane run gave 2 merges in 23 defects; an
+  experiment that forced three vendors onto the same three files gave 0 of 7
+  pairs, confirmed by independent judges; a four-model sweep of the richest lane
+  gave 13 findings and 13 distinct defects. Ranking on a signal that is almost
+  always 1-versus-1 implied a confidence the data does not support, so it no
+  longer orders anything. It is still counted and shown, relabelled from
+  "Confidence" to "Reported by".
+- ~~A run that dies loses every sweep before it in the app.~~ **Done.** The
+  desktop app now reuses completed sweeps by default — the opposite of the
+  command line, because the case that actually happens is "it died at nine of
+  twelve and I pressed Run again". Failed sweeps are still retried.
+- ~~A malformed Kilo reply loses the whole sweep.~~ **Done.** Three sweeps died
+  that way in one day, each after the expensive part was finished. A malformed
+  reply now gets one cheap reshape attempt that reads no code and is told to
+  invent nothing; the anchor check still runs on whatever comes back.
+- **Severity is now the only ranking key, and it is self-assigned.** Retiring
+  agreement had that consequence: the report orders by severity, then by file
+  path, and severity is whatever the model that found the defect chose to call
+  it. Nothing validates it. If severity is noise then "worst first" is a claim
+  the tool cannot support — which makes this the most load-bearing unchecked
+  assumption left.
 - **No cross-lane severity pass.** A multi-lane report warns that severities are
   not comparable across lanes, but does not yet rank within each lane separately.
-  Deferred until more than one lane has actually been run, so it can be designed
-  against real output.
 - **Same model, same input, different answers.** Two identical Claude sweeps of
   the fixture returned 5 findings and 7 findings. Run-to-run variance is real and
   unquantified.

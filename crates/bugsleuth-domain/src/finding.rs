@@ -254,7 +254,8 @@ pub fn finding_schema() -> Value {
                         },
                         "severity": {
                             "type": "string",
-                            "enum": ["critical", "high", "medium", "low"]
+                            "enum": ["critical", "high", "medium", "low"],
+                            "description": "Judge by the consequence to a user, NOT by how interesting the bug is or how hard it was to find. critical: data loss, a security breach, or the application unusable. high: a common action fails or misleads the user, or an accessibility barrier locks someone out of an outcome entirely. medium: a real problem that has a workaround, or one that only affects an uncommon path. low: minor, cosmetic, or very rare. Ask what happens to the person using this, and whether they have another way to get what they wanted."
                         },
                         "file": {
                             "type": "string",
@@ -375,5 +376,24 @@ mod tests {
         assert_eq!(parsed.findings.len(), 1);
         assert!(parsed.findings[0].fix.approach.is_empty());
         assert!(parsed.findings[0].fix.edits.is_empty());
+    }
+
+    #[test]
+    fn severity_tells_the_model_what_the_levels_mean() {
+        // It was a bare enum with no description, and models assigned it by
+        // instinct: measured against independent assessment, 6 of 14 severities
+        // were wrong, in both directions. Severity is the only thing the report
+        // orders by, so an undefined scale made "worst first" unsupportable.
+        let schema = finding_schema();
+        let severity = &schema["properties"]["findings"]["items"]["properties"]["severity"];
+        let text = severity["description"].as_str().unwrap_or_default();
+        assert!(!text.is_empty(), "severity has no description at all");
+        for level in ["critical", "high", "medium", "low"] {
+            assert!(text.contains(level), "{level} is not defined");
+        }
+        assert!(
+            text.contains("workaround"),
+            "nothing distinguishes a blocking defect from an inconvenient one"
+        );
     }
 }
