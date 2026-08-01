@@ -191,18 +191,6 @@ fn verify_all(
     let mut rejected = Vec::new();
 
     for (index, finding) in raw.into_iter().enumerate() {
-        // A lane must not report against files it has no mandate over — this is
-        // what stops the UX lane filing "no loading state" on a backend module.
-        if !lane.covers(&finding.file) {
-            rejected.push(Rejected {
-                title: finding.title,
-                claimed_file: finding.file,
-                claimed_line: finding.line,
-                reason: format!("outside the {} lane's file scope", lane.title()),
-            });
-            continue;
-        }
-
         match verify_anchor(repo, &finding) {
             Ok(anchor) => {
                 let id = FindingId::new(format!("{}-{index}", lane.slug()));

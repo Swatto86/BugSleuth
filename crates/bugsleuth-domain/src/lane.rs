@@ -66,19 +66,6 @@ impl Lane {
             Lane::Ux => UX_MANDATE,
         }
     }
-
-    /// Whether this lane should look at a given repo-relative path.
-    ///
-    /// Lanes are file-type aware so the UX lane cannot report "no loading state"
-    /// against a backend module it has no business reading.
-    pub fn covers(self, path: &str) -> bool {
-        let lower = path.to_ascii_lowercase();
-        match self {
-            Lane::Correctness | Lane::Security => true,
-            Lane::Contract => true,
-            Lane::Ux => LaneScope::is_frontend(&lower),
-        }
-    }
 }
 
 impl fmt::Display for Lane {
@@ -104,25 +91,6 @@ impl std::str::FromStr for Lane {
 #[derive(Debug, thiserror::Error)]
 #[error("unknown lane `{0}` (expected one of: correctness, security, contract, ux)")]
 pub struct UnknownLane(pub String);
-
-/// Path classification shared by the lanes.
-pub struct LaneScope;
-
-impl LaneScope {
-    /// Frontend source that a user-facing behavioural defect could live in.
-    pub fn is_frontend(lower_path: &str) -> bool {
-        const FRONTEND_EXTENSIONS: [&str; 8] = [
-            ".tsx", ".jsx", ".ts", ".js", ".svelte", ".vue", ".html", ".css",
-        ];
-        // A .ts/.js file under a server/ or scripts/ directory is not UI.
-        if lower_path.contains("/server/") || lower_path.contains("/scripts/") {
-            return false;
-        }
-        FRONTEND_EXTENSIONS
-            .iter()
-            .any(|extension| lower_path.ends_with(extension))
-    }
-}
 
 const CORRECTNESS_MANDATE: &str = "\
 Find defects where the code does something other than what it plainly intends: \
@@ -172,14 +140,6 @@ report. If you cannot point at code, do not report it.";
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn ux_lane_ignores_backend_and_server_side_typescript() {
-        assert!(Lane::Ux.covers("src/components/Button.tsx"));
-        assert!(!Lane::Ux.covers("crates/engine/src/lib.rs"));
-        assert!(!Lane::Ux.covers("src/server/handler.ts"));
-        assert!(Lane::Correctness.covers("crates/engine/src/lib.rs"));
-    }
 
     #[test]
     fn every_lane_parses_back_from_its_own_slug() {

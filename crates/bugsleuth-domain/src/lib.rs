@@ -12,5 +12,5 @@ pub use finding::{
     Finding, FixEdit, FixPlan, RawFinding, RawFindings, Severity, VerifiedAnchor, finding_schema,
 };
 pub use ids::{FindingId, LaneId, ModelId, RunId};
-pub use lane::{Lane, LaneScope};
+pub use lane::Lane;
 pub use proof::{ProofClaim, ProofVerdict, proof_schema};
