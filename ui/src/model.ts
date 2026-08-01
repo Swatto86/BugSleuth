@@ -176,32 +176,3 @@ export interface ModelGroup {
   label: string;
   models: string[];
 }
-
-/**
- * Narrow a grouped model list to those matching a query.
- *
- * Kilo offers 638 models, which is more than a menu can usefully present, so
- * the picker has a filter box. Matching is case-insensitive substring over the
- * whole id — the id already contains the route, the vendor and the model name,
- * so "glm" and "openrouter" and "openrouter/z-ai" all narrow usefully without
- * needing a query syntax.
- *
- * Space-separated terms must ALL match, in any order: "glm openrouter" finds
- * the OpenRouter GLM models whichever way round you think of them.
- *
- * Groups left with nothing are dropped rather than shown empty, so the group
- * headings that remain are a true summary of what is on offer.
- */
-export function filterGroups(groups: ModelGroup[], query: string): ModelGroup[] {
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (terms.length === 0) return groups;
-  return groups
-    .map((group) => ({
-      label: group.label,
-      models: group.models.filter((id) => {
-        const haystack = id.toLowerCase();
-        return terms.every((term) => haystack.includes(term));
-      }),
-    }))
-    .filter((group) => group.models.length > 0);
-}

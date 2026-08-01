@@ -379,28 +379,21 @@ footer .status.error {
 }
 
 /*
-  The model picker is a filter box above its menu.
+  The model picker is one control: a text box that suggests.
 
-  Kilo offers 638 models, which is past what any menu presents usefully, so the
-  select keeps its route grouping and gains a search box rather than being
-  replaced by a flat combobox — grouping is what says which account a model
-  spends from, and that is worth more than the tidier control would be.
+  Kilo offers 638 models, which is past what a menu presents usefully, so the
+  search is the dropdown rather than a filter sitting above one. A datalist
+  cannot draw group headings, so each suggestion carries its billing route as
+  its own label instead — which is where it belonged, since the route describes
+  that one model rather than a section of the list.
 */
 .model-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   max-width: 320px;
 }
 
-.model-picker select,
-.model-picker input.model-filter,
+.model-picker input.model-text,
 td.model-id input.model-text {
   width: 100%;
+  max-width: 320px;
   font-family: inherit;
-}
-
-.model-picker input.model-filter {
-  font-size: 12px;
-  padding: 3px 8px;
 }
