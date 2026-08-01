@@ -54,17 +54,27 @@ Five commands: `preflight`, `sweep`, `run`, `judge`, `prove`. See
 
 ## The most important open question
 
-**Recall on real code is low, and the one measurement I have is a miss.**
+**Recall on real code is low. Two vendors, two misses.**
 
 On the seeded fixture every vendor finds nearly everything, so it cannot
 discriminate. On a real repository — Alder rolled back to before commit
-`REDACTED` — the Claude correctness sweep returned **2 findings, and neither was
-the reverted bug.** Both findings were real and anchored, but the defect the
-experiment was designed around was not found.
+`REDACTED` — the correctness lane returned:
 
-This is the single most important number in the project and it is currently
-based on one lane and one vendor. Everything else rests on the sweep actually
-finding things.
+| Vendor | Findings | Found the reverted bug? |
+|---|---|---|
+| Claude | 2 | **No** |
+| Codex | 2 | **No** |
+| Kilo | failed (silent non-zero exit) | — |
+
+All four findings were real, anchored, and worth having — a silently dropped
+attachment, a corrupted refresh token, and a timezone bug both vendors found
+independently. But **the defect the experiment was designed around was found by
+neither**, on a 27-file crate with the lane pointed straight at it.
+
+That is the single most important number in the project. On a toy fixture recall
+looks like 100%; on real code, for this one defect, it is 0 of 2. Everything else
+rests on the sweep actually finding things, and one defect is far too small a
+sample to conclude anything except that this needs measuring properly.
 
 ### A design gap that showed up with it
 
@@ -110,6 +120,12 @@ decision.**
 - **Same model, same input, different answers.** Two identical Claude sweeps of
   the fixture returned 5 findings and 7 findings. Run-to-run variance is real and
   unquantified.
+- **Clustering was tuned on data that could not stress it.** The seeded fixture's
+  findings all land within a line or two of each other, so a 3-line anchor window
+  looked fine; on a real crate two vendors anchored the same defect 5 lines apart
+  and it failed to merge. Now 10, with the real output committed as a second test
+  corpus. Assume other thresholds have the same problem until real data has been
+  through them.
 - **Compound findings do not merge.** When one model bundles two defects into one
   finding it stays separate from both single-defect counterparts. Documented at
   the threshold in `crates/bugsleuth-judge/src/cluster.rs`.
