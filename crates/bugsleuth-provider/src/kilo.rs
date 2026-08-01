@@ -32,6 +32,50 @@ mod discover;
 
 pub(crate) const VENDOR: &str = "kilo";
 
+/// Which account a Kilo model spends from.
+///
+/// Kilo encodes this in the model id's first segment, and it matters more than
+/// it looks: the same underlying model can be reached three different ways, and
+/// they bill to three different places. `kilo/z-ai/glm-5` spends Kilo Gateway
+/// credit; `openrouter/z-ai/glm-5` spends your own OpenRouter key. Nothing in
+/// the run output would otherwise tell you which.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Route {
+    /// Kilo Gateway — the subscription/Kilo Pass route.
+    Gateway,
+    /// Your own OpenRouter API key. Bring-your-own-key.
+    OpenRouter,
+    /// A signed-in OpenAI account.
+    OpenAi,
+    /// A model running locally.
+    Ollama,
+    /// No prefix, so Kilo picks from its own configuration.
+    Configured,
+}
+
+impl Route {
+    pub fn describe(self) -> &'static str {
+        match self {
+            Route::Gateway => "Kilo Gateway (subscription)",
+            Route::OpenRouter => "OpenRouter (your own API key)",
+            Route::OpenAi => "OpenAI account",
+            Route::Ollama => "local via Ollama",
+            Route::Configured => "Kilo's configured default",
+        }
+    }
+}
+
+/// Read the billing route out of a Kilo model id.
+pub fn route_of(model: &str) -> Route {
+    match model.trim().split('/').next().unwrap_or_default() {
+        "kilo" => Route::Gateway,
+        "openrouter" => Route::OpenRouter,
+        "openai" => Route::OpenAi,
+        "ollama" => Route::Ollama,
+        _ => Route::Configured,
+    }
+}
+
 pub struct KiloSweep<'a> {
     /// A throwaway checkout the model may safely write to. **Never** the
     /// repository under review — see the module note above.
@@ -231,6 +275,35 @@ mod tests {
             brief: "",
             timeout: Duration::from_secs(60),
             binary: None,
+        }
+    }
+
+    #[test]
+    fn the_model_id_says_which_account_a_sweep_will_spend_from() {
+        // The same model reached three ways bills to three different places.
+        assert_eq!(route_of("kilo/z-ai/glm-5"), Route::Gateway);
+        assert_eq!(route_of("openrouter/z-ai/glm-5"), Route::OpenRouter);
+        assert_eq!(route_of("openai/gpt-5"), Route::OpenAi);
+        assert_eq!(route_of("ollama/llama3"), Route::Ollama);
+    }
+
+    #[test]
+    fn an_id_with_no_prefix_leaves_the_choice_to_kilo() {
+        assert_eq!(route_of(""), Route::Configured);
+        assert_eq!(route_of("  "), Route::Configured);
+        assert_eq!(route_of("some-model"), Route::Configured);
+    }
+
+    #[test]
+    fn every_route_can_be_described_to_a_person() {
+        for route in [
+            Route::Gateway,
+            Route::OpenRouter,
+            Route::OpenAi,
+            Route::Ollama,
+            Route::Configured,
+        ] {
+            assert!(!route.describe().is_empty());
         }
     }
 

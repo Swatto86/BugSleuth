@@ -51,6 +51,7 @@ pub fn run() {
             commands::pick_directory,
             commands::frontend_ready,
             commands::quit,
+            commands::billing_routes,
         ])
         .run(tauri::generate_context!())
         // The only failure here is the webview runtime refusing to start, at
