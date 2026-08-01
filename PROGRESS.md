@@ -3,7 +3,7 @@
 **Written for a session with zero context.** If you are resuming, read this file
 and `DECISIONS.md`, then continue from "Next concrete step".
 
-Last updated: 1 August 2026.
+Last updated: 1 August 2026 (afternoon).
 
 ## Where we are
 
@@ -167,13 +167,72 @@ is written up in [RUNBOOK.md](RUNBOOK.md).
 `DECISIONS.md` 3.10. It is committed and correct in shape but must not be
 treated as passing evidence; the runbook is the acceptance test until it works.
 
+## What changed after the first real run
+
+Running the tool on a real repository — Alder, 35 source files, 956 KB —
+found more defects in BugSleuth than the fixture ever had. In rough order of
+how much they mattered:
+
+**Findings now say how to fix themselves.** Every finding carries a fix plan:
+the root-cause approach, per-file edits naming the function rather than a line
+number, the test that must fail before and pass after with its exact command,
+and the callers that were checked. It is written for a named reader — a smaller
+model running locally that has not read the review and cannot ask a question —
+because a fix written for someone who already understands the bug is a
+different document. The merged report grew a "Fixing these" section of
+self-contained work orders; before this it showed title, location and agreement
+only, which nobody could act on without opening the code.
+
+**Kilo failed every sweep of a real repository, three problems deep.** The
+report said "produced no diagnostic output" because the adapter only read
+stderr, and Kilo streams its errors as JSON on stdout. Underneath that, Kilo
+was loading the reviewed repository's own `CONTEXT.md` — 165 KB of it — and
+running out of context before reading any code. Underneath *that*, its default
+model simply cannot hold a repository this size. All three are now addressed
+and Kilo sweeps Alder successfully.
+
+The middle one is the important one, and it is not about size. Claude and Codex
+already refuse the reviewed repository's instructions by flag; Kilo has no such
+flag, so its throwaway worktree is now stripped of them. A repository could
+otherwise have told its own reviewer what not to report.
+
+**The run's own report was being thrown away.** The last progress event and the
+finished event are emitted back to back, and the progress event arrived second
+— painting a log of what had just happened over twenty ranked defects.
+
+**The app was opening console windows.** Every provider CLI, the test runner and
+every `git` call is a console program, and Windows gives one launched from a
+windowed process a console of its own. A run is a dozen of them.
+
+**Choosing a model is now a menu, not a memory test.** Provider, model and
+effort per row. Kilo's 638 models are fetched live and each suggestion carries
+the account it spends from — including the handful that carry a `kilo/` prefix
+but bill to a plan you bought from the provider directly, which no amount of
+reading the id would tell you. Effort levels come from each model's own
+metadata, because they are not uniform: of those 638, 254 accept no effort at
+all and some accept `instant`/`thinking` rather than a ladder.
+
+**One thing that was not a bug.** Twice I reported that the app was losing its
+settings. It was not: my shell reads a redirected filesystem, so the file I
+could see was never the file the app writes. Typing a value, killing the
+process and relaunching restores it. What came out of the hunt is worth having
+anyway — a failed save or load now says so in the status bar instead of being
+swallowed.
+
 ## Known gaps
 
 - **Kilo cannot prove.** Claude and Codex both can. Kilo is refused with a stated
   reason: it cannot be given an output schema to enforce, so its account of what
   it did cannot be relied on.
-- **Only the correctness lane has ever been run.** Security, Contract and UX have
-  written mandates and have never been pointed at anything.
+- **Proving has never been run from the app.** It is wired and refuses clearly
+  when there is no test command or no git repository, but no proof round has
+  been started by clicking Run.
+- **Nothing merged on real code.** Twenty findings from seven sweeps of Alder
+  became twenty distinct defects — the vendors overlapped on nothing at all. So
+  cross-vendor review bought coverage but no corroboration, and "found by N
+  models" ranked nothing. Whether the merge threshold is wrong for real code or
+  the vendors genuinely disagree is unknown, and it is a question about the
+  premise of the tool rather than about a threshold.
 - **No cross-lane severity pass.** A multi-lane report warns that severities are
   not comparable across lanes, but does not yet rank within each lane separately.
   Deferred until more than one lane has actually been run, so it can be designed

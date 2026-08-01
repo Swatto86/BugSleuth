@@ -66,6 +66,11 @@ which a status check alone would not catch.
 
 Model: `haiku` is enough. The journey is about the app, not the model.
 
+**If you point it at a real repository instead**, give Kilo a large-context
+model — `kilo/kimi-coding/kimi-for-coding` works on Alder. Its configured
+default cannot hold one, and the run will tell you so in those words rather
+than failing vaguely.
+
 ## Afterwards
 
 ```bash

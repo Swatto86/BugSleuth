@@ -621,3 +621,114 @@ itself and can break environment creation.
 in shape, but it does not currently observe anything, so it must not be treated
 as passing evidence. The verification that does hold is behavioural — launching
 the real binary and checking effects only a mounted UI can produce.
+
+## Part 4 — What the first real repository taught us
+
+Everything in this part came from pointing the tool at Alder rather than at
+the fixture. None of it was visible on a 6-file toy crate.
+
+### 4.1 A finding that does not say how to fix it makes the reader read the code
+
+Which is exactly the reader this tool is for: the one who cannot. So every
+finding now carries a fix plan — root-cause approach, per-file edits naming the
+symbol rather than a line number, the test that must fail before and pass
+after with its command, and the callers that were checked.
+
+The schema descriptions name the reader outright: *a smaller model running
+locally that has not read your review and cannot ask you anything*. That
+phrasing is load-bearing. A fix written for someone who already understands the
+bug omits precisely what the implementer needs.
+
+`fix` is **required by the schema but optional to deserialize**. Only Claude's
+output is schema-constrained; Codex and Kilo are merely asked. The existing
+parser tests caught that making it mandatory would discard an entire sweep over
+one missing field — every finding in it, paid for and thrown away.
+
+### 4.2 The reviewed repository was writing the reviewer's brief
+
+Every one of these CLIs reads instruction files from the directory it starts in
+and treats them as standing orders. When that directory is a repository you are
+*reviewing*, the repository is briefing its own reviewer.
+
+Claude refuses them with `--safe-mode` and Codex with `--ignore-rules`. **Kilo
+has no such flag** — `--pure` only skips external plugins — so its throwaway
+worktree is stripped of instruction files instead. That is possible only
+because Kilo already gets a worktree rather than the real checkout.
+
+This surfaced as a size problem: Alder's `CONTEXT.md` is 165 KB, Kilo loaded
+it, compacted three times and gave up before reading a line of code. Proven
+rather than assumed — the same command in the same worktree with that one file
+removed exits 0. But size was the symptom. A file saying "do not report
+authentication issues" would have been obeyed just as faithfully.
+
+### 4.3 Read the failing tool's stdout, not just its stderr
+
+Kilo's failures were reported as "produced no diagnostic output" for weeks of
+apparent mystery. Kilo says almost nothing on stderr and streams its errors as
+JSON events on stdout alongside everything else, so the adapter was discarding
+the one thing that explained the failure. It had been saying
+`ContextOverflowError: Compaction exhausted` the whole time.
+
+A CLI that structures its output will structure its errors the same way. Look
+where the tool talks, not where the convention says errors go.
+
+### 4.4 Billing route cannot be read off a Kilo model id
+
+`kilo/z-ai/glm-5.2` spends Kilo Gateway credit. `kilo/zai-coding/glm-5.2`
+spends a plan you bought from Z.ai. Same prefix, same model name, different
+bill, and nothing in the id distinguishes them — only the catalogue's own
+`hasUserByokAvailable` flag does, which is why the model list is read from
+`kilo models --verbose` rather than the bare listing.
+
+Exactly five of 638 models carry it, and they are precisely the ones Kilo's own
+extension badges BYOK.
+
+### 4.5 Effort levels belong to the model, not the vendor
+
+Claude and Codex take an effort flag that means the same thing whatever model
+is chosen. Kilo forwards `--variant` to whichever provider is behind the model,
+so there is no vendor-wide answer — and the catalogue proves it: of 638 models,
+254 accept no effort at all, 109 take `low/medium/high`, and some take
+`instant`/`thinking`, which is a pair rather than a ladder.
+
+A hardcoded `low/medium/high` therefore offered levels the provider rejects
+while hiding ones it accepts. Levels now come from each model's own `variants`
+block, sorted by rank rather than catalogue order — the catalogue does not agree
+with itself, listing mostly ascending and occasionally `max, high, low`.
+
+### 4.6 The report was being painted over by its own progress log
+
+The last progress event and the finished event are emitted back to back, and on
+the first real run the progress event arrived second — replacing twenty ranked
+defects with a log of what had just happened. Progress is now ignored once the
+run is over.
+
+Worth noting how this hid: the status bar said "Finished", the pane was full of
+plausible text, and nothing looked wrong.
+
+### 4.7 A GUI that shells out opens console windows
+
+Every provider CLI, the target's test runner and every `git` call is a console
+program, and Windows gives one launched from a *windowed* process a console of
+its own. A run is a dozen sweeps. `CREATE_NO_WINDOW` at all six spawn sites.
+
+The `tokio` and `std` `Command` types take the flag through different traits,
+so two crates carry four lines each rather than gaining a dependency edge.
+
+### 4.8 A settings bug that was not one
+
+Twice recorded here as real, and it was not. The app appeared to discard saved
+settings and appeared not to write its settings file for a whole session. Both
+observations came from reading that file through a sandboxed shell whose
+filesystem is redirected: the file being read was never the file the app writes.
+Typing a value, killing the process and relaunching restores it exactly.
+
+The lesson is about method rather than code. Every other conclusion in this
+project was checked by observing an effect the mechanism could not fake; this
+one was checked by reading a path, and the path lied. When a tool and its
+observer disagree, suspect the observer.
+
+What came out of it is still worth having: a failed save or load now says so in
+the status bar rather than being swallowed. That instrumentation is what
+finally settled the question — a failing save would announce itself, and it
+does not.
