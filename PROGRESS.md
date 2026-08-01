@@ -3,113 +3,113 @@
 **Written for a session with zero context.** If you are resuming, read this file
 and `DECISIONS.md`, then continue from "Next concrete step".
 
-Last updated: 1 August 2026, end of the unattended overnight session.
+Last updated: 1 August 2026.
 
 ## Where we are
 
 | Milestone | State |
 |---|---|
 | Read Eir and record findings | **Done** — `DECISIONS.md` part 1 |
-| M0 — CLI harness, one provider, one lane, validated JSON with anchors | **Done, verified against a real model** |
+| M0 — CLI harness, validated JSON with anchors | **Done, verified against real models** |
 | M1 — can a model produce a *failing test* for a bug it claims? | **Done. It can.** 4/4 correct across real and fabricated defects |
-| M2 — multi-model, multi-lane, judge | **Partly done.** Second vendor (Codex) works and cross-vendor value is demonstrated. **The judge is not built**, so the M2 kill gate has not been run |
-| M3 — Tauri UI | **Out of scope**, by instruction |
+| M2 — multi-model, multi-lane, judge | **Done.** Three vendors, deterministic judge, `run` orchestrates the whole product. Kill gate passed on weak evidence |
+| M3 — Tauri UI | **Not started**, deliberately |
 
 ## Model invocation budget
 
-Cap for the night was ~40. **Used: 7.** No rate limit was hit.
-
-| # | What | Model | Outcome |
-|---|---|---|---|
-| 1 | M0 sweep, correctness, seeded fixture | claude sonnet | 5 findings, 5 verified, 0 discarded, 8 turns |
-| 2 | Prove real Alder defect | claude sonnet | **PROVED**, 7 turns |
-| 3 | Prove fabricated Alder defect | claude sonnet | Correctly refused, 13 turns |
-| 4 | Prove real fixture defect | claude sonnet | **PROVED**, 5 turns |
-| 5 | Prove fabricated fixture defect | claude sonnet | Correctly refused, 5 turns |
-| 6 | Codex sweep | `gpt-5.6-codex` | Failed instantly: that model id is not available on a ChatGPT account. Cost nothing |
-| 7 | Codex sweep, correctness, seeded fixture | codex default | 9 findings, 9 verified, 0 discarded |
+**Used: 14.** No rate limit was hit, but one Kilo sweep died with the silent
+non-zero exit these CLIs use for an overload when three ran concurrently — which
+is why sweeps are now batched one-per-vendor.
 
 ## What exists
 
 ```
 crates/
   bugsleuth-domain/    lanes, findings, proof verdicts. Types only, no I/O
-  bugsleuth-provider/  Claude and Codex CLI adapters + shared subprocess handling
+  bugsleuth-provider/  Claude, Codex and Kilo adapters + shared subprocess handling
   bugsleuth-verify/    anchor checking, git worktrees, test execution
-  bugsleuth-cli/       the harness binary, `bugsleuth`
-fixtures/
-  seeded-repo/         a tiny crate with 6 known bugs (5 planted, 1 found by Codex)
-  SEEDED.md            the answer key, kept OUTSIDE the fixture repo on purpose
+  bugsleuth-judge/     clustering, agreement counting, ranking
+  bugsleuth-cli/       the `bugsleuth` binary
+fixtures/seeded-repo/  a tiny crate with 6 known bugs (5 planted, 1 found by Codex)
+fixtures/SEEDED.md     the answer key, kept OUTSIDE the fixture repo on purpose
 eval/                  the M1 defect descriptions and what they measure
-scripts/
-  verify.ps1           the full gate: fmt, clippy, tests, build, file sizes
 ```
 
-Commands:
-
-```bash
-cargo run -p bugsleuth-cli -- preflight
-```
-
-```bash
-cargo run -p bugsleuth-cli -- sweep --repo fixtures/seeded-repo --lane correctness --model sonnet
-```
-
-```bash
-cargo run -p bugsleuth-cli -- sweep --repo fixtures/seeded-repo --lane correctness --model codex:
-```
-
-```bash
-cargo run -p bugsleuth-cli -- prove --repo <git repo> --defect-file <file> --test-command "cargo test"
-```
-
-`--model` takes `vendor:model`. A bare name means Claude. `codex:` with nothing
-after it means Codex's own default model — note that `gpt-5.6-codex` is **not**
-usable on a ChatGPT subscription.
+Five commands: `preflight`, `sweep`, `run`, `judge`, `prove`. See
+[README.md](README.md).
 
 ## Verified, with evidence
 
-- `scripts/verify.ps1` passes: fmt, clippy with warnings as errors, 66 tests,
+- `scripts/verify.ps1` passes: fmt, clippy with warnings as errors, ~125 tests,
   release build, 400-line file cap.
-- **M0**: the correctness lane found all 5 planted defects in the fixture, all
-  anchored to real code, none discarded.
 - **M1**: 2 real defects proved with genuine failing tests; 2 fabricated defects
   correctly refused. For the real Alder defect the model's test was also
-  confirmed to **pass** once the historical fix was applied — so it detects the
-  bug rather than failing for an unrelated reason.
-- **Cross-vendor**: same lane, same repo — Claude 5 findings, Codex 9. Codex
-  found a real defect neither Claude nor the fixture author had noticed;
-  confirmed by running the function.
+  confirmed to **pass** once the historical fix was applied.
+- **Three vendors work** and are detected by `preflight`.
+- **Judge**: on hand-labelled real cross-vendor output (committed as test data),
+  23 findings merge to 11 distinct defects with correct separation of two
+  different defects reported one line apart.
+- **Kill gate passed, weakly.** Every vendor missed something another found;
+  running only the best single vendor costs 2 of 11 defects. But see below.
+
+## The most important open question
+
+**Recall on real code is low, and the one measurement I have is a miss.**
+
+On the seeded fixture every vendor finds nearly everything, so it cannot
+discriminate. On a real repository — Alder rolled back to before commit
+`REDACTED` — the Claude correctness sweep returned **2 findings, and neither was
+the reverted bug.** Both findings were real and anchored, but the defect the
+experiment was designed around was not found.
+
+This is the single most important number in the project and it is currently
+based on one lane and one vendor. Everything else rests on the sweep actually
+finding things.
+
+### A design gap that showed up with it
+
+The reverted bug is a *silent UI failure* — an image is stripped and no banner
+offers to load it — but it lives in backend Rust (`crates/infrastructure/src/html.rs`).
+
+- The **UX lane** is the one whose mandate covers "a failure that is swallowed so
+  the user sees nothing", but its file filter only matches frontend extensions,
+  so it would reject a finding in a `.rs` file outright.
+- The **correctness lane** can see the file but its mandate does not point at
+  user-visible consequences.
+
+So this defect currently falls between lanes. That is a real design question, not
+a bug to quietly patch: widening the UX lane to all files risks exactly the
+aesthetic-opinion pollution the file filter exists to prevent. **This needs your
+decision.**
 
 ## Known gaps
 
-- **No judge.** This is the main thing standing between here and finishing M2.
-- **The M2 kill gate has not been run** — it needs the judge.
-- Kilo, the third vendor, is not wired up.
-- Codex can sweep but cannot prove; the proof path is Claude-only.
-- No persistence, no resume, no concurrency governor. A run that dies restarts.
-- Detection rate on a real codebase is unmeasured. M0 measured plumbing on a toy
-  fixture, not recall on real code.
-- The UX, Security and Contract lanes have mandates written but have never been
-  run against anything.
+- **The proof step is Claude-only.** Codex and Kilo can sweep but not prove. That
+  matters — proof is the feature the whole design rests on.
+- **Only the correctness lane has ever been run.** Security, Contract and UX have
+  written mandates and have never been pointed at anything.
+- **No cross-lane severity pass.** The judge merges within a lane only.
+- **Same model, same input, different answers.** Two identical Claude sweeps of
+  the fixture returned 5 findings and 7 findings. Run-to-run variance is real and
+  unquantified.
+- **Compound findings do not merge.** When one model bundles two defects into one
+  finding it stays separate from both single-defect counterparts. Documented at
+  the threshold in `crates/bugsleuth-judge/src/cluster.rs`.
 
 ## Next concrete step
 
-**Build the within-lane judge and run the M2 kill gate.**
+**Measure recall properly on real code.** Revert several known bug-fix commits in
+a real repository and count how many each vendor finds, per lane. Cheap now that
+`run` and `--resume` exist:
 
-The input it needs now exists: two vendors produce overlapping findings on the
-same code (see `eval-out/m0-correctness-sonnet.json` and
-`eval-out/m2-correctness-codex.json` for a real, already-paid-for pair).
+```bash
+cargo run -p bugsleuth-cli -- run --repo <clone> --config bugsleuth.example.json --out-dir runs/ --resume
+```
 
-The judge should merge duplicates, count how many models independently found
-each defect, and rank. Strip which model reported what before judging — models
-favour their own family's output. Put the judge on the BYOD API key rather than
-a subscription CLI: it needs strict structured output, has no repo access, and
-is pure text in, text out.
+Two things to fix in the experiment design first, both learned the hard way:
 
-Then the gate: **if the judge's top-10 is no better than the best single model's
-top-10, stop building.** On the current evidence Codex alone found a superset of
-Claude's findings on this fixture, so a judge must be shown to add something
-beyond "use the better model", or the premise is in trouble. That is the honest
-framing of the test, and the fixture is probably too small to settle it — a
-larger repository is likely needed for the gate to mean anything.
+1. **Check every planted defect is actually absent from the code**, and every
+   fabricated one actually false. A draft control in the M1 eval turned out to be
+   *true* on inspection and would have measured the opposite of its intent.
+2. **Point the right lane at it.** The banner bug is a UX-mandate defect in a
+   backend file — see the design gap above.
