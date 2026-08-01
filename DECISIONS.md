@@ -519,12 +519,18 @@ directly-runnable binary that launches with no installer and no prerequisites.
 As it stands the portable exe would fail on a machine without the redistributable
 — and it would fail with an unhelpful system dialog, not a message from us.
 
-**The fix is `-C target-feature=+crt-static`** in `.cargo/config.toml`, which
-statically links the CRT. It is deliberately not applied yet: a packaged build
-was running when this was found, static-CRT linking occasionally breaks against
-crates that assume the dynamic runtime, and destabilising a working build to fix
-something that only matters at release is the wrong order.
+**Fixed** with `-C target-feature=+crt-static` in `.cargo/config.toml`. The
+binary now imports nothing outside `System32`: the `VCRUNTIME140*` pair is gone
+and so are the `api-ms-win-crt-*` UCRT imports, since those link statically too.
+Size was unchanged at 9.0 MB, and the app was re-launched afterwards to confirm
+static linking had not broken the webview.
 
-**Do this before the first release**, and verify by running the portable exe on a
-machine (or container) without the redistributable — not by rechecking the
-imports, which will change whether or not the app actually starts.
+**Worth knowing: this is not a Tauri problem and not unusual.** Every Rust
+binary built for `x86_64-pc-windows-msvc` links the MSVC runtime dynamically by
+default — the CLI in this repo had the same import. Eir already carries exactly
+this setting in its own `.cargo/config.toml`, which is why its binaries are
+self-contained and the symptom never appeared there. BugSleuth simply started
+from an empty workspace and did not inherit it.
+
+**Still worth doing before a release:** run the portable exe on a machine without
+the redistributable. Absent imports are good evidence, not proof that it starts.
