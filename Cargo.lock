@@ -64,6 +64,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bugsleuth-domain",
+ "bugsleuth-engine",
  "bugsleuth-judge",
  "bugsleuth-provider",
  "bugsleuth-verify",
@@ -80,6 +81,20 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "bugsleuth-engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bugsleuth-domain",
+ "bugsleuth-judge",
+ "bugsleuth-provider",
+ "bugsleuth-verify",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

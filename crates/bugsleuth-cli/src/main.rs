@@ -1,19 +1,13 @@
 //! The M0 harness: run one lane against one repository with one model, verify
 //! every anchor, and print what survived.
 
-mod brief;
 mod cli;
-mod merge;
-mod orchestrate;
-mod plan;
-mod prove;
-mod report;
-mod sweep;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Result;
+use bugsleuth_engine::{brief, merge, orchestrate, plan, prove, report, sweep};
 use clap::Parser;
 
 use cli::{Cli, Command, JudgeArgs, ProveArgs, RunArgs, SweepArgs};
