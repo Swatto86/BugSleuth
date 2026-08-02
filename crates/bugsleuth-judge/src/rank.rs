@@ -83,6 +83,7 @@ mod tests {
         Cluster {
             findings,
             agreement,
+            acknowledged: None,
             triaged: None,
             triage_reason: None,
         }

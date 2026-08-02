@@ -183,6 +183,7 @@ fn the_cluster_speaks_through_whichever_finding_brought_a_fix_plan() {
     let cluster = Cluster {
         findings: vec![silent, explained],
         agreement: 2,
+        acknowledged: None,
         triaged: None,
         triage_reason: None,
     };
@@ -264,6 +265,7 @@ fn cluster_at(severity: Severity) -> Cluster {
             },
         )],
         agreement: 1,
+        acknowledged: None,
         triaged: None,
         triage_reason: None,
     }

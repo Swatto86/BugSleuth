@@ -28,6 +28,20 @@ pub struct Cluster {
     /// ran. Kept beside the models' own grades rather than overwriting them:
     /// severity decides the order of the whole report, so a reader who cannot
     /// check the code is owed the fact that it was changed, and to what from.
+    /// The code's own words acknowledging this as a deliberate decision, when
+    /// it has any.
+    ///
+    /// Not every wrong finding is a hallucination. Measured over two
+    /// self-reviews, four of the five findings that did not survive scrutiny
+    /// were accurate observations about trade-offs this codebase had already
+    /// made *and documented at the exact line named* — the same two, reported
+    /// twice each. That is not the reviewer being wrong; it is the report
+    /// telling a reader something the code already answers.
+    ///
+    /// Only ever set from a quote found verbatim in the file. A dismissal
+    /// carries its own proof or it does not count, exactly as a finding does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acknowledged: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub triaged: Option<Severity>,
     /// The one-sentence consequence the triage pass gave for its grade. Shown
@@ -133,6 +147,7 @@ pub fn cluster(findings: Vec<Finding>) -> Vec<Cluster> {
             None => clusters.push(Cluster {
                 findings: vec![finding],
                 agreement: 0,
+                acknowledged: None,
                 triaged: None,
                 triage_reason: None,
             }),

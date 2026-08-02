@@ -46,6 +46,25 @@ impl RunReport {
             && self.triage.graded == self.ranked.len()
     }
 
+    /// Whose judgement put this list in this order.
+    ///
+    /// The reader cannot check the code, so "worst first" has to say who
+    /// decided it — and a pass that did not run must say that rather than let
+    /// silence read as "graded".
+    fn how_it_was_ordered(&self) -> String {
+        if !self.triage.note.is_empty() {
+            return format!("\n  Note: {}.\n", self.triage.note);
+        }
+        if self.triage.graded > 0 {
+            return format!(
+                "\n  Severities were re-graded across the whole list, with every defect\n  \
+                 in view ({} of {} moved from what the model that found it said).\n",
+                self.triage.changed, self.triage.graded
+            );
+        }
+        String::new()
+    }
+
     pub fn to_text(&self) -> String {
         let mut out = String::from("=== run report ===\n");
         for sweep in &self.swept {
@@ -90,17 +109,7 @@ impl RunReport {
             self.ranked.len()
         ));
 
-        // What ordered this list, in one line. The reader cannot check the code,
-        // so "worst first" has to say whose judgement that is.
-        if !self.triage.note.is_empty() {
-            out.push_str(&format!("\n  Note: {}.\n", self.triage.note));
-        } else if self.triage.graded > 0 {
-            out.push_str(&format!(
-                "\n  Severities were re-graded across the whole list, with every defect\n  \
-                 in view ({} of {} moved from what the model that found it said).\n",
-                self.triage.changed, self.triage.graded
-            ));
-        }
+        out.push_str(&self.how_it_was_ordered());
 
         // Severity means different things in different mandates. A "high" from
         // the security lane and a "high" from the correctness lane were assigned
@@ -129,7 +138,37 @@ impl RunReport {
         ));
         out.push_str(&crate::caveats::limits("  "));
 
-        for entry in &self.ranked {
+        // Findings the code already answers, moved out of the ranked list.
+        //
+        // Measured over two self-reviews, four of the five findings that did
+        // not survive scrutiny were accurate observations about deliberate
+        // trade-offs documented at the exact line named — the same two,
+        // reported twice each. Not hallucinations: the reviewer was right about
+        // the code and wrong that anyone needed telling. Left in the list they
+        // are indistinguishable from real work, and the reader has no way to
+        // know which is which.
+        //
+        // Each carries the code's own words, verified to be in the file, so
+        // this section can be audited rather than trusted.
+        let known: Vec<_> = self
+            .ranked
+            .iter()
+            .filter(|entry| entry.cluster.acknowledged.is_some())
+            .collect();
+        if !known.is_empty() {
+            out.push_str(&format!(
+                "\n  {} of these are already documented in the code as deliberate\n  \
+                 decisions. They are listed at the end rather than above, with what the\n  \
+                 code says, so you can disagree with the decision if you want to.\n",
+                known.len()
+            ));
+        }
+
+        for entry in self
+            .ranked
+            .iter()
+            .filter(|e| e.cluster.acknowledged.is_none())
+        {
             let cluster = &entry.cluster;
             let finding = cluster.representative();
             out.push_str(&format!(
@@ -160,8 +199,38 @@ impl RunReport {
                 ));
             }
         }
+
+        out.push_str(&already_documented(&known));
         out
     }
+}
+
+/// The findings the code itself already answers, printed with its own words.
+///
+/// Kept out of the ranked list. Each quote was checked to be really in the file
+/// named, so this section can be audited rather than trusted — a reader who
+/// disagrees with the decision can go and read it.
+fn already_documented(known: &[&bugsleuth_judge::Ranked]) -> String {
+    if known.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from(
+        "\n  Already documented as deliberate decisions\n  \
+         (accurate observations the code already answers; each quote below was\n  \
+         checked to be really in the file named)\n",
+    );
+    for entry in known {
+        let finding = entry.cluster.representative();
+        out.push_str(&format!(
+            "\n  - [{}] {}\n    {}:{}\n    the code says: \"{}\"\n",
+            entry.cluster.severity().as_str().to_uppercase(),
+            finding.title,
+            finding.anchor.file,
+            finding.anchor.line,
+            entry.cluster.acknowledged.as_deref().unwrap_or_default(),
+        ));
+    }
+    out
 }
 
 #[cfg(test)]

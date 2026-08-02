@@ -97,7 +97,7 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
         return Outcome::default();
     }
 
-    let prompt = prompt_for(clusters);
+    let prompt = prompt_for(clusters, Some(request.repo));
     let verdicts = match claude_triage(TriageRequest {
         repo: request.repo,
         model: request.model,
@@ -143,7 +143,19 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
             changed += 1;
         }
         cluster.triaged = Some(*severity);
-        cluster.triage_reason = Some(reason.clone());
+
+        // A dismissal carries its own proof, exactly as a finding does. The
+        // model may say the code already documents this, but only a quote
+        // actually present in the file settles it — otherwise the easiest way
+        // to make a report look clean would be to claim every defect was
+        // already known.
+        match acknowledgement(reason, request.repo, cluster) {
+            Some((quote, rest)) => {
+                cluster.acknowledged = Some(quote);
+                cluster.triage_reason = Some(rest);
+            }
+            None => cluster.triage_reason = Some(reason.clone()),
+        }
     }
 
     let missing = clusters.len() - graded;
@@ -173,6 +185,51 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
     }
 }
 
+/// The quote a verdict offers as proof the code already acknowledges this, if
+/// that quote is really in the file it names.
+///
+/// Returns the quote and the rest of the reason. `None` when the verdict makes
+/// no such claim, when the file cannot be read, or — the case that matters —
+/// when the quoted words are not there. An unfounded dismissal is discarded and
+/// the finding stands, which is the safe direction: the cost of being wrong is
+/// a reader seeing a defect they already knew about, against a reader never
+/// seeing a real one.
+fn acknowledgement(reason: &str, repo: &Path, cluster: &Cluster) -> Option<(String, String)> {
+    const MARKER: &str = "ACKNOWLEDGED:";
+    let rest = reason.trim().strip_prefix(MARKER)?.trim();
+
+    // The quote is whatever the model put first, up to the end of a sentence or
+    // the line. Compared with whitespace collapsed, since a comment is wrapped
+    // across lines with leading slashes and the model will not reproduce that.
+    let quote = rest
+        .trim_start_matches(['"', '\''])
+        .split(['"', '\n'])
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches('.')
+        .to_string();
+    if quote.split_whitespace().count() < 4 {
+        // Too short to be evidence of anything.
+        return None;
+    }
+
+    let file = repo.join(&cluster.representative().anchor.file);
+    let source = std::fs::read_to_string(file).ok()?;
+    let flatten = |text: &str| {
+        text.split_whitespace()
+            .map(|word| word.trim_matches(|c: char| c == '/' || c == '*'))
+            .filter(|word| !word.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    };
+    if !flatten(&source).contains(&flatten(&quote)) {
+        return None;
+    }
+    Some((quote, rest.to_string()))
+}
+
 /// The id a defect is offered under. Its position, which is stable for the
 /// length of one call and means nothing outside it.
 fn id_of(index: usize) -> String {
@@ -185,7 +242,7 @@ fn id_of(index: usize) -> String {
 /// the defect is, what goes wrong, and what the finder called it. The current
 /// grade is included deliberately — withholding it would not produce an
 /// independent opinion, it would produce one made with less information.
-pub(crate) fn prompt_for(clusters: &[Cluster]) -> String {
+pub(crate) fn prompt_for(clusters: &[Cluster], repo: Option<&Path>) -> String {
     let mut out = String::new();
     out.push_str(
         "You are grading the severity of defects already found in this repository by other \
@@ -199,7 +256,16 @@ pub(crate) fn prompt_for(clusters: &[Cluster]) -> String {
          one verdict per id below, and keep the ids as they are written.\n\n\
          Grade from what is written below. You have no tools and nothing to open: each entry \
          was written by a reviewer who did read the code, and carries where the defect is, \
-         what goes wrong, and why it is wrong. Answer in one reply.\n\n",
+         what goes wrong, and why it is wrong. Answer in one reply.\n\n\
+         Some entries carry \"What the code says about itself here\": the comment written at \
+         that exact location. Read it. If it shows the concern is a deliberate, recorded \
+         decision rather than an oversight — the trade-off named, a reason given, an \
+         alternative rejected — then begin your reason with `ACKNOWLEDGED: ` and a short \
+         verbatim quote from that comment, copied exactly. Quote only what is really there: \
+         a quote that cannot be found in the file is discarded, and the dismissal with it. A \
+         comment that merely restates what the code does is not an acknowledgement. Grade \
+         such an entry as you otherwise would — the marker changes where it is reported, not \
+         what it is worth.\n\n",
     );
 
     for (index, cluster) in clusters.iter().enumerate() {
@@ -221,124 +287,62 @@ pub(crate) fn prompt_for(clusters: &[Cluster]) -> String {
             finding.failure_scenario,
             finding.explanation,
         ));
+        if let Some(said) = repo.and_then(|root| commentary_at(root, finding)) {
+            out.push_str(&format!(
+                "What the code says about itself here:
+{said}
+
+"
+            ));
+        }
     }
     out
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bugsleuth_domain::{Finding, FindingId, Lane, ModelId, RawFinding, VerifiedAnchor};
+/// The comment block written immediately above a finding's anchor.
+///
+/// Read because a reviewer is not the only one who has looked at this code: the
+/// person who wrote it may have already recorded why it is the way it is. Four
+/// of the five findings that failed scrutiny across two self-reviews were
+/// accurate observations about deliberate trade-offs documented at the exact
+/// line named — and the words settling them were sitting in the file the whole
+/// time, unread.
+///
+/// Contiguous comment lines only, and a bounded number of them: this goes into
+/// a prompt, and a run of commented-out code above a defect is not commentary
+/// about it.
+fn commentary_at(repo: &Path, finding: &bugsleuth_domain::Finding) -> Option<String> {
+    const MOST: usize = 24;
+    let text = std::fs::read_to_string(repo.join(&finding.anchor.file)).ok()?;
+    let lines: Vec<&str> = text.lines().collect();
+    // Anchors are 1-based, and the comment sits above the line itself.
+    let mut index = usize::try_from(finding.anchor.line).ok()?.checked_sub(1)?;
 
-    fn cluster_at(severity: Severity, title: &str) -> Cluster {
-        Cluster {
-            findings: vec![Finding::new(
-                FindingId::new("f"),
-                Lane::Correctness,
-                ModelId::new("claude:sonnet"),
-                RawFinding {
-                    title: title.into(),
-                    severity,
-                    file: "a.rs".into(),
-                    line: 1,
-                    snippet: "x".into(),
-                    explanation: "e".into(),
-                    failure_scenario: "boom".into(),
-                    fix: Default::default(),
-                },
-                VerifiedAnchor {
-                    file: "a.rs".into(),
-                    line: 1,
-                    claimed_line: 1,
-                    snippet: "x".into(),
-                },
-            )],
-            agreement: 1,
-            triaged: None,
-            triage_reason: None,
+    let mut block: Vec<&str> = Vec::new();
+    while index > 0 && block.len() < MOST {
+        index -= 1;
+        let line = lines.get(index)?.trim();
+        let is_comment = line.starts_with("//") || line.starts_with('#') || line.starts_with('*');
+        if !is_comment {
+            // Attributes and blank lines sit between a doc comment and the item
+            // it documents, so they do not end the block.
+            if line.is_empty() || line.starts_with("#[") {
+                continue;
+            }
+            break;
         }
+        block.push(line);
     }
-
-    #[test]
-    fn every_defect_is_offered_under_an_id_the_reply_can_name() {
-        let clusters = vec![
-            cluster_at(Severity::Low, "first"),
-            cluster_at(Severity::High, "second"),
-        ];
-        let prompt = prompt_for(&clusters);
-        assert!(prompt.contains("## id 1"));
-        assert!(prompt.contains("## id 2"));
-        assert!(prompt.contains("first"));
-        assert!(prompt.contains("second"));
+    if block.is_empty() {
+        return None;
     }
-
-    #[test]
-    fn the_prompt_says_what_each_defect_was_already_graded() {
-        // Withholding it would not buy independence, only a judgement made with
-        // less to go on.
-        let prompt = prompt_for(&[cluster_at(Severity::Critical, "t")]);
-        assert!(prompt.contains("Currently graded: critical"), "{prompt}");
-    }
-
-    #[test]
-    fn the_prompt_forbids_the_three_things_that_would_damage_the_report() {
-        let prompt = prompt_for(&[cluster_at(Severity::Low, "t")]);
-        for rule in ["Do not add defects", "Do not remove", "Do not merge"] {
-            assert!(prompt.contains(rule), "the prompt does not say: {rule}");
-        }
-    }
-
-    #[tokio::test]
-    async fn a_single_defect_is_not_paid_to_be_compared_with_nothing() {
-        // Comparison is the whole mechanism; with one defect there is nothing to
-        // compare and the call could only restate the model's own opinion.
-        let mut clusters = vec![cluster_at(Severity::Low, "only")];
-        let outcome = apply(
-            &mut clusters,
-            Request {
-                repo: Path::new("."),
-                // A binary that does not exist: if this ever tried to run, the
-                // test would fail rather than quietly spending quota.
-                model: "no-such-model",
-                effort: "",
-                timeout: Duration::from_secs(1),
-                api_key: None,
-            },
-        )
-        .await;
-        assert_eq!(outcome, Outcome::default());
-        assert_eq!(clusters[0].triaged, None);
-    }
+    block.reverse();
+    Some(block.join(
+        "
+",
+    ))
 }
 
 #[cfg(test)]
-mod prompt_tests {
-    use super::*;
-
-    #[test]
-    fn the_prompt_never_offers_tools_the_pass_does_not_have() {
-        // It once did, for a whole afternoon of runs. Told to read files it had
-        // no way to open, the pass burned every turn and returned nothing at all
-        // — and the failure looked exactly like a turn limit set too low.
-        let prompt = prompt_for(&[]);
-        for offer in ["You may read", "open the file", "Read only what you need"] {
-            assert!(!prompt.contains(offer), "the prompt still offers: {offer}");
-        }
-        assert!(prompt.contains("no tools"), "{prompt}");
-    }
-
-    #[test]
-    fn a_recovered_grading_is_not_presented_as_a_full_comparison() {
-        // The whole mechanism is comparison. A grading model that was cut off
-        // and asked afterwards what it had decided compared some of the list,
-        // and the report has to say which.
-        let outcome = Outcome {
-            graded: 4,
-            changed: 1,
-            note: "the triage pass ran out of turns and its grades were recovered afterwards,                    so 4 of 9 defects were compared rather than all of them"
-                .into(),
-        };
-        assert!(outcome.note.contains("recovered afterwards"));
-        assert!(outcome.note.contains("rather than all of them"));
-    }
-}
+#[path = "triage/tests.rs"]
+mod tests;

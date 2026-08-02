@@ -85,6 +85,7 @@ mod tests {
                         },
                     )],
                     agreement: 1,
+                    acknowledged: None,
                     triaged,
                     triage_reason: reason.map(String::from),
                 },

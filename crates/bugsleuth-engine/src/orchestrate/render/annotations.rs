@@ -114,6 +114,7 @@ fn a_moved_grade_is_shown_with_what_it_moved_from_and_why() {
             },
         )],
         agreement: 1,
+        acknowledged: None,
         triaged: Some(Severity::Low),
         triage_reason: Some("cosmetic only, nothing is lost".into()),
     };

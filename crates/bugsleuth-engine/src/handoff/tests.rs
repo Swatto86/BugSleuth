@@ -109,6 +109,7 @@ fn ranked_of(position: usize) -> Ranked {
         cluster: bugsleuth_judge::Cluster {
             findings: vec![finding(Default::default())],
             agreement: 1,
+            acknowledged: None,
             triaged: None,
             triage_reason: None,
         },
