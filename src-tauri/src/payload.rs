@@ -10,7 +10,14 @@ use bugsleuth_engine::orchestrate::RunReport;
 use serde_json::{Value, json};
 
 /// Every ranked defect, in report order, as the window will show it.
-pub fn findings(report: &RunReport) -> Vec<Value> {
+///
+/// Each card carries its own standalone fix prompt. The bundle is already
+/// offered whole and each defect is already written to its own file, but the
+/// window could only hand over all of them at once — and handing one defect at
+/// a time to a small local model is the workflow the handoff was built around.
+pub fn findings(repo: &str, report: &RunReport) -> Vec<Value> {
+    let total = report.ranked.len();
+    let sweeps = report.swept.len();
     report
         .ranked
         .iter()
@@ -36,6 +43,7 @@ pub fn findings(report: &RunReport) -> Vec<Value> {
                 "failure": finding.failure_scenario,
                 "fixApproach": finding.fix.approach,
                 "snippet": finding.anchor.snippet,
+                "prompt": bugsleuth_engine::handoff::single(repo, entry, total, sweeps),
             })
         })
         .collect()
@@ -95,7 +103,7 @@ mod tests {
 
     #[test]
     fn a_regrade_reaches_the_window_as_data_with_both_grades_and_the_reason() {
-        let cards = findings(&report(Some(Severity::Low), Some("cosmetic")));
+        let cards = findings("C:/repo", &report(Some(Severity::Low), Some("cosmetic")));
         assert_eq!(cards[0]["severity"], "low");
         assert_eq!(cards[0]["claimedSeverity"], "high");
         assert_eq!(cards[0]["triageReason"], "cosmetic");
@@ -105,9 +113,24 @@ mod tests {
     fn an_unmoved_grade_sends_no_regrade_fields_so_the_card_stays_quiet() {
         // A reason without a moved grade would show a judgement that changed
         // nothing, and the card cannot know that.
-        let cards = findings(&report(Some(Severity::High), Some("agrees")));
+        let cards = findings("C:/repo", &report(Some(Severity::High), Some("agrees")));
         assert_eq!(cards[0]["severity"], "high");
         assert!(cards[0]["claimedSeverity"].is_null());
         assert!(cards[0]["triageReason"].is_null());
+    }
+
+    #[test]
+    fn each_card_carries_a_standalone_prompt_for_that_one_defect() {
+        // Handing one defect at a time to a small local model is the workflow
+        // the handoff was built around; the window could only hand over the
+        // whole bundle.
+        let cards = findings("C:/repo", &report(None, None));
+        let prompt = cards[0]["prompt"].as_str().unwrap_or_default();
+        assert!(
+            prompt.contains("the title"),
+            "the defect is not in its prompt"
+        );
+        assert!(prompt.contains("defect 1 of 1"), "{prompt}");
+        assert!(prompt.contains("C:/repo"), "the repository is not named");
     }
 }

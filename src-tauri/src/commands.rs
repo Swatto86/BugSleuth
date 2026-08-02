@@ -156,7 +156,7 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
                     "prompt": prompt,
                     "promptPath": saved.map(|p| p.display().to_string()),
                     "promptCount": report.ranked.len(),
-                    "findings": crate::payload::findings(&report),
+                    "findings": crate::payload::findings(&repo.display().to_string(), &report),
                 })
             }
             Err(error) => serde_json::json!({ "ok": false, "text": error.to_string() }),

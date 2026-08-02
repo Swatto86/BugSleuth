@@ -521,3 +521,9 @@ label.checkline input[type="checkbox"] {
   font-size: 0.8rem;
   overflow-x: auto;
 }
+
+.copy-one {
+  align-self: flex-start;
+  font-size: 0.8rem;
+  padding: 4px 10px;
+}

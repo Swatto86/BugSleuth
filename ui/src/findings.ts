@@ -22,6 +22,8 @@ export interface FindingCard {
   failure: string;
   fixApproach: string;
   snippet: string;
+  /** A complete, standalone fix prompt for this one defect. */
+  prompt?: string;
 }
 
 /** Build the whole findings list. Empty input renders nothing at all. */
@@ -85,9 +87,41 @@ function findingCard(card: FindingCard): HTMLElement {
   if (card.fixApproach.trim()) {
     body.append(section("Fix approach", card.fixApproach));
   }
+  if (card.prompt) body.append(copyButton(card));
 
   details.append(body);
   return details;
+}
+
+/**
+ * Copy this one defect's work order.
+ *
+ * The whole bundle is offered above, but a small local model handed twenty
+ * defects at once truncates and answers confidently about the first few. One
+ * defect is the unit the handoff was designed around, so it is the unit the
+ * window should hand over.
+ */
+function copyButton(card: FindingCard): HTMLElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "copy-one";
+  const idle = "Copy this defect's fix prompt";
+  button.textContent = idle;
+  button.addEventListener("click", () => {
+    void navigator.clipboard.writeText(card.prompt ?? "").then(
+      () => {
+        // Confirmed rather than assumed: a copy that silently failed and one
+        // that worked look identical, and the user finds out by pasting
+        // nothing into an agent.
+        button.textContent = "Copied";
+        window.setTimeout(() => (button.textContent = idle), 1500);
+      },
+      (error: unknown) => {
+        button.textContent = `Could not copy: ${String(error)}`;
+      },
+    );
+  });
+  return button;
 }
 
 function badge(severity: string): HTMLElement {
