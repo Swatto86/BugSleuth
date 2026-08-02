@@ -149,7 +149,10 @@ mod tests {
     #[test]
     fn a_successful_sweep_is_reused_rather_than_paid_for_twice() {
         let dir = scratch("reuse");
-        let report = lane_report(Status::Swept { turns: Some(3) });
+        let report = lane_report(Status::Swept {
+            turns: Some(3),
+            salvaged: false,
+        });
         assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
         assert!(reusable(&unit(), &options(&dir, true)).is_some());
         let _ = std::fs::remove_dir_all(&dir);
@@ -171,7 +174,10 @@ mod tests {
     #[test]
     fn nothing_is_reused_unless_resume_was_asked_for() {
         let dir = scratch("no-resume");
-        let report = lane_report(Status::Swept { turns: None });
+        let report = lane_report(Status::Swept {
+            turns: None,
+            salvaged: false,
+        });
         assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
         assert!(reusable(&unit(), &options(&dir, false)).is_none());
         let _ = std::fs::remove_dir_all(&dir);
@@ -213,7 +219,10 @@ mod tests {
             lane: "Correctness".into(),
             model: "claude:sonnet".into(),
             commit: None,
-            status: Status::Swept { turns: None },
+            status: Status::Swept {
+                turns: None,
+                salvaged: false,
+            },
             findings: vec![],
             rejected: vec![],
         };
@@ -340,7 +349,10 @@ mod tests {
         // tens of minutes. Changing the encoding must not silently throw them
         // away and charge for the sweeps again.
         let dir = scratch("legacy");
-        let report = lane_report(Status::Swept { turns: Some(2) });
+        let report = lane_report(Status::Swept {
+            turns: Some(2),
+            salvaged: false,
+        });
         assert!(write_report(&dir, &legacy_file_name_for(&unit()), &report).is_ok());
         assert!(reusable(&unit(), &options(&dir, true)).is_some());
         let _ = std::fs::remove_dir_all(&dir);
@@ -352,7 +364,10 @@ mod tests {
         // legacy file is only believed when the report inside it says it is
         // this sweep. Otherwise resume would hand a model another's findings.
         let dir = scratch("legacy-wrong");
-        let mut report = lane_report(Status::Swept { turns: Some(2) });
+        let mut report = lane_report(Status::Swept {
+            turns: Some(2),
+            salvaged: false,
+        });
         report.model = "codex:something-else".into();
         assert!(write_report(&dir, &legacy_file_name_for(&unit()), &report).is_ok());
         assert!(reusable(&unit(), &options(&dir, true)).is_none());
@@ -362,9 +377,15 @@ mod tests {
     #[test]
     fn the_current_name_wins_over_a_legacy_file_for_the_same_unit() {
         let dir = scratch("legacy-precedence");
-        let mut current = lane_report(Status::Swept { turns: Some(1) });
+        let mut current = lane_report(Status::Swept {
+            turns: Some(1),
+            salvaged: false,
+        });
         current.commit = Some("current".into());
-        let mut legacy = lane_report(Status::Swept { turns: Some(9) });
+        let mut legacy = lane_report(Status::Swept {
+            turns: Some(9),
+            salvaged: false,
+        });
         legacy.commit = Some("legacy".into());
         assert!(write_report(&dir, &file_name_for(&unit()), &current).is_ok());
         assert!(write_report(&dir, &legacy_file_name_for(&unit()), &legacy).is_ok());

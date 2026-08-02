@@ -100,6 +100,10 @@ pub struct Swept {
     pub model: String,
     pub lane: Lane,
     pub findings: usize,
+    /// True when this sweep's answer was recovered after it ran out of turns.
+    /// Recovered work beats a lost lane, but a short list from a reviewer that
+    /// was cut off means "as far as it got", not "that is all there is".
+    pub salvaged: bool,
     /// Findings the model reported whose quoted code could not be located.
     /// Surfaced because the rate is the headline measure of whether a model's
     /// claims about this repository can be trusted at all.
@@ -198,6 +202,10 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
                         lane: report.lane,
                         findings: report.lane_report.findings.len(),
                         rejected: report.lane_report.rejected.len(),
+                        salvaged: matches!(
+                            report.lane_report.status,
+                            Status::Swept { salvaged: true, .. }
+                        ),
                     });
                     findings.extend(report.lane_report.findings);
                 }
@@ -249,6 +257,7 @@ fn take_reusable(
                     lane: unit.lane,
                     findings: previous.findings.len(),
                     rejected: previous.rejected.len(),
+                    salvaged: matches!(previous.status, Status::Swept { salvaged: true, .. }),
                 });
                 findings.extend(previous.findings);
             }

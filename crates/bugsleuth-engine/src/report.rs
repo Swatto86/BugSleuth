@@ -38,6 +38,13 @@ pub enum Status {
     Swept {
         #[serde(default)]
         turns: Option<u32>,
+        /// True when the answer was recovered from a session that ran out of
+        /// turns mid-review. Recovered work is worth far more than a lost
+        /// lane, but it is not a clean sweep: the reviewer was cut off and
+        /// asked afterwards what it had, so a short list here means "as far as
+        /// it got", not "that is all there is".
+        #[serde(default)]
+        salvaged: bool,
     },
     /// The lane did not run, or did not finish. Never rendered as "no findings".
     NotSwept { reason: String },
@@ -63,7 +70,7 @@ impl LaneReport {
                 ));
                 return out;
             }
-            Status::Swept { turns } => {
+            Status::Swept { turns, .. } => {
                 let turns = turns.map(|t| format!(" in {t} turns")).unwrap_or_default();
                 out.push_str(&format!(
                     "  swept{turns} · {} verified, {} discarded\n",
@@ -176,7 +183,10 @@ mod tests {
             lane: "Security".into(),
             model: "claude:sonnet".into(),
             commit: None,
-            status: Status::Swept { turns: Some(4) },
+            status: Status::Swept {
+                turns: Some(4),
+                salvaged: false,
+            },
             findings: vec![],
             rejected: vec![],
         };

@@ -67,6 +67,12 @@ pub struct SweepResult {
     /// The CLI's session id, kept so a sweep can be resumed rather than restarted.
     pub session_id: Option<String>,
     pub turns: Option<u32>,
+    /// Whether this answer came from a salvaged session rather than the sweep
+    /// itself. A salvaged sweep is recovered work, not a clean run: the model
+    /// was cut off mid-review and asked afterwards what it had, so the list may
+    /// be short in a way an ordinary empty result is not. Presenting the two
+    /// identically would let a truncated review read as a thorough one.
+    pub salvaged: bool,
 }
 
 /// Run one lane sweep.
@@ -90,12 +96,14 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
 
     // A sweep that ran out of turns did the expensive part and then lost it.
     // Ask the same conversation for its answer once before giving up on a lane.
+    let mut salvaged = false;
     let outcome = match first {
         Ok(outcome) => outcome,
         Err(ProviderError::TurnsExhausted {
             session: Some(session),
             ..
         }) => {
+            salvaged = true;
             salvage::salvage(
                 spec.repo,
                 spec.model,
@@ -116,6 +124,7 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
         usage: outcome.usage,
         session_id: outcome.session_id,
         turns: outcome.num_turns,
+        salvaged,
     })
 }
 

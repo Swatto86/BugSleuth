@@ -144,7 +144,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
             api_key: request.api_key,
         })
         .await
-        .map(|r| (r.findings.findings, r.turns)),
+        .map(|r| (r.findings.findings, r.turns, r.salvaged)),
         Vendor::Codex => codex::sweep(CodexSweep {
             repo: reviewed,
             model,
@@ -154,7 +154,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
             binary: None,
         })
         .await
-        .map(|r| (r.findings.findings, None)),
+        .map(|r| (r.findings.findings, None, false)),
         Vendor::Kilo => kilo::sweep(KiloSweep {
             worktree: reviewed,
             model,
@@ -164,10 +164,10 @@ pub async fn run(request: Request<'_>) -> LaneReport {
             binary: None,
         })
         .await
-        .map(|r| (r.findings.findings, None)),
+        .map(|r| (r.findings.findings, None, false)),
     };
 
-    let (raw, turns) = match outcome {
+    let (raw, turns, salvaged) = match outcome {
         Ok(outcome) => outcome,
         Err(error) => return not_swept(error.to_string()),
     };
@@ -178,7 +178,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         lane: request.lane.title().to_string(),
         model: model_label,
         commit,
-        status: Status::Swept { turns },
+        status: Status::Swept { turns, salvaged },
         findings,
         rejected,
     }

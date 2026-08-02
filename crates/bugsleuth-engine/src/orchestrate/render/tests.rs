@@ -13,6 +13,7 @@ fn report(gaps: Vec<Gap>) -> RunReport {
             lane: Lane::Correctness,
             findings: 0,
             rejected: 0,
+            salvaged: false,
         }],
         gaps,
     }
@@ -61,12 +62,14 @@ fn a_multi_lane_report_warns_that_severities_are_not_comparable() {
                 lane: Lane::Correctness,
                 findings: 1,
                 rejected: 0,
+                salvaged: false,
             },
             Swept {
                 model: "claude:sonnet".into(),
                 lane: Lane::Security,
                 findings: 1,
                 rejected: 0,
+                salvaged: false,
             },
         ],
         triage: Default::default(),
@@ -86,12 +89,14 @@ fn two_models_on_one_lane_is_still_one_lane() {
                 lane: Lane::Correctness,
                 findings: 1,
                 rejected: 0,
+                salvaged: false,
             },
             Swept {
                 model: "codex:".into(),
                 lane: Lane::Correctness,
                 findings: 1,
                 rejected: 0,
+                salvaged: false,
             },
         ],
         triage: Default::default(),
@@ -126,6 +131,7 @@ fn graded_report(triage: Outcome) -> RunReport {
             lane: Lane::Correctness,
             findings: 0,
             rejected: 0,
+            salvaged: false,
         }],
         gaps: vec![],
     }
@@ -164,12 +170,14 @@ fn a_fully_graded_multi_lane_report_stops_warning_that_lanes_cannot_be_compared(
                 lane: Lane::Correctness,
                 findings: 1,
                 rejected: 0,
+                salvaged: false,
             },
             Swept {
                 model: "claude:sonnet".into(),
                 lane: Lane::Security,
                 findings: 1,
                 rejected: 0,
+                salvaged: false,
             },
         ],
         gaps: vec![],
@@ -241,6 +249,7 @@ fn a_moved_grade_is_shown_with_what_it_moved_from_and_why() {
             lane: Lane::Ux,
             findings: 1,
             rejected: 0,
+            salvaged: false,
         }],
         gaps: vec![],
     };
@@ -274,6 +283,7 @@ fn rejected_findings_are_counted_in_the_sweep_line() {
             lane: Lane::Correctness,
             findings: 3,
             rejected: 2,
+            salvaged: false,
         }],
         gaps: vec![],
     };
@@ -302,4 +312,28 @@ fn a_report_says_what_the_method_could_not_see_even_when_every_lane_ran() {
     assert!(text.contains("could not see"), "{text}");
     assert!(text.contains("Nothing was run"), "{text}");
     assert!(text.contains("vulnerability database"), "{text}");
+}
+
+#[test]
+fn a_salvaged_sweep_does_not_read_like_a_clean_one() {
+    // A review cut off partway and asked afterwards what it had can return a
+    // short list. Rendered identically to a thorough sweep that found little,
+    // it would be read as reassurance rather than as a truncated review.
+    let salvaged = RunReport {
+        ranked: vec![],
+        triage: Default::default(),
+        swept: vec![Swept {
+            model: "claude:sonnet".into(),
+            lane: Lane::Security,
+            findings: 1,
+            rejected: 0,
+            salvaged: true,
+        }],
+        gaps: vec![],
+    };
+    let text = salvaged.to_text();
+    assert!(text.contains("RECOVERED"), "{text}");
+    assert!(text.contains("as far as it got"), "{text}");
+    // An ordinary sweep says nothing of the sort.
+    assert!(!report(Vec::new()).to_text().contains("RECOVERED"));
 }

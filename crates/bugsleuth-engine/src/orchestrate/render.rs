@@ -38,8 +38,16 @@ impl RunReport {
             } else {
                 format!(", {} rejected as unverifiable", sweep.rejected)
             };
+            // A salvaged sweep is recovered work, not a clean run. Rendering
+            // the two identically would let a review that was cut off partway
+            // read as a thorough one that simply found little.
+            let salvaged = if sweep.salvaged {
+                " — RECOVERED after running out of turns, so this list is as far as it got"
+            } else {
+                ""
+            };
             out.push_str(&format!(
-                "  swept: {} lane by {} ({} findings{rejected})\n",
+                "  swept: {} lane by {} ({} findings{rejected}){salvaged}\n",
                 sweep.lane.title(),
                 sweep.model,
                 sweep.findings,

@@ -87,6 +87,7 @@ mod tests {
                 lane: Lane::Ux,
                 findings: 1,
                 rejected: 0,
+                salvaged: false,
             }],
             gaps: vec![],
         }

@@ -135,6 +135,24 @@ error messages, unsafe deserialization, TOCTOU on file paths, over-broad \
 permissions and capability grants, unvalidated input crossing a trust boundary \
 (IPC, subprocess arguments, HTTP handlers, file paths), and dependency risk.
 
+# Do not stop at the first one
+
+The most likely way you will miss a real hole is by finding the loudest \
+instance of a sink and moving on. Measured against known defects, two \
+reviewers each found one unescaped `innerHTML` assignment, reported it, and \
+never looked at the same file's other one — which was also unescaped and also \
+reachable from remote data.
+
+So when you find any sink — an HTML injection point, a path join, a query \
+built by concatenation, a subprocess argument, a deserialization — **enumerate \
+every other use of that same sink in the codebase and check each one \
+separately**. Some will be escaped and some will not, and the escaped ones are \
+what make the unescaped one easy to miss. A helper that *builds* a string \
+which is later assigned to a sink is part of that sink: follow it back.
+
+Report each unsafe use as its own finding. One finding that says \
+'and there are others like it' cannot be fixed one commit at a time.
+
 OUT OF SCOPE for this lane: ordinary logic bugs with no attacker angle, \
 type-contract drift, and user-interface behaviour. Do not report theoretical \
 hardening ideas with no concrete exploitation path.";
@@ -146,6 +164,23 @@ names, casing, optionality, or numeric width differ between producer and \
 consumer, an enum variant one side can emit and the other cannot parse, a \
 version-skew hazard in a persisted format, and error shapes that the caller \
 cannot actually distinguish.
+
+# The same rule, written down twice
+
+A mismatch is not always a type. Look for a rule expressed on both sides of a \
+boundary in different words: a maximum size checked in the frontend and again \
+in the backend, a timeout both ends assume, a retry count, a page size, a \
+field-length limit, a regular expression duplicated in two languages. Nothing \
+makes those two values agree, and nothing fails when they drift — the wrong \
+side simply wins, silently.
+
+Measured against a known defect, a frontend refused attachments over one limit \
+while the backend enforced a smaller one, so files that passed the check the \
+user could see failed at send with a raw error. Both numbers were plain \
+constants, in the repository, ten minutes apart.
+
+Read every literal limit you find, and go looking for its counterpart on the \
+other side. When you find one, report both values and which one wins.
 
 OUT OF SCOPE for this lane: internal logic errors, security issues, and \
 interface aesthetics. A finding here must name BOTH sides of the mismatch.";
@@ -222,6 +257,40 @@ mod tests {
         assert!(
             mandate.contains("Shift+F10"),
             "nothing names the platform's own keyboard path to a context menu"
+        );
+    }
+
+    #[test]
+    fn the_security_mandate_asks_for_the_other_uses_of_a_sink_it_measurably_missed() {
+        // Graded against a known injection defect, two vendors each found one
+        // unescaped innerHTML assignment, reported it, and never looked at the
+        // same file's other one - which was also unescaped and also reachable
+        // from remote data. Finding the loudest instance and stopping was the
+        // whole miss.
+        let mandate = Lane::Security.mandate();
+        assert!(
+            mandate.contains("enumerate"),
+            "nothing tells the reviewer to sweep the other uses of a sink it found"
+        );
+        assert!(
+            mandate.contains("Do not stop at the first"),
+            "nothing warns against stopping at the loudest instance"
+        );
+    }
+
+    #[test]
+    fn the_contract_mandate_asks_about_a_rule_written_down_on_both_sides() {
+        // The measured miss was two plain constants: a frontend size guard and
+        // the smaller backend budget it was meant to pre-screen for. Both were
+        // in the repository; neither side made them agree.
+        let mandate = Lane::Contract.mandate();
+        assert!(
+            mandate.contains("written down twice") || mandate.contains("expressed on both sides"),
+            "nothing asks about one rule duplicated across a boundary"
+        );
+        assert!(
+            mandate.contains("report both values"),
+            "nothing asks for both sides of a duplicated limit"
         );
     }
 }
