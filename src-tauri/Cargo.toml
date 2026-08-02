@@ -21,6 +21,20 @@ serde_json = { workspace = true }
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tokio = { workspace = true }
+tauri-plugin-wdio = { version = "1.2.0", optional = true }
 
 [lints]
 workspace = true
+
+# WebDriver support is TEST-ONLY and must never reach a published build.
+#
+# Without it the app exposes no automation endpoint at all: msedgedriver
+# attaches to a blank webview and every acceptance spec fails with an empty
+# document. That is how six runs were spent on plausible theories about dev
+# builds, driver versions and stale instances before anyone printed the URL.
+#
+# Off by default, so `tauri build` and `cargo build --release` exclude it, and
+# the release workflow asserts the published binary does not carry it.
+[features]
+default = []
+wdio = ["dep:tauri-plugin-wdio"]

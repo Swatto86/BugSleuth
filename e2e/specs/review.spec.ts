@@ -35,6 +35,20 @@ describe("BugSleuth desktop app", () => {
     // than `cargo tauri build`, so it points at the dev server instead of
     // embedding the frontend — and every other spec then fails with a confusing
     // "element not found" that says nothing about the real cause.
+    // What the webview is *actually* showing, printed before the wait rather
+    // than guessed at afterwards. Six runs were spent on plausible theories —
+    // a dev build, a driver mismatch, a stale instance — because the failure
+    // said "blank page" and nothing about why. The URL alone separates all of
+    // them: tauri://… or http://… is a production binary, localhost:5173 is a
+    // development one pointed at a server that is not running.
+    const url = await browser.getUrl().catch((e: unknown) => `getUrl failed: ${String(e)}`);
+    const source = await browser.getPageSource().catch(() => "");
+    console.log(`
+[diagnostic] url=${url}`);
+    console.log(`[diagnostic] page source is ${source.length} chars`);
+    console.log(`[diagnostic] source head: ${source.slice(0, 300).replace(/\s+/g, " ")}
+`);
+
     await browser.waitUntil(
       async () => (await (await $$("#app")).length) > 0,
       {

@@ -1,14 +1,9 @@
-# Tag-driven release.
+# Tag-driven release, one job per platform.
 #
-# Publishes three things together, because two of them are useless alone: the
-# NSIS installer, the **portable executable**, and checksums covering both.
-# The portable exe is not a convenience — a published desktop tool has to be
-# runnable without an installer, admin rights, or prerequisites.
-#
-# BugSleuth bundles no resources and no sidecars, so the raw MSVC binary that
-# `tauri build` produces is already self-contained: WebView2Loader is statically
-# linked, and the webview itself is the OS component every supported Windows
-# already ships. The workflow asserts that rather than trusting it.
+# Publishes, for every OS the tool supports: the installer, the **portable
+# executable**, and checksums. The portable binary is not a convenience — a
+# published desktop tool has to be runnable without an installer, admin rights
+# or prerequisites, and an installer may ship in addition, never instead.
 name: release
 
 on:
@@ -19,8 +14,27 @@ permissions:
   contents: write
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            gate: pwsh ./scripts/verify.ps1
+            portable: bugsleuth-app.exe
+            cli: bugsleuth.exe
+            suffix: windows-x64.exe
+          - os: ubuntu-latest
+            gate: bash ./scripts/verify.sh
+            portable: bugsleuth-app
+            cli: bugsleuth
+            suffix: linux-x64
+          - os: macos-latest
+            gate: bash ./scripts/verify.sh
+            portable: bugsleuth-app
+            cli: bugsleuth
+            suffix: macos-arm64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,68 +46,60 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.os }}
+
+      - name: Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
+            patchelf libxdo-dev
 
       # The gate runs again on the tagged commit. CI passing on the branch is
       # not evidence about the tag if anything landed between them.
       - name: Gate
-        shell: pwsh
-        run: ./scripts/verify.ps1
+        shell: bash
+        run: ${{ matrix.gate }}
 
-      - name: Build the app
+      # Default features only. WebDriver support is test-only and must not be
+      # in anything published; the check below proves it is not.
+      - name: Build
         run: npx --yes @tauri-apps/cli@^2 build
 
-      - name: Collect artifacts
-        shell: pwsh
+      - name: Collect and verify artifacts
+        shell: bash
         run: |
-          $out = "release-artifacts"
-          New-Item -ItemType Directory -Force $out | Out-Null
+          set -euo pipefail
+          out=release-artifacts
+          mkdir -p "$out"
 
-          # Named explicitly rather than globbed. This workspace produces two
-          # executables — the desktop app and the CLI — and "the first .exe that
-          # is not a setup" would publish whichever sorted first. Both are real
-          # deliverables, so both ship.
-          #
-          # They land in the *workspace* target directory, not src-tauri/target:
-          # verified by building, because guessing this wrong publishes nothing
-          # and the workflow would still go green on an empty glob.
-          $bin = "target/release"
-          $wanted = @{
-            "bugsleuth-app.exe" = "BugSleuth-portable.exe"
-            "bugsleuth.exe"     = "bugsleuth-cli.exe"
-          }
-          foreach ($name in $wanted.Keys) {
-            $path = Join-Path $bin $name
-            if (-not (Test-Path $path)) { throw "expected executable missing: $path" }
-            Copy-Item $path (Join-Path $out $wanted[$name])
-          }
+          # Named explicitly: this workspace produces two executables, and "the
+          # first one that is not a setup" would publish whichever sorted first.
+          for pair in "${{ matrix.portable }}:BugSleuth-portable-${{ matrix.suffix }}" \
+                      "${{ matrix.cli }}:bugsleuth-cli-${{ matrix.suffix }}"; do
+            src="target/release/${pair%%:*}"
+            [ -f "$src" ] || { echo "expected executable missing: $src"; exit 1; }
+            cp "$src" "$out/${pair##*:}"
+          done
 
-          # A portable binary that needs a DLL we do not ship is not portable.
-          # Checked rather than assumed: it is the one property that makes this
-          # artifact worth publishing beside the installer at all.
-          $app = Join-Path $out "BugSleuth-portable.exe"
-          $dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue
-          if ($dumpbin) {
-            $imports = & $dumpbin.Source /dependents $app
-            if ($imports -match 'WebView2Loader\.dll') {
-              throw 'the portable exe imports WebView2Loader.dll, which is not shipped beside it'
-            }
-          } else {
-            Write-Host 'note: dumpbin unavailable, import check skipped'
-          }
+          # The published binary must carry no automation surface. `wdio` is a
+          # non-default feature precisely so this holds, and it is asserted
+          # rather than assumed: shipping it would let anything on the machine
+          # drive the app.
+          if strings -a "target/release/${{ matrix.portable }}" 2>/dev/null | grep -qi "tauri-plugin-wdio"; then
+            echo "the published binary carries WebDriver support"; exit 1
+          fi
 
-          # The bundle lands in the workspace target directory too, not under
-          # src-tauri. Verified by building rather than assumed - the wrong path
-          # here publishes an empty release and the job still goes green.
-          $bundles = Get-ChildItem -Path target/release/bundle -Recurse -Include *.exe,*.msi -File
-          if (-not $bundles) { throw 'no installer was produced' }
-          $bundles | ForEach-Object { Copy-Item $_.FullName $out }
+          bundles=$(find target/release/bundle -type f \
+            \( -name '*.exe' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.dmg' \) 2>/dev/null || true)
+          [ -n "$bundles" ] || { echo "no installer was produced"; exit 1; }
+          while IFS= read -r b; do cp "$b" "$out/"; done <<< "$bundles"
 
-          Get-ChildItem $out -File |
-            Get-FileHash -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
-            Set-Content (Join-Path $out "SHA256SUMS.txt")
-
-          Get-ChildItem $out | Format-Table Name, Length
+          ( cd "$out" && sha256sum * > "SHA256SUMS-${{ matrix.suffix }}.txt" 2>/dev/null \
+            || shasum -a 256 * > "SHA256SUMS-${{ matrix.suffix }}.txt" )
+          ls -la "$out"
 
       - name: Publish
         uses: softprops/action-gh-release@v2

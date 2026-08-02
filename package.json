@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "node --experimental-strip-types --test ui/src/*.test.ts",
-    "e2e": "wdio run e2e/wdio.conf.ts"
+    "e2e": "npm run e2e:build && wdio run e2e/wdio.conf.ts",
+    "e2e:build": "tauri build --features wdio --no-bundle --config src-tauri/tauri.wdio.conf.json"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

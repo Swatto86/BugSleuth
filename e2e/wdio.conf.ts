@@ -68,6 +68,43 @@ function assertProductionBuild(exe: string): void {
 
 let tauriDriver: ChildProcess | undefined;
 
+/**
+ * Wait until the driver is actually accepting connections.
+ *
+ * `spawn` returning is not the driver being ready — it takes a moment to bind
+ * 4444, and wdio's first request goes out immediately. The suite failed with
+ * "Unable to connect to http://127.0.0.1:4444/", which reads like a missing
+ * driver and is really a race with a driver that was seconds from ready.
+ *
+ * Worse than the failure was one variant of it: with a stale driver already
+ * holding the port from an earlier aborted run, the suite hung with no output
+ * at all rather than failing, and sat there for over an hour. So this also
+ * fails loudly with the reason rather than waiting forever.
+ */
+async function waitForDriver(): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  let lastError = "no attempt made";
+  while (Date.now() < deadline) {
+    if (tauriDriver?.exitCode !== null && tauriDriver?.exitCode !== undefined) {
+      throw new Error(`tauri-driver exited with code ${tauriDriver.exitCode} before binding 4444`);
+    }
+    try {
+      // Any answer at all means it is listening. WebDriver replies 404 to a
+      // bare GET, which is a perfectly good sign of life.
+      await fetch("http://127.0.0.1:4444/status");
+      return;
+    } catch (error) {
+      lastError = String(error);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  throw new Error(
+    `tauri-driver never accepted a connection on 127.0.0.1:4444 within 30s. ` +
+      `Last error: ${lastError}. A driver left running by an aborted run will ` +
+      `hold that port - check for a stray tauri-driver.exe.`,
+  );
+}
+
 export const config: WebdriverIO.Config = {
   runner: "local",
   framework: "mocha",
@@ -94,13 +131,30 @@ export const config: WebdriverIO.Config = {
     },
   ],
 
-  onPrepare: () => {
-    assertProductionBuild(application);
+  onPrepare: async () => {
+    // **Fatal, not logged.** WebdriverIO reports a throwing `onPrepare` and
+    // then starts the workers anyway, so a clear message — "the binary does not
+    // contain the current frontend, rebuild it" — became an unrelated
+    // ECONNREFUSED from a driver that was never started. The first time this
+    // happened the suite produced no output at all and sat for over an hour.
+    //
+    // The check is worth keeping precisely because it fires often: the gate
+    // runs `vite build`, which makes `ui/dist` newer than the app, so any gate
+    // run after a package build leaves the binary stale.
+    try {
+      assertProductionBuild(application);
+    } catch (error) {
+      console.error(`
+${String(error instanceof Error ? error.message : error)}
+`);
+      process.exit(1);
+    }
     tauriDriver = spawn(
       "tauri-driver",
       ["--native-driver", path.resolve(root, ".webdriver/msedgedriver.exe")],
       { stdio: [null, process.stdout, process.stderr], shell: true },
     );
+    await waitForDriver();
   },
 
   onComplete: () => {

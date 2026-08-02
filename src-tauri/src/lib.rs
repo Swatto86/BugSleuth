@@ -19,8 +19,18 @@ mod tray;
 use tauri::Manager;
 
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+
+    // Test-only, compiled in solely for the acceptance suite. Without it the
+    // app exposes no automation endpoint at all — WebDriver attaches to a blank
+    // webview and every spec fails with an empty document. With it in a
+    // published build the app would offer that surface to anything on the
+    // machine, so it is a non-default feature and the release workflow asserts
+    // the shipped binary does not carry it.
+    #[cfg(feature = "wdio")]
+    let builder = builder.plugin(tauri_plugin_wdio::init());
+
+    builder
         .setup(|app| {
             tray::install(app.handle())?;
 

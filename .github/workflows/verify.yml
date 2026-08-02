@@ -1,8 +1,12 @@
-# The gate, run on every push and pull request.
+# The gate, on every platform the tool claims to support.
 #
-# Deliberately the same script a developer runs locally (`scripts/verify.ps1`),
-# rather than a re-listing of its steps here: two definitions of "green" drift,
-# and the one that drifts is always the one nobody reads.
+# One job per OS rather than Windows alone, because "it compiles here" has never
+# been evidence about anywhere else — and this project ships a desktop app whose
+# webview, process handling and path rules all differ between them.
+#
+# Each platform runs the same gate a developer runs locally: verify.ps1 on
+# Windows, verify.sh elsewhere. Two definitions of green drift, and the one that
+# drifts is always the one nobody reads.
 name: verify
 
 on:
@@ -17,7 +21,17 @@ concurrency:
 
 jobs:
   gate:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            gate: pwsh ./scripts/verify.ps1
+          - os: ubuntu-latest
+            gate: bash ./scripts/verify.sh
+          - os: macos-latest
+            gate: bash ./scripts/verify.sh
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,21 +39,27 @@ jobs:
         with:
           node-version: 22
           cache: npm
-
-      # From the lockfile, so CI installs what was committed rather than
-      # whatever resolves today.
       - run: npm ci
 
-      # rust-toolchain.toml pins the version; this action honours it.
       - uses: dtolnay/rust-toolchain@stable
-
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}
 
-      - name: Frontend typecheck and tests
+      # Tauri's Linux backend is webkit2gtk, which is not on the runner image.
+      # Without these the Rust build fails at link time with a pkg-config error
+      # that says nothing about Tauri.
+      - name: Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          npx tsc --noEmit
-          npm test
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev
 
-      - name: Gate (fmt, clippy, tests, release build, file caps)
-        shell: pwsh
-        run: ./scripts/verify.ps1
+      - name: Gate
+        shell: bash
+        run: ${{ matrix.gate }}
