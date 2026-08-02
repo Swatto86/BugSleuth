@@ -143,15 +143,30 @@ impl Finding {
         raw: RawFinding,
         anchor: VerifiedAnchor,
     ) -> Self {
+        // Made printable here, once, rather than at each place a report is
+        // rendered. Every string below is attacker-influenced: the snippet is
+        // code from the repository under review, and the model's own prose is
+        // written after reading it. A terminal acts on an escape sequence
+        // rather than showing it, so a repository could recolour, clear or
+        // overwrite the report about itself — and this tool's output is a list
+        // of security findings.
+        //
+        // At construction because there is more than one renderer, and fixing
+        // the one that was found would have left the others. There is no path
+        // to a `Finding` that does not come through here.
         Self {
             id,
             lane: lane.id(),
             model,
-            title: raw.title,
+            title: crate::limits::printable(&raw.title),
             severity: raw.severity,
-            anchor,
-            explanation: raw.explanation,
-            failure_scenario: raw.failure_scenario,
+            anchor: VerifiedAnchor {
+                file: crate::limits::printable(&anchor.file),
+                snippet: crate::limits::printable(&anchor.snippet),
+                ..anchor
+            },
+            explanation: crate::limits::printable(&raw.explanation),
+            failure_scenario: crate::limits::printable(&raw.failure_scenario),
             fix: raw.fix,
         }
     }

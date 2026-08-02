@@ -287,3 +287,88 @@ fn without_a_triage_pass_the_models_own_grade_stands() {
     assert_eq!(cluster.severity(), Severity::High);
     assert_eq!(cluster.severity(), cluster.claimed_severity());
 }
+
+/// Every ordering of the same findings must produce the same report.
+///
+/// The defect: a finding joined the *first* cluster it matched, and
+/// `same_defect` is symmetric but not transitive — wording similarity is not.
+/// A middle finding matching two separate clusters merged them in one order and
+/// left them apart in another, so which report a user saw depended on the order
+/// the sweeps happened to finish in. The doc comment claimed the opposite,
+/// which is how it survived being read.
+///
+/// **The premise is asserted, not assumed.** The first version of this test
+/// used three wordings that all matched each other, so it passed on the broken
+/// algorithm and proved nothing. If the three findings below ever stop forming
+/// a chain, this fails on that rather than quietly going vacuous.
+#[test]
+fn the_grouping_does_not_depend_on_the_order_findings_arrive_in() {
+    let a = worded(
+        "a",
+        10,
+        "average_price divides by zero when the inventory is empty",
+    );
+    let b = worded(
+        "b",
+        12,
+        "average_price divides by zero when the inventory is empty, and remove_stock          underflows when the quantity is larger than the stock",
+    );
+    let c = worded(
+        "c",
+        14,
+        "remove_stock underflows when the quantity is larger than the stock held",
+    );
+
+    // A chain, not a triangle: B is the compound finding that bridges two
+    // defects sharing no identifier of their own.
+    assert!(
+        pairing::same_defect(&a, &b),
+        "A and B must match for this to test anything"
+    );
+    assert!(
+        pairing::same_defect(&b, &c),
+        "B and C must match for this to test anything"
+    );
+    assert!(
+        !pairing::same_defect(&a, &c),
+        "A and C must NOT match, or there is no chain"
+    );
+
+    let orders = [
+        vec![a.clone(), b.clone(), c.clone()],
+        vec![a.clone(), c.clone(), b.clone()],
+        vec![c.clone(), b.clone(), a.clone()],
+        vec![c.clone(), a.clone(), b.clone()],
+    ];
+    let groupings: Vec<Vec<usize>> = orders
+        .into_iter()
+        .map(|order| {
+            let mut sizes: Vec<usize> = cluster(order).iter().map(|c| c.findings.len()).collect();
+            sizes.sort_unstable();
+            sizes
+        })
+        .collect();
+
+    assert!(
+        groupings.windows(2).all(|pair| pair[0] == pair[1]),
+        "the same findings grouped differently depending on their order: {groupings:?}"
+    );
+}
+fn worded(id: &str, line: u32, explanation: &str) -> Finding {
+    Finding {
+        id: FindingId::new(id),
+        lane: LaneId::new("correctness"),
+        model: ModelId::new("claude:sonnet"),
+        title: "inventory arithmetic".into(),
+        severity: Severity::High,
+        anchor: VerifiedAnchor {
+            file: "src/price.rs".into(),
+            line,
+            claimed_line: line,
+            snippet: "code".into(),
+        },
+        explanation: explanation.into(),
+        failure_scenario: "f".into(),
+        fix: Default::default(),
+    }
+}

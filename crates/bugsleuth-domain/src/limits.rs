@@ -77,6 +77,31 @@ pub const UNSANDBOXED_VENDOR_WARNING: &str = "This run includes Kilo, which cann
 /// check that inference themselves.
 pub const PROVING_EXECUTION_WARNING: &str = "Proving ran this repository's own build and test commands on this machine, with your account's permissions and no sandbox — a build script, a procedural macro or a test fixture in the reviewed code executed as you. The throwaway checkout stops the reviewed code being modified and nothing else. Only ask for proof on a repository you would already be willing to run.";
 
+/// Text from the reviewed repository, made safe to print on a terminal.
+///
+/// Quoted source is attacker-controlled: the whole premise is that the code
+/// under review may be hostile. An ANSI escape sequence inside a snippet is
+/// interpreted by the terminal printing the report, not shown — it can move the
+/// cursor, clear the screen, recolour text, or overwrite the lines above it. In
+/// a tool whose output is a list of security findings, that means a repository
+/// can hide the finding about itself.
+///
+/// Everything below space except tab is replaced with a visible placeholder.
+/// Nothing legitimate in a source snippet needs a control character, and seeing
+/// `<0x1b>` where one was is more informative than silently dropping it.
+#[must_use]
+pub fn printable(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c == '\t' || c == '\n' || !c.is_control() {
+                c.to_string()
+            } else {
+                format!("<0x{:02x}>", c as u32)
+            }
+        })
+        .collect()
+}
+
 /// The limits as a markdown list, for the fix prompt and the report.
 pub fn as_list(bullet: &str) -> String {
     REVIEW_LIMITS

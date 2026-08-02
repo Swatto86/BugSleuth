@@ -241,6 +241,12 @@ fn api_key(requested: bool) -> Result<Option<String>> {
 async fn run_sweep(args: SweepArgs) -> Result<()> {
     let repo = real_path(&args.repo)?;
 
+    // The same check `run` makes, from the same function. `sweep` skipped it,
+    // so a typo in --effort reached the vendor's CLI: either rejected after the
+    // sweep was already paid for, or — worse — ignored, leaving a report that
+    // looks normal and never says the depth asked for was not applied.
+    bugsleuth_engine::plan::check_effort(&args.model, &args.effort)?;
+
     let api_key = api_key(args.use_api_key)?;
 
     let report = sweep::run(sweep::Request {

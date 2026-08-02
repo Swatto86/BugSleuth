@@ -18,6 +18,14 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Distinguishes staging files written by one process, as the id cannot.
+///
+/// Two writes in one process can be in flight at once — the orchestrator writes
+/// a report per sweep and sweeps run concurrently — so the process id alone
+/// would let two of them share a temporary file.
+static NEXT: AtomicU64 = AtomicU64::new(0);
 
 /// Write `contents` to `path`, leaving the previous file untouched on failure.
 ///
@@ -56,9 +64,23 @@ fn staged_path(path: &Path) -> io::Result<PathBuf> {
             format!("{} names no file to write", path.display()),
         )
     })?;
+    // Unique per writer. The staging name used to be `.{name}.writing` and
+    // nothing else, so two processes replacing the same report wrote to one
+    // temporary file at the same time: each rename then succeeded, and the file
+    // that survived could hold the other writer's bytes. An atomic write that
+    // publishes a mixture of two contents is worse than no atomic write, since
+    // the whole point is that a reader never sees one.
+    //
+    // The worktree module learned this an hour earlier and this module was
+    // written without it — the same rule, missed in the second place, which is
+    // the class this codebase keeps finding in itself.
     let mut staged = std::ffi::OsString::from(".");
     staged.push(name);
-    staged.push(".writing");
+    staged.push(format!(
+        ".{}-{}.writing",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
     Ok(path.with_file_name(staged))
 }
 

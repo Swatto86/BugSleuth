@@ -136,3 +136,61 @@ fn an_explicitly_empty_list_is_still_a_clean_sweep() {
     let parsed = serde_json::from_str::<RawFindings>(r#"{"findings": []}"#);
     assert!(parsed.is_ok_and(|p| p.findings.is_empty()));
 }
+
+/// A hostile repository must not be able to rewrite the report about itself.
+///
+/// The reviewed code is untrusted by design. An ANSI escape inside a snippet is
+/// acted on by the terminal printing the report rather than shown: it can
+/// recolour text, clear the screen, or move the cursor up and overwrite the
+/// lines already printed. In a list of security findings that means the
+/// repository hiding the finding about itself.
+///
+/// Sanitised at construction rather than at each renderer, because there are
+/// several and fixing the one that was reported would have left the rest.
+#[test]
+fn control_characters_from_the_repository_cannot_reach_a_terminal() {
+    let esc = char::from(27);
+    let hostile = format!("let x = 1;{esc}[2J{esc}[1;1Hnothing to see here");
+
+    let finding = Finding::new(
+        FindingId::new("f1"),
+        Lane::Security,
+        ModelId::new("claude:sonnet"),
+        RawFinding {
+            title: format!("a title with {esc}[31m colour"),
+            severity: Severity::High,
+            file: "src/x.rs".into(),
+            line: 1,
+            snippet: hostile.clone(),
+            explanation: format!("an explanation with {esc}[2J a screen clear"),
+            failure_scenario: format!("a scenario with {esc}[A a cursor move"),
+            fix: Default::default(),
+        },
+        VerifiedAnchor {
+            file: format!("src/{esc}[2Jx.rs"),
+            line: 1,
+            claimed_line: 1,
+            snippet: hostile,
+        },
+    );
+
+    for (what, text) in [
+        ("the title", &finding.title),
+        ("the explanation", &finding.explanation),
+        ("the failure scenario", &finding.failure_scenario),
+        ("the file name", &finding.anchor.file),
+        ("the snippet", &finding.anchor.snippet),
+    ] {
+        assert!(
+            !text.contains(esc),
+            "{what} still carries an escape the terminal will act on: {text:?}"
+        );
+        assert!(
+            text.contains("<0x1b>"),
+            "{what} lost the escape silently instead of showing it: {text:?}"
+        );
+    }
+
+    // Ordinary text is untouched, or the report becomes unreadable.
+    assert!(finding.anchor.snippet.contains("let x = 1;"));
+}

@@ -89,20 +89,47 @@ impl Cluster {
 
 /// Group findings that describe the same defect.
 ///
-/// Order-independent by construction: a finding joins the first cluster it
-/// matches, and matching is symmetric, so the same input in any order produces
-/// the same grouping.
+/// Order-independent: the result is the connected components of "these two
+/// describe the same defect", so any permutation of the input gives the same
+/// grouping.
+///
+/// **The previous version claimed that and did not do it.** It joined a finding
+/// to the *first* cluster it matched, reasoning that `same_defect` is symmetric.
+/// Symmetry is not enough — the relation is not transitive, because wording
+/// similarity is not. Given A matching B, and C matching both, `[A, B, C]`
+/// produced one cluster while `[A, C, B]` could produce two, and the report a
+/// user saw depended on the order sweeps happened to finish in. Merging every
+/// cluster a finding matches makes the documented property true.
+///
+/// Found by BugSleuth reviewing itself, and it is the "comment describes
+/// behaviour the code does not implement" class, in the doc comment of the
+/// function whose stability the whole report rests on.
 pub fn cluster(findings: Vec<Finding>) -> Vec<Cluster> {
     let mut clusters: Vec<Cluster> = Vec::new();
 
     for finding in findings {
-        match clusters.iter_mut().find(|cluster| {
-            cluster
-                .findings
-                .iter()
-                .any(|other| same_defect(other, &finding))
-        }) {
-            Some(cluster) => cluster.findings.push(finding),
+        let matching: Vec<usize> = clusters
+            .iter()
+            .enumerate()
+            .filter(|(_, cluster)| {
+                cluster
+                    .findings
+                    .iter()
+                    .any(|other| same_defect(other, &finding))
+            })
+            .map(|(index, _)| index)
+            .collect();
+
+        match matching.split_first() {
+            Some((&first, rest)) => {
+                // Fold the others into the first, highest index out so the
+                // remaining indices stay valid as they are removed.
+                for &index in rest.iter().rev() {
+                    let absorbed = clusters.remove(index);
+                    clusters[first].findings.extend(absorbed.findings);
+                }
+                clusters[first].findings.push(finding);
+            }
             None => clusters.push(Cluster {
                 findings: vec![finding],
                 agreement: 0,

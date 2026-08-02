@@ -75,6 +75,18 @@ pub struct RunControl(std::sync::Mutex<Option<bugsleuth_engine::cancel::Cancel>>
 ///
 /// Sweeps already written to disk are kept, so pressing Run again with reuse
 /// enabled picks up from where this left off rather than paying twice.
+impl RunControl {
+    /// Whether a review is in flight right now.
+    ///
+    /// The signal is replaced per run and cleared when one finishes, so its
+    /// presence is the same fact the window's Stop button is offered on.
+    pub fn running(&self) -> bool {
+        self.0
+            .lock()
+            .is_ok_and(|guard| guard.as_ref().is_some_and(|c| !c.stopped()))
+    }
+}
+
 #[tauri::command]
 pub fn cancel_run(control: tauri::State<'_, RunControl>) {
     if let Ok(guard) = control.0.lock()

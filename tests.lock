@@ -89,12 +89,14 @@ rust anchor::tests::rejects_a_file_that_does_not_exist
 rust anchor::tests::rejects_a_path_that_climbs_out_of_the_repository
 rust anchor::tests::rejects_code_that_does_not_exist_in_the_file
 rust anchor::tests::tolerates_re_indented_code
+rust atomic::tests::a_failed_write_destroys_nothing_and_leaves_no_debris
 rust atomic::tests::a_file_is_replaced_whole
 rust atomic::tests::a_path_that_names_no_file_is_an_error_rather_than_a_panic
+rust atomic::tests::concurrent_writes_leave_one_whole_file_and_no_debris
 rust atomic::tests::no_durable_write_bypasses_this_module
 rust atomic::tests::nothing_is_left_beside_the_file_afterwards
-rust atomic::tests::the_previous_file_survives_a_failed_write
 rust atomic::tests::the_staging_file_is_a_sibling_so_the_rename_cannot_cross_a_filesystem
+rust atomic::tests::two_writers_of_one_file_stage_into_different_places
 rust brief::tests::a_path_scope_appears_only_when_one_was_given
 rust brief::tests::a_vendor_without_schema_enforcement_gets_the_schema_in_the_prompt
 rust brief::tests::each_lane_gets_its_own_mandate_and_not_another_lanes
@@ -137,6 +139,7 @@ rust cluster::tests::clustering_does_not_depend_on_the_order_findings_arrive_in
 rust cluster::tests::findings_from_different_lanes_are_never_merged
 rust cluster::tests::one_model_reporting_a_defect_twice_counts_as_agreement_of_one
 rust cluster::tests::the_cluster_speaks_through_whichever_finding_brought_a_fix_plan
+rust cluster::tests::the_grouping_does_not_depend_on_the_order_findings_arrive_in
 rust cluster::tests::the_same_kind_of_defect_in_different_files_stays_separate
 rust cluster::tests::two_different_defects_one_line_apart_stay_separate
 rust cluster::tests::two_models_in_one_lane_still_merge
@@ -167,6 +170,7 @@ rust find::tests::returns_none_for_a_command_that_cannot_exist
 rust finding::tests::a_finding_with_no_fix_plan_still_lands_rather_than_sinking_the_sweep
 rust finding::tests::a_reply_with_no_findings_key_is_malformed_rather_than_a_clean_sweep
 rust finding::tests::an_explicitly_empty_list_is_still_a_clean_sweep
+rust finding::tests::control_characters_from_the_repository_cannot_reach_a_terminal
 rust finding::tests::empty_findings_array_parses_as_a_clean_sweep
 rust finding::tests::schema_and_type_agree_on_required_field_names
 rust finding::tests::severity_tells_the_model_what_the_levels_mean
@@ -279,6 +283,7 @@ rust orchestrate::tests::a_bare_alias_resolves_to_the_label_a_report_records
 rust orchestrate::tests::a_cancelled_run_names_every_sweep_it_never_reached
 rust orchestrate::tests::a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model
 rust orchestrate::tests::a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted
+rust orchestrate::tests::finishing_one_pass_leaves_the_other_passes_outstanding
 rust orchestrate::tests::the_report_label_and_the_comparison_come_from_one_function
 rust outcome::tests::a_vendor_that_cannot_prove_is_skipped_rather_than_attempted
 rust outcome::tests::nothing_provable_still_leaves_something_to_try
@@ -286,6 +291,7 @@ rust outcome::tests::proving_uses_a_vendor_the_user_actually_configured
 rust payload::tests::a_regrade_reaches_the_window_as_data_with_both_grades_and_the_reason
 rust payload::tests::an_unmoved_grade_sends_no_regrade_fields_so_the_card_stays_quiet
 rust payload::tests::each_card_carries_a_standalone_prompt_for_that_one_defect
+rust plan::effort_gate_tests::the_sweep_command_checks_effort_the_same_way_run_does
 rust plan::tests::a_bare_model_name_is_treated_as_the_claude_vendor_for_batching
 rust plan::tests::a_configuration_that_would_run_nothing_is_an_error_not_an_empty_report
 rust plan::tests::a_fully_covered_run_reports_no_gaps

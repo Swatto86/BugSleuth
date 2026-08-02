@@ -112,7 +112,13 @@ impl LaneReport {
                     finding.anchor.claimed_line
                 ));
             }
-            for line in finding.anchor.snippet.lines() {
+            // Made printable first. The snippet is text from the repository
+            // under review, which this tool treats as hostile by design, and an
+            // escape sequence inside it is acted on by the terminal rather than
+            // shown — it can recolour, clear, or overwrite the lines above it,
+            // which in a list of security findings means a repository hiding
+            // the finding about itself.
+            for line in bugsleuth_domain::printable(&finding.anchor.snippet).lines() {
                 out.push_str(&format!("    | {line}\n"));
             }
             out.push_str(&format!("    Why:  {}\n", finding.explanation));

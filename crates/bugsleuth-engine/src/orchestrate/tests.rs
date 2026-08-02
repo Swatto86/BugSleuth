@@ -204,3 +204,48 @@ fn the_report_label_and_the_comparison_come_from_one_function() {
         "the sweep builds its label some other way, so the two can disagree again"
     );
 }
+
+/// One finished sweep accounts for exactly one outstanding unit.
+///
+/// The defect: the cancellation bookkeeping removed every unit matching the
+/// finished sweep's lane and model. A model configured for three passes had all
+/// three struck off when the first finished, so a run cancelled after pass one
+/// reported the other two as accounted for — a claim of coverage that never
+/// happened, in the summary whose whole job is saying what did not run.
+///
+/// Calls the real `strike_off`. The first version of this test re-implemented
+/// the predicate, which would have passed happily while the code it was meant
+/// to protect regressed.
+#[test]
+fn finishing_one_pass_leaves_the_other_passes_outstanding() {
+    use crate::plan::Unit;
+    use bugsleuth_domain::Lane;
+
+    let unit = |pass: usize| Unit {
+        model: "sonnet".into(),
+        lane: Lane::Correctness,
+        pass,
+        effort: String::new(),
+    };
+    let mut remaining = vec![unit(1), unit(2), unit(3)];
+
+    strike_off(&mut remaining, Lane::Correctness, "claude:sonnet");
+    assert_eq!(
+        remaining.len(),
+        2,
+        "one sweep struck off more than one unit"
+    );
+
+    strike_off(&mut remaining, Lane::Correctness, "claude:sonnet");
+    strike_off(&mut remaining, Lane::Correctness, "claude:sonnet");
+    assert!(
+        remaining.is_empty(),
+        "three sweeps did not account for three units"
+    );
+
+    // A sweep of something else accounts for nothing here.
+    let mut other = vec![unit(1)];
+    strike_off(&mut other, Lane::Security, "claude:sonnet");
+    strike_off(&mut other, Lane::Correctness, "codex:");
+    assert_eq!(other.len(), 1, "an unrelated sweep struck off a unit");
+}

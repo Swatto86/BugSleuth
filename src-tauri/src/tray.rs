@@ -8,6 +8,7 @@
 //! hides, so without this menu item there would be no way out but the task
 //! manager.
 
+use tauri::Emitter;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Runtime};
@@ -32,7 +33,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => reveal(app),
-            "quit" => app.exit(0),
+            "quit" => quit_or_ask(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -50,7 +51,13 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
-fn reveal<R: Runtime>(app: &AppHandle<R>) {
+/// Show the window, wherever the request came from.
+///
+/// One implementation. There were two — this and a near-copy in `lib.rs` that
+/// did not unminimize, so revealing from the tray restored a minimised window
+/// and revealing from the frontend left it minimised and focused, which looks
+/// exactly like the app failing to start.
+pub(crate) fn reveal<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -70,4 +77,26 @@ fn toggle<R: Runtime>(app: &AppHandle<R>) {
     } else {
         reveal(app);
     }
+}
+
+/// Quit, unless a review is running — in which case ask first.
+///
+/// The tray's Quit exited immediately while the window's Quit asked for
+/// confirmation, for the identical action. The README calls the tray item the
+/// only real exit, so it is the *more* likely of the two to be used, and it was
+/// the one that could throw away tens of minutes of paid sweeping in silence.
+/// Both go through the same question now: the window is revealed and asked to
+/// put it, which also keeps the wording in one place.
+pub(crate) fn quit_or_ask<R: Runtime>(app: &AppHandle<R>) {
+    let running = app
+        .try_state::<crate::commands::RunControl>()
+        .is_some_and(|control| control.running());
+    if !running {
+        app.exit(0);
+        return;
+    }
+    reveal(app);
+    // Best effort. If the window cannot be told, the safe outcome is that
+    // nothing is thrown away and the in-window Quit still works.
+    let _ = app.emit("confirm-quit", ());
 }

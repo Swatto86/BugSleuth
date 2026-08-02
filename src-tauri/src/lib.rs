@@ -16,8 +16,6 @@ mod payload;
 mod settings;
 mod tray;
 
-use tauri::Manager;
-
 pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
 
@@ -79,8 +77,5 @@ pub fn run() {
 /// theme, so the user never sees an unstyled flash — the window is configured
 /// hidden with a matching background colour for the same reason.
 pub(crate) fn reveal(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    tray::reveal(app);
 }

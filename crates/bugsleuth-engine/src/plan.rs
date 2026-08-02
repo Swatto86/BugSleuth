@@ -117,7 +117,7 @@ impl Plan {
 /// whichever provider is behind the model, so its accepted values are a
 /// property of that model and are discovered at runtime; refusing what we
 /// cannot enumerate would block valid configurations.
-fn check_effort(id: &str, effort: &str) -> Result<()> {
+pub fn check_effort(id: &str, effort: &str) -> Result<()> {
     if effort.is_empty() {
         return Ok(());
     }
@@ -350,5 +350,33 @@ mod tests {
         assert_eq!(vendor_of("kilo:"), "kilo");
         // A model id that merely contains a colon is not a vendor prefix.
         assert_eq!(vendor_of("anthropic:claude-opus-5"), "claude");
+    }
+}
+
+#[cfg(test)]
+mod effort_gate_tests {
+    /// Both commands must validate effort, and from the same function.
+    ///
+    /// The defect: `run` checked it and `sweep` did not, so a typo in --effort
+    /// reached the vendor's CLI — either rejected after the sweep was paid for,
+    /// or ignored, leaving a report that looks normal and never says the depth
+    /// asked for was never applied. Two commands, one contract, one check.
+    #[test]
+    fn the_sweep_command_checks_effort_the_same_way_run_does() {
+        let cli = include_str!("../../bugsleuth-cli/src/main.rs");
+        let code: String = cli
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let sweep = code
+            .split_once("async fn run_sweep")
+            .expect("run_sweep is gone; this check needs rewriting")
+            .1;
+        let body = &sweep[..sweep.find("\nasync fn ").unwrap_or(sweep.len())];
+        assert!(
+            body.contains("check_effort"),
+            "the sweep command no longer validates effort before spending a sweep"
+        );
     }
 }

@@ -9,6 +9,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 import { confirmDialog } from "./dialog";
 import { type Preset, type Settings, preset } from "./model";
@@ -85,6 +86,11 @@ export function bindGuardedActions(deps: ActionDeps): void {
       destructive: true,
     }).then((yes) => {
       if (!yes) return;
+      // Checked again, after the dialog. A review takes tens of minutes and the
+      // dialog can sit open for any part of it, so the run may have finished on
+      // its own while it did — and this used to overwrite "Finished" and the
+      // ranked defects' status with a permanent, false "Stopping…".
+      if (!isRunning()) return;
       ui.stop.disabled = true;
       deps.setStatus("Stopping — killing the sweeps in flight", "running");
       // A failed cancel must not leave the button dead and the status stuck on
@@ -97,7 +103,23 @@ export function bindGuardedActions(deps: ActionDeps): void {
     });
   });
 
-  ui.quit.addEventListener("click", () => {
+  // The tray's Quit asks the window to put the question, so both routes out of
+  // the app get the same warning and the wording lives in one place. The tray
+  // used to call exit(0) outright, which is the *more* likely of the two to be
+  // used — the README calls it the only real exit — and was the one that could
+  // throw away a run in silence.
+  void listen("confirm-quit", () => {
+    askBeforeQuitting();
+  }).catch((error: unknown) => {
+    deps.setStatus(
+      `The tray's Quit cannot reach this window: ${String(error)}`,
+      "error",
+    );
+  });
+
+  ui.quit.addEventListener("click", askBeforeQuitting);
+
+  function askBeforeQuitting(): void {
     if (!isRunning()) {
       // invoke-may-fail-silently: if quitting fails the window is still here,
       // which is the whole feedback there is to give, and there is no fallback
@@ -118,5 +140,5 @@ export function bindGuardedActions(deps: ActionDeps): void {
       // window, and the run it was abandoning carries on being reported.
       if (yes) void invoke("quit");
     });
-  });
+  }
 }
