@@ -15,6 +15,10 @@
  *
  * Both directions are checked, with opposite biases, because a wrong answer
  * costs something different each way.
+ *
+ * Element ids are here for the same reason. `el("prove-top")` throws when the
+ * markup no longer has that id, which is at least loud — but it is loud at boot
+ * on a user's machine, after packaging, and the whole window fails to start.
  */
 
 import { strict as assert } from "node:assert";
@@ -159,6 +163,39 @@ function classesStyled(): Set<string> {
   return styled;
 }
 
+/** Ids the markup defines. */
+function idsDefined(): Set<string> {
+  const html = fs.readFileSync(path.join(ui, "index.html"), "utf8");
+  return new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]!));
+}
+
+/**
+ * Ids the code looks up, and the prefixes it builds them from.
+ *
+ * `el(\`preset-${name}\`)` never spells out `preset-cheap`, so a literal-only
+ * scan would miss three buttons. The prefix carries the same guarantee: nothing
+ * beginning with it may vanish from the markup.
+ */
+function idsUsed(): { names: string[]; prefixes: string[] } {
+  const names: string[] = [];
+  const prefixes: string[] = [];
+  for (const file of sources()) {
+    const source = fs.readFileSync(file, "utf8");
+    for (const match of source.matchAll(/\bel(?:<[^>]*>)?\(\s*(?:"([^"]*)"|`([^`]*)`)/g)) {
+      const literal = match[1];
+      if (literal !== undefined) {
+        names.push(literal);
+        continue;
+      }
+      const template = match[2]!;
+      const before = template.split("${")[0]!;
+      if (template.includes("${") && before) prefixes.push(before);
+      else if (before) names.push(before);
+    }
+  }
+  return { names, prefixes };
+}
+
 test("the scans find things at all, so a passing run means something", () => {
   // If a regex stopped matching — a formatter rewrote the quotes, the markup
   // moved — every assertion below would pass on an empty set.
@@ -175,6 +212,24 @@ test("the precise scan sees each of the three ways a class is set", () => {
   assert.ok(used.has("hidden"), "classList.toggle");
   assert.ok(used.has("finding-title"), "the text() element helper");
   assert.ok(used.has("pill"), "the literal part of a `pill ${…}` template");
+});
+
+test("every element the code looks up exists in the markup", () => {
+  const defined = idsDefined();
+  const { names, prefixes } = idsUsed();
+  assert.ok(names.length >= 15, "found almost no element lookups");
+  assert.ok(prefixes.includes("preset-"), `no built ids found: ${prefixes.join(" ")}`);
+
+  const missing = names.filter((id) => !defined.has(id));
+  const unbuilt = prefixes.filter((p) => ![...defined].some((id) => id.startsWith(p)));
+
+  assert.deepEqual(
+    missing,
+    [],
+    "the code looks these up by id and the markup has no such element, so the " +
+      "window throws on startup and shows a blank page instead",
+  );
+  assert.deepEqual(unbuilt, [], "ids are built from these prefixes and the markup has none");
 });
 
 test("no element asks for a class the stylesheet does not define", () => {
