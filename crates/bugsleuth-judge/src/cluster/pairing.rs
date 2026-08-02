@@ -59,6 +59,14 @@ const MAX_LINE_GAP: u32 = 10;
 pub(crate) const MIN_WORDING_OVERLAP: f32 = 0.35;
 
 pub(super) fn same_defect(left: &Finding, right: &Finding) -> bool {
+    // Different lanes ask different questions. A correctness sweep and a
+    // security sweep landing on the same lines have found two properties of one
+    // piece of code, not one defect twice — and merging keeps only one account,
+    // so the reader never learns the other exists. Running more than one lane
+    // is the whole reason this tool costs what it costs.
+    if left.lane != right.lane {
+        return false;
+    }
     if left.anchor.file != right.anchor.file {
         return false;
     }
