@@ -67,7 +67,12 @@ while IFS= read -r file; do
     echo "  OVER HARD CAP ($hard): $file — $lines lines"
     over=$((over + 1))
   fi
-done < <(find . -type f \( -name '*.rs' -o -name '*.ts' -o -name '*.css' -o -name '*.html' \))
+# The same extensions check-file-size.ps1 uses. The two lists must match or the
+# gates disagree about what "green" means, which is the whole failure this file
+# exists to avoid — and it happened immediately: this one included CSS and the
+# other did not, so the first cross-platform run failed on a file Windows had
+# never been checking.
+done < <(find . -type f \( -name '*.rs' -o -name '*.ts' -o -name '*.tsx' \))
 if [ "$over" -gt 0 ]; then
   echo ""
   echo "Split these by responsibility before committing."

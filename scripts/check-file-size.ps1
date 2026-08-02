@@ -25,7 +25,12 @@ $files = Get-ChildItem -Path $root -Recurse -File -Include '*.rs', '*.ts', '*.ts
 $over = @()
 $warn = @()
 foreach ($file in $files) {
-    $lines = (Get-Content -LiteralPath $file.FullName | Measure-Object -Line).Lines
+    # Every line, blank ones included. `Measure-Object -Line` skips empty
+    # strings, so this silently undercounted by however many blank lines a file
+    # had — three files sat 4, 12 and 27 lines over the hard cap while this
+    # reported them as passing. Found the first time a second platform ran the
+    # equivalent check and disagreed.
+    $lines = @(Get-Content -LiteralPath $file.FullName).Count
     $relative = $file.FullName.Substring($root.Length + 1)
     if ($lines -gt $HardCap) {
         $over += [pscustomobject]@{ Path = $relative; Lines = $lines }
