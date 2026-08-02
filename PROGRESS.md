@@ -390,6 +390,54 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## Regression sweep before 0.2.0: 33 defects, seven of them real and critical
+
+All four lanes, two vendors, against a frozen worktree with every project
+document stripped. 34 findings merged into 33 distinct defects; the triage pass
+moved 21 of 33 severities.
+
+Ten graded critical. Two were the seeded fixture's own planted bugs, which is
+the answer key being found rather than a defect. Seven were real and are fixed;
+the last is Kilo's un-sandboxable execution, which cannot be fixed here and is
+stated in every report instead.
+
+Three of the seven are the **same class this codebase keeps producing**:
+something destroyed before its replacement is safely written.
+
+- **Settings** were truncated before the replacement landed, so a failed save
+  wiped every setting. This module's own error reporting exists because losing
+  settings silently once cost a whole session — and it was still possible to
+  lose them this way.
+- **The fix-prompt bundle** was truncated in place. The earlier fix reordered
+  the *per-defect* files and did nothing for the bundle itself.
+- Both now stage and rename, like the sweep reports.
+
+Two are **a comment describing a fix that was never made**:
+
+- A sweep whose task panicked printed a warning and vanished from the report,
+  reading exactly like a lane that ran and found nothing — beside a comment
+  that had demanded a gap for weeks.
+- The Kilo repair's own description says it gets no repository access, while
+  the code handed it the worktree under review, with `--auto`, so any tool call
+  was approved unasked. It now runs in an empty directory with nothing to reach.
+
+And two are keys that were not keys:
+
+- **The run cache** was keyed by the repository's leaf folder name, so a
+  worktree beside the original shared a directory and resume handed one repo
+  the other's sweeps while the report stated the wrong provenance.
+- **Turn exhaustion** was only recognised on a non-zero exit, so the identical
+  failure with a clean exit bypassed the salvage entirely.
+
+The seventh is the one worth dwelling on. **The test-run logs were written
+inside the tree being reviewed** — `<repo>/target/bugsleuth/`. A repository can
+commit a symlink at that path, git materialises it on checkout, and
+`File::create` follows it and truncates whatever it points at. Arbitrary file
+destruction, chosen by the code under review. It is the same escape the anchor
+check was hardened against a day earlier, in the one place that writes rather
+than reads — which is exactly the lesson the security mandate now carries:
+having found one instance of a sink, go and find the others.
+
 ## The last two lanes reviewed BugSleuth, and the salvage saved the haul
 
 Correctness and UX had never been pointed at this repository. Seventeen findings
