@@ -261,6 +261,18 @@ pub async fn probe() -> Result<String, ProviderError> {
     Ok(version)
 }
 
+/// Prove the machine holds a Kilo session, by using it.
+pub async fn signin() -> crate::signin::SignIn {
+    let Some(binary) = discover::resolve_binary() else {
+        return crate::signin::SignIn::Failed("the kilo CLI could not be found".to_string());
+    };
+    let args: Vec<String> = ["run", "--auto", "--pure", "--agent", "ask"]
+        .iter()
+        .map(|a| (*a).to_string())
+        .collect();
+    crate::signin::one_shot(&binary.to_string_lossy(), &args, "kilo").await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

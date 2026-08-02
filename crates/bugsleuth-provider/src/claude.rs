@@ -301,6 +301,21 @@ pub(crate) struct ResultEnvelope {
     pub(crate) usage: Option<Usage>,
 }
 
+/// Prove the machine holds a Claude session, by using it.
+///
+/// `--print` with no tools and no schema: the cheapest thing this CLI can be
+/// asked to do that still requires being signed in.
+pub async fn signin() -> crate::signin::SignIn {
+    let Some(binary) = resolve_binary() else {
+        return crate::signin::SignIn::Failed(not_found().to_string());
+    };
+    let args: Vec<String> = ["--print", "--output-format", "text"]
+        .iter()
+        .map(|a| (*a).to_string())
+        .collect();
+    crate::signin::one_shot(&binary.to_string_lossy(), &args, "claude").await
+}
+
 #[cfg(test)]
 #[path = "claude/tests.rs"]
 mod tests;

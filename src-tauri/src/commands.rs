@@ -52,6 +52,26 @@ pub async fn preflight() -> Vec<VendorStatus> {
         .collect()
 }
 
+/// Prove each vendor is actually signed in, by asking it something.
+///
+/// Separate from `preflight`, and deliberately not run at startup. Preflight is
+/// free and answers "can this CLI start"; this costs one trivial model call per
+/// vendor and answers the question that actually decides whether a run will
+/// work. A green preflight beside a signed-out CLI is how someone commits forty
+/// minutes and real quota to a run that could never have finished.
+#[tauri::command]
+pub async fn check_signin() -> Vec<VendorStatus> {
+    bugsleuth_engine::sweep::check_signin()
+        .await
+        .into_iter()
+        .map(|(name, state)| VendorStatus {
+            available: state.usable(),
+            detail: state.describe(name),
+            name: name.to_string(),
+        })
+        .collect()
+}
+
 #[tauri::command]
 pub fn load_settings() -> Settings {
     settings::load()

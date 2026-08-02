@@ -20,6 +20,7 @@ mod json;
 pub mod kilo;
 pub mod models;
 pub mod process;
+pub mod signin;
 
 pub use claude::{ClaudeSweep, SweepResult, Usage};
 pub use error::ProviderError;

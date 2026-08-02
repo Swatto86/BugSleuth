@@ -24,6 +24,32 @@ export interface VendorStatus {
   detail: string;
 }
 
+/**
+ * One pill per vendor, after a real sign-in check.
+ *
+ * Distinct from `vendorPills`, which reports whether a CLI can be *started* —
+ * a weaker fact that every one of these tools satisfies while logged out. The
+ * detail carries the vendor's own words, because "run `claude login`" is what
+ * actually tells someone what to do and a generic "unavailable" throws it away.
+ */
+export function signinPills(
+  results: { name: string; available: boolean; detail: string }[],
+): HTMLElement[] {
+  return results.map((result) => {
+    const pill = document.createElement("span");
+    pill.className = `pill ${result.available ? "ok" : "bad"}`;
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    const label = document.createElement("span");
+    label.textContent = result.detail;
+    pill.append(dot, label);
+    // The full sentence is already the label; the title repeats it for a
+    // narrow window where the pill has to clip.
+    pill.title = result.detail;
+    return pill;
+  });
+}
+
 /** One pill per provider CLI. */
 export function vendorPills(statuses: VendorStatus[]): HTMLElement[] {
   return statuses.map((vendor) => {

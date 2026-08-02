@@ -262,6 +262,24 @@ pub async fn probe() -> Result<String, ProviderError> {
     Ok(output.stdout.trim().to_string())
 }
 
+/// Prove the machine holds a ChatGPT session, by using it.
+pub async fn signin() -> crate::signin::SignIn {
+    let Some(binary) = discover::resolve_binary() else {
+        return crate::signin::SignIn::Failed("the codex CLI could not be found".to_string());
+    };
+    let args: Vec<String> = [
+        "--ask-for-approval",
+        "never",
+        "exec",
+        "--sandbox",
+        "read-only",
+    ]
+    .iter()
+    .map(|a| (*a).to_string())
+    .collect();
+    crate::signin::one_shot(&binary.to_string_lossy(), &args, "codex").await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

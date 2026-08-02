@@ -56,6 +56,7 @@ pub fn run() {
         .manage(commands::RunControl::default())
         .invoke_handler(tauri::generate_handler![
             commands::preflight,
+            commands::check_signin,
             commands::load_settings,
             commands::save_settings,
             commands::start_run,

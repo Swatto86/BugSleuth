@@ -267,6 +267,16 @@ pub async fn probe_all() -> Vec<(&'static str, Result<String, String>)> {
     ]
 }
 
+/// Prove each vendor is signed in, by asking it something.
+///
+/// The counterpart to [`probe_all`], and the honest one. Probing answers "can
+/// this CLI start", which every one of them can while signed out; this asks for
+/// one word back, which only a real session can produce. Costs a trivial model
+/// call per vendor, so it is offered rather than run automatically.
+pub async fn check_signin() -> Vec<(&'static str, bugsleuth_provider::signin::SignIn)> {
+    bugsleuth_provider::signin::check_all().await
+}
+
 /// Confirm the provider CLIs can be started before a run commits to them.
 pub async fn preflight() -> Result<()> {
     let probes = probe_all().await;

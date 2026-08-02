@@ -14,6 +14,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { type Settings, boundedProveTop } from "./model";
+import { signinPills } from "./view";
 
 /** The elements these handlers touch, and what they do to the rest. */
 export interface ControlDeps {
@@ -26,6 +27,8 @@ export interface ControlDeps {
     reuseCompleted: HTMLInputElement;
     triageSeverities: HTMLInputElement;
     browse: HTMLButtonElement;
+    checkSignin: HTMLButtonElement;
+    vendors: HTMLDivElement;
     addModel: HTMLButtonElement;
     copyPrompt: HTMLButtonElement;
   };
@@ -92,6 +95,31 @@ export function bindControls(deps: ControlDeps): void {
       })
       .catch((error: unknown) => {
         deps.setStatus(`Could not open the folder picker: ${String(error)}`, "error");
+      });
+  });
+
+  ui.checkSignin.addEventListener("click", () => {
+    // Disabled while it runs: each click is three real model calls, and a
+    // second one started on top of the first would spend twice to learn once.
+    // Eir guards its own provider test the same way, for the same reason.
+    ui.checkSignin.disabled = true;
+    const previous = ui.checkSignin.textContent;
+    ui.checkSignin.textContent = "Asking each vendor…";
+    invoke<{ name: string; available: boolean; detail: string }[]>("check_signin")
+      .then((results) => {
+        ui.vendors.replaceChildren(...signinPills(results));
+        const working = results.filter((r) => r.available).length;
+        deps.setStatus(
+          `${working} of ${results.length} vendors answered`,
+          working === 0 ? "error" : "",
+        );
+      })
+      .catch((error: unknown) => {
+        deps.setStatus(`Could not check sign-in: ${String(error)}`, "error");
+      })
+      .finally(() => {
+        ui.checkSignin.disabled = false;
+        ui.checkSignin.textContent = previous;
       });
   });
 
