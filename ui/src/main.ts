@@ -21,9 +21,10 @@ import {
   uncoveredLanes,
   unitCount,
 } from "./model";
-import { confirmDialog } from "./dialog";
+import { bindGuardedActions } from "./actions";
+import { savingSettings } from "./persist";
 import { listOf } from "./format";
-import { type RunDeps, currentFixPrompt, isRunning, listenForRunEvents, startRun } from "./run";
+import { type RunDeps, currentFixPrompt, isRunning, listenForRunEvents } from "./run";
 import {
   type Catalogue,
   type VendorModels,
@@ -208,7 +209,7 @@ function render(): void {
 function refresh(): void {
   renderCoverage();
   renderPlanSummary();
-  void persist();
+  persist();
 }
 
 function setStatus(text: string, kind: "" | "running" | "error" = ""): void {
@@ -217,42 +218,12 @@ function setStatus(text: string, kind: "" | "running" | "error" = ""): void {
   ui.spinner.classList.toggle("hidden", kind !== "running");
 }
 
-// ── Commands ────────────────────────────────────────────────────────────────
-
-let saveTimer: number | undefined;
-/** Whether the last save attempt failed, so recovery can be reported too. */
-let saveFailed = false;
-
-/**
- * Persist settings, coalesced so typing does not write on every keystroke.
- *
- * A failure here used to be swallowed on the grounds that losing a preference
- * is not worth interrupting anyone over. That reasoning was wrong in a way that
- * took hours to unpick: saving failed for a whole session, the app looked
- * perfectly normal, and every configuration made in it was lost on restart. The
- * cost of a wrong preference is small; the cost of not knowing your settings
- * are not being kept is not.
- *
- * So it is reported in the status bar — not a dialog, because it must not
- * interrupt a run in progress — and only while nothing else is being said.
- */
-function persist(): void {
-  window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => {
-    void invoke("save_settings", { settings })
-      .then(() => {
-        if (saveFailed) {
-          saveFailed = false;
-          if (!isRunning()) setStatus("Ready");
-        }
-      })
-      .catch((error: unknown) => {
-        saveFailed = true;
-        if (!isRunning()) setStatus(`Settings are not being saved: ${String(error)}`, "error");
-      });
-  }, 400);
-}
-
+/** Save settings, reporting a failure the user would otherwise never see. */
+const persist = savingSettings({
+  settings: () => settings,
+  setStatus,
+  quiet: () => isRunning(),
+});
 
 const runDeps = (): RunDeps => ({
   output: ui.output,
@@ -318,76 +289,16 @@ function bind(): void {
     render();
   });
 
-  for (const name of ["cheap", "balanced", "deep"] as Preset[]) {
-    el<HTMLButtonElement>(`preset-${name}`).addEventListener("click", () => {
-      // A preset replaces the whole matrix. Sitting beside "Add model", it is
-      // an easy misclick, and there is no undo — several minutes of chosen
-      // vendors, lanes, efforts and passes would simply be gone.
-      //
-      // Asked only when something would actually be lost: a confirmation that
-      // appears when nothing is at stake is how people learn to click through
-      // confirmations without reading them.
-      if (settings.models.every(isShipped)) {
-        settings.models = preset(name);
-        render();
-        return;
-      }
-      void confirmDialog({
-        title: "Replace your configuration?",
-        message:
-          "This replaces every row in the matrix with the " +
-          `${name} preset, and cannot be undone.`,
-        confirmLabel: "Replace",
-        destructive: true,
-      }).then((yes) => {
-        if (!yes) return;
-        settings.models = preset(name);
-        render();
-      });
-    });
-  }
-
-  ui.run.addEventListener("click", () => void startRun(runDeps()));
-
-  // Closing the window only hides it. This is the reachable, keyboard-navigable
-  // way to actually exit, so the tray is not the single point of failure.
-  //
-  // Guarded while a run is in flight: a sweep is tens of minutes of paid
-  // subscription quota, and quitting throws away every lane not yet written to
-  // disk. One misplaced click should not be able to do that silently.
-  ui.stop.addEventListener("click", () => {
-    void confirmDialog({
-      title: "Stop this review?",
-      message:
-        "Sweeps that have already finished are kept on disk, and running " +
-        "again with reuse enabled picks up from there rather than paying for " +
-        "them twice. Sweeps still in flight are abandoned.",
-      confirmLabel: "Stop the review",
-      destructive: true,
-    }).then((yes) => {
-      if (!yes) return;
-      ui.stop.disabled = true;
-      setStatus("Stopping — killing the sweeps in flight", "running");
-      void invoke("cancel_run");
-    });
-  });
-
-  ui.quit.addEventListener("click", () => {
-    if (!isRunning()) {
-      void invoke("quit");
-      return;
-    }
-    void confirmDialog({
-      title: "A review is running",
-      message:
-        "Quitting abandons it. Every sweep not yet written to disk is lost, " +
-        "along with the subscription quota it cost. Stop the review instead " +
-        "if you want to keep what has finished.",
-      confirmLabel: "Quit anyway",
-      destructive: true,
-    }).then((yes) => {
-      if (yes) void invoke("quit");
-    });
+  bindGuardedActions({
+    ui,
+    settings: () => settings,
+    setSettings: (models) => {
+      settings.models = models;
+    },
+    render,
+    setStatus,
+    runDeps,
+    isShipped,
   });
 
   ui.copyPrompt.addEventListener("click", () => {

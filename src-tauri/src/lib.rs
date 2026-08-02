@@ -11,6 +11,7 @@
 
 mod catalogue;
 mod commands;
+mod outcome;
 mod payload;
 mod settings;
 mod tray;
