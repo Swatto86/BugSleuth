@@ -390,6 +390,58 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## Security and contract, measured at last: 3 of 3 after naming two classes
+
+Correctness had a recall number and UX had a precision number. These two lanes
+had neither, and running them on BugSleuth itself did not fix that — I graded
+those three findings myself, which is the one thing this project's evidence says
+not to do.
+
+**Precision, graded by someone else.** All three self-review findings went to an
+independent strict grader *and* to an adversarial skeptic told to refute by
+default. **3 of 3 survived both.** One skeptic did better than my own check: it
+copied the two accused functions verbatim into a standalone program and ran them
+against a real directory junction, confirming the symlink escape empirically
+rather than by reading. One correction it forced: the Codex scratch-directory
+finding was graded **too severe** at high.
+
+**Recall, against ground truth chosen independently of the tool.** Seven fix
+commits in Alder's history were verified as genuine security or contract
+defects — chosen by what they fixed, never by what BugSleuth had found, each one
+confirmed present at its parent commit. None were rejected. Four were findable
+from code alone; the other three needed knowledge of a remote API, which is
+itself the evidence behind one of the review limits now printed in every report.
+
+Three were measured, each swept at its own parent commit with every project
+document stripped from the tree:
+
+| Known defect | Lane | Before | After |
+|---|---|---|---|
+| Draft body written to `innerHTML` unsanitised | Security | Claude only | Claude only |
+| `ruleSummary()` interpolated into `innerHTML` | Security | **Missed by both** | **Found** |
+| Frontend size guard larger than the backend budget | Contract | **Missed by both** | **Found by both** |
+
+**1 of 3, then 3 of 3** — the same trajectory the correctness lane took, by the
+same route, and the misses were nameable both times.
+
+The security miss was *stopping at the loudest instance*. Both vendors found one
+unescaped `innerHTML` assignment in the file, reported it, and never looked at
+the other one. The mandate now says to enumerate every other use of a sink once
+one is found, to follow helpers that build strings assigned to a sink, and to
+report each unsafe use separately. The effect was visible immediately: Codex
+went from one finding to two distinct sinks in the same file.
+
+The contract miss was *a rule written down twice* — a frontend attachment guard
+of 3 MiB against a smaller backend budget, both plain constants in the
+repository. The mandate now asks for limits duplicated across a boundary and for
+both values to be named. Both vendors found it on the re-run.
+
+**What this does not establish.** Three defects, one run per condition, one
+repository. It does not give either lane a recall *rate*, and model variance
+contributes something. What it does establish is that both lanes were missing
+findable defects for a nameable reason, and that naming the reason moved them —
+which is now the third time that has worked.
+
 ## BugSleuth reviewed itself, and found three real defects
 
 The security and contract lanes had never been measured — correctness and UX
