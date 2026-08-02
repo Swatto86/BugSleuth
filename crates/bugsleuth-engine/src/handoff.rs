@@ -151,17 +151,13 @@ pub fn write_all(
     // a failure left an empty fix-prompt.md where the last run's whole work
     // order had been.
     let bundle = dir.join("fix-prompt.md");
-    let staged = dir.join(".fix-prompt.md.writing");
-    std::fs::write(&staged, prompt(repo, ranked, not_reviewed, sweeps))?;
-    if let Err(error) = std::fs::rename(&staged, &bundle) {
-        let _ = std::fs::remove_file(&staged);
-        return Err(error);
-    }
+    crate::atomic::write(&bundle, prompt(repo, ranked, not_reviewed, sweeps))?;
 
     let mut written: Vec<String> = Vec::new();
     for entry in ranked {
         let name = format!("fix-prompt-{:02}.md", entry.position);
-        if std::fs::write(dir.join(&name), single(repo, entry, ranked.len(), sweeps)).is_ok() {
+        let body = single(repo, entry, ranked.len(), sweeps);
+        if crate::atomic::write(&dir.join(&name), body).is_ok() {
             written.push(name.to_lowercase());
         }
     }
@@ -173,7 +169,7 @@ pub fn write_all(
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_lowercase();
             let stale = name.starts_with("fix-prompt-")
-                && !name.ends_with(".writing")
+                && !crate::atomic::is_staged(&name)
                 && name.ends_with(".md")
                 && !written.contains(&name);
             if stale {

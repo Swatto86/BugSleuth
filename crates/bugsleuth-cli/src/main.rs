@@ -151,7 +151,7 @@ fn run_judge(args: JudgeArgs) -> Result<()> {
             std::fs::create_dir_all(parent)?;
         }
         let json = serde_json::to_string_pretty(&merged.ranked)?;
-        std::fs::write(&path, json)
+        bugsleuth_engine::atomic::write(&path, json)
             .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", path.display()))?;
         eprintln!(
             "
@@ -199,7 +199,7 @@ async fn run_prove(args: ProveArgs) -> Result<()> {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&path, &report.patch)
+        bugsleuth_engine::atomic::write(&path, &report.patch)
             .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", path.display()))?;
         eprintln!("wrote {}", path.display());
     }
@@ -266,7 +266,7 @@ async fn run_sweep(args: SweepArgs) -> Result<()> {
             std::fs::create_dir_all(parent)
                 .map_err(|e| anyhow::anyhow!("cannot create {}: {e}", parent.display()))?;
         }
-        std::fs::write(&path, json)
+        bugsleuth_engine::atomic::write(&path, json)
             .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", path.display()))?;
         eprintln!("\nwrote {}", path.display());
     }

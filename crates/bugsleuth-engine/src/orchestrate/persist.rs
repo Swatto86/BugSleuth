@@ -148,13 +148,8 @@ pub(super) fn write_report(dir: &Path, name: &str, report: &LaneReport) -> Resul
     let path: PathBuf = dir.join(name);
     let json = serde_json::to_string_pretty(report)?;
 
-    let staged = dir.join(format!(".{name}.writing"));
-    std::fs::write(&staged, json)
-        .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", staged.display()))?;
-    if let Err(error) = std::fs::rename(&staged, &path) {
-        let _ = std::fs::remove_file(&staged);
-        anyhow::bail!("cannot replace {}: {error}", path.display());
-    }
+    crate::atomic::write(&path, json)
+        .map_err(|e| anyhow::anyhow!("cannot replace {}: {e}", path.display()))?;
     Ok(())
 }
 
