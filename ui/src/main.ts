@@ -21,6 +21,7 @@ import {
   uncoveredLanes,
   unitCount,
 } from "./model";
+import { confirmDialog } from "./dialog";
 import { listOf } from "./format";
 import { type RunDeps, currentFixPrompt, isRunning, listenForRunEvents, startRun } from "./run";
 import {
@@ -30,8 +31,6 @@ import {
   vendorPills,
   matrixRows,
 } from "./view";
-
-
 
 const el = <T extends HTMLElement>(id: string): T => {
   const found = document.getElementById(id);
@@ -58,6 +57,7 @@ const ui = {
   spinner: el<HTMLSpanElement>("spinner"),
   planSummary: el<HTMLSpanElement>("plan-summary"),
   run: el<HTMLButtonElement>("run"),
+  stop: el<HTMLButtonElement>("stop"),
   quit: el<HTMLButtonElement>("quit"),
   copyPrompt: el<HTMLButtonElement>("copy-prompt"),
   promptPath: el<HTMLParagraphElement>("prompt-path"),
@@ -69,14 +69,7 @@ const ui = {
  */
 const TRIAGE_MODEL = "haiku";
 
-const QUIT_DURING_RUN =
-  "A review is running. Quitting now abandons it, and every sweep not yet " +
-  "written to disk is lost along with the subscription quota it cost.\n\n" +
-  "Quit anyway?";
 
-const PRESET_OVERWRITES =
-  "This replaces every row in the matrix with the preset, and cannot be " +
-  "undone.\n\nReplace your configuration?";
 
 /**
  * Whether a row is still exactly as some preset shipped it.
@@ -168,6 +161,9 @@ function renderPlanSummary(): void {
   ui.planSummary.textContent =
     units === 0 ? "" : `${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`;
   ui.run.disabled = isRunning() || !canRun(settings);
+  // Offered only while there is something to stop, so it is never a button
+  // that does nothing.
+  ui.stop.classList.toggle("hidden", !isRunning());
 }
 
 function render(): void {
@@ -260,6 +256,7 @@ function persist(): void {
 
 const runDeps = (): RunDeps => ({
   output: ui.output,
+  stop: ui.stop,
   findings: ui.findings,
   copyPrompt: ui.copyPrompt,
   promptPath: ui.promptPath,
@@ -326,9 +323,27 @@ function bind(): void {
       // A preset replaces the whole matrix. Sitting beside "Add model", it is
       // an easy misclick, and there is no undo — several minutes of chosen
       // vendors, lanes, efforts and passes would simply be gone.
-      if (!settings.models.every(isShipped) && !window.confirm(PRESET_OVERWRITES)) return;
-      settings.models = preset(name);
-      render();
+      //
+      // Asked only when something would actually be lost: a confirmation that
+      // appears when nothing is at stake is how people learn to click through
+      // confirmations without reading them.
+      if (settings.models.every(isShipped)) {
+        settings.models = preset(name);
+        render();
+        return;
+      }
+      void confirmDialog({
+        title: "Replace your configuration?",
+        message:
+          "This replaces every row in the matrix with the " +
+          `${name} preset, and cannot be undone.`,
+        confirmLabel: "Replace",
+        destructive: true,
+      }).then((yes) => {
+        if (!yes) return;
+        settings.models = preset(name);
+        render();
+      });
     });
   }
 
@@ -340,9 +355,39 @@ function bind(): void {
   // Guarded while a run is in flight: a sweep is tens of minutes of paid
   // subscription quota, and quitting throws away every lane not yet written to
   // disk. One misplaced click should not be able to do that silently.
+  ui.stop.addEventListener("click", () => {
+    void confirmDialog({
+      title: "Stop this review?",
+      message:
+        "Sweeps that have already finished are kept on disk, and running " +
+        "again with reuse enabled picks up from there rather than paying for " +
+        "them twice. Sweeps still in flight are abandoned.",
+      confirmLabel: "Stop the review",
+      destructive: true,
+    }).then((yes) => {
+      if (!yes) return;
+      ui.stop.disabled = true;
+      setStatus("Stopping — killing the sweeps in flight", "running");
+      void invoke("cancel_run");
+    });
+  });
+
   ui.quit.addEventListener("click", () => {
-    if (isRunning() && !window.confirm(QUIT_DURING_RUN)) return;
-    void invoke("quit");
+    if (!isRunning()) {
+      void invoke("quit");
+      return;
+    }
+    void confirmDialog({
+      title: "A review is running",
+      message:
+        "Quitting abandons it. Every sweep not yet written to disk is lost, " +
+        "along with the subscription quota it cost. Stop the review instead " +
+        "if you want to keep what has finished.",
+      confirmLabel: "Quit anyway",
+      destructive: true,
+    }).then((yes) => {
+      if (yes) void invoke("quit");
+    });
   });
 
   ui.copyPrompt.addEventListener("click", () => {

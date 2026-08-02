@@ -19,6 +19,7 @@ const NEWLINE = String.fromCharCode(10);
 /** What the lifecycle needs from the window, handed in rather than imported. */
 export interface RunDeps {
   output: HTMLPreElement;
+  stop: HTMLButtonElement;
   findings: HTMLDivElement;
   copyPrompt: HTMLButtonElement;
   promptPath: HTMLParagraphElement;
@@ -44,6 +45,9 @@ export async function startRun(deps: RunDeps): Promise<void> {
   deps.setStatus("Running — this takes tens of minutes", "running");
   deps.output.textContent = "Starting…";
   deps.findings.replaceChildren();
+  // Re-enabled per run: it disables itself once pressed, so a second press
+  // cannot arrive while the first is still killing processes.
+  deps.stop.disabled = false;
   try {
     await invoke("start_run", { settings: deps.settings() });
   } catch (error) {

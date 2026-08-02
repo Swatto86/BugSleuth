@@ -113,6 +113,7 @@ fn options<'a>(dir: &'a Path, resume: bool) -> RunOptions<'a> {
         resume,
         progress: None,
         triage_model: "",
+        cancel: Default::default(),
     }
 }
 

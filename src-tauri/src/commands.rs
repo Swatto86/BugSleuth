@@ -91,12 +91,38 @@ pub fn plan_run(settings: Settings) -> CommandResult<PlanPreview> {
     })
 }
 
+/// The signal that stops whichever run is in flight, held for the app's life.
+///
+/// One at a time: the Run button is disabled while a run is going, so a second
+/// run cannot start, and a stale signal from a finished run must not cancel the
+/// next one — hence a fresh `Cancel` at the start of every run rather than one
+/// reused forever.
+#[derive(Default)]
+pub struct RunControl(std::sync::Mutex<Option<bugsleuth_engine::cancel::Cancel>>);
+
+/// Stop the run in progress.
+///
+/// Sweeps already written to disk are kept, so pressing Run again with reuse
+/// enabled picks up from where this left off rather than paying twice.
+#[tauri::command]
+pub fn cancel_run(control: tauri::State<'_, RunControl>) {
+    if let Ok(guard) = control.0.lock()
+        && let Some(cancel) = guard.as_ref()
+    {
+        cancel.stop();
+    }
+}
+
 /// Start a run. Returns immediately; progress and the result arrive as events.
 ///
 /// Spawned rather than awaited so the command does not hold the frontend for
 /// the tens of minutes a real sweep takes.
 #[tauri::command]
-pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResult<()> {
+pub async fn start_run(
+    app: tauri::AppHandle,
+    control: tauri::State<'_, RunControl>,
+    settings: Settings,
+) -> CommandResult<()> {
     let repo = checked_repo(&settings.repo)?;
     let plan = plan::plan(&to_config(&settings)).map_err(|e| e.to_string())?;
     let out_dir = run_output_dir(&repo);
@@ -112,6 +138,13 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
         }
     });
 
+    // A fresh signal per run: reusing one would let a cancel from a finished
+    // run stop the next one before it started.
+    let cancel = bugsleuth_engine::cancel::Cancel::new();
+    if let Ok(mut guard) = control.0.lock() {
+        *guard = Some(cancel.clone());
+    }
+
     tauri::async_runtime::spawn(async move {
         let report = orchestrate::run(
             &plan,
@@ -124,6 +157,7 @@ pub async fn start_run(app: tauri::AppHandle, settings: Settings) -> CommandResu
                 out_dir: Some(&out_dir),
                 resume: settings.reuse_completed,
                 triage_model: &settings.triage_model,
+                cancel: cancel.clone(),
                 progress: Some(progress),
             },
         )

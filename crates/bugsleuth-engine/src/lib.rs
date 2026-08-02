@@ -11,6 +11,7 @@
 //! deserialize, a call in here, and a serialize.
 
 pub mod brief;
+pub mod cancel;
 mod caveats;
 pub mod handoff;
 pub mod merge;

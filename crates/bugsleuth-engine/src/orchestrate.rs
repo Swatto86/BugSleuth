@@ -80,6 +80,10 @@ pub struct RunOptions<'a> {
     /// Receives events as the run proceeds. Sends are best-effort: a front end
     /// that has gone away must not stop the run it started.
     pub progress: Progress,
+    /// Signal that stops the run. A run costs tens of minutes and real quota,
+    /// so one started against the wrong repository must be stoppable without
+    /// killing the application.
+    pub cancel: crate::cancel::Cancel,
     /// Model that re-grades every severity with the whole report in view.
     /// Empty turns the pass off, leaving each severity as whichever model found
     /// the defect graded it — in isolation, which is measurably unreliable.
@@ -173,6 +177,9 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         units: outstanding,
         uncovered: vec![],
     };
+    // Kept so a cancelled run can name what it never got to. Sweeps remove
+    // themselves as they land.
+    let mut remaining_units: Vec<Unit> = remaining.units.clone();
     let batches = remaining.batches();
     for (index, batch) in batches.iter().enumerate() {
         emit(
@@ -186,6 +193,12 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
                     .collect(),
             },
         );
+
+        // Checked between batches as well as during one: a cancel that arrives
+        // while a batch is finishing must not start the next.
+        if options.cancel.stopped() {
+            break;
+        }
 
         // Everything in a batch is a different vendor, so these run at once.
         for report in run_batch(batch, &options).await {
@@ -215,6 +228,9 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
                 },
             );
 
+            remaining_units
+                .retain(|unit| unit.lane != report.lane || unit.model != report.lane_report.model);
+
             match &report.lane_report.status {
                 Status::Swept { .. } => {
                     swept.push(Swept {
@@ -242,6 +258,8 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
     // more with everything in view before anything is ranked on it.
     let mut clusters = cluster(findings);
     let triage = crate::triage::grade(&mut clusters, &options).await;
+
+    note_cancelled(&options, &remaining_units, &mut gaps);
 
     Ok(RunReport {
         ranked: rank(clusters),
@@ -310,6 +328,24 @@ struct SweepOutcome {
 /// Spawning needs owned data, so each task gets its own copy of the handful of
 /// small values it needs. That is cheaper than taking on a dependency purely to
 /// join a collection of borrowing futures.
+/// Name every sweep a cancellation prevented.
+///
+/// A cancelled run must never read as a finished one. Each unit that never ran
+/// becomes a gap with its reason, exactly like a lane nobody assigned to — the
+/// report's whole discipline is that an absent finding is never silent.
+fn note_cancelled(options: &RunOptions<'_>, remaining: &[Unit], gaps: &mut Vec<Gap>) {
+    if !options.cancel.stopped() {
+        return;
+    }
+    for unit in remaining {
+        gaps.push(Gap {
+            lane: unit.lane,
+            model: Some(unit.model.clone()),
+            reason: "the run was cancelled before this sweep finished".to_string(),
+        });
+    }
+}
+
 async fn run_batch(batch: &[Unit], options: &RunOptions<'_>) -> Vec<SweepOutcome> {
     let mut tasks = tokio::task::JoinSet::new();
 
@@ -342,12 +378,31 @@ async fn run_batch(batch: &[Unit], options: &RunOptions<'_>) -> Vec<SweepOutcome
     }
 
     let mut out = Vec::with_capacity(batch.len());
-    while let Some(joined) = tasks.join_next().await {
-        match joined {
-            Ok(outcome) => out.push(outcome),
-            // A panicking sweep must not take the run down with it, and must not
-            // vanish either — the caller has to see a gap where it should be.
-            Err(error) => eprintln!("warning: a sweep task failed to complete: {error}"),
+    loop {
+        tokio::select! {
+            // Cancellation wins the race deliberately: `JoinSet` aborts its
+            // tasks when dropped, and every CLI is spawned with `kill_on_drop`,
+            // so leaving this loop is what actually stops the spending. Waiting
+            // politely for the in-flight sweeps would mean waiting the full
+            // per-sweep timeout — up to forty-five minutes — after the user
+            // asked to stop.
+            () = options.cancel.cancelled() => {
+                eprintln!("cancelled: stopping {} sweep(s) in flight. Sweeps already                            finished are on disk and a later --resume will reuse them.",
+                          tasks.len());
+                break;
+            }
+            joined = tasks.join_next() => {
+                match joined {
+                    None => break,
+                    Some(Ok(outcome)) => out.push(outcome),
+                    // A panicking sweep must not take the run down with it, and
+                    // must not vanish either — the caller has to see a gap
+                    // where it should be.
+                    Some(Err(error)) => {
+                        eprintln!("warning: a sweep task failed to complete: {error}");
+                    }
+                }
+            }
         }
     }
     out

@@ -44,12 +44,14 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
+        .manage(commands::RunControl::default())
         .invoke_handler(tauri::generate_handler![
             commands::preflight,
             commands::load_settings,
             commands::save_settings,
             commands::plan_run,
             commands::start_run,
+            commands::cancel_run,
             commands::pick_directory,
             commands::frontend_ready,
             commands::quit,

@@ -3,7 +3,7 @@
 
 use super::super::orchestrate::persist::file_name_for;
 use super::super::orchestrate::*;
-use super::super::plan::Unit;
+use super::super::plan::{Config, ModelPlan, Unit, plan};
 use bugsleuth_domain::Lane;
 use std::path::Path;
 use std::time::Duration;
@@ -77,6 +77,7 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
             repo: Path::new("."),
             scope: None,
             triage_model: "",
+            cancel: Default::default(),
             max_turns: 1,
             timeout: Duration::from_secs(1),
             api_key: None,
@@ -103,4 +104,49 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
     assert!(text.contains("found by 2 of 2 models"));
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_cancelled_run_names_every_sweep_it_never_reached() {
+    // The report's whole discipline is that an absent finding is never silent.
+    // A run stopped after one of four sweeps must not look like a run that
+    // covered everything and found little.
+    let plan = plan(&Config {
+        models: vec![ModelPlan {
+            id: "no-such-model-please".to_string(),
+            lanes: vec!["correctness".to_string(), "security".to_string()],
+            effort: String::new(),
+            passes: 1,
+        }],
+    })
+    .unwrap_or_else(|e| panic!("plan failed: {e}"));
+
+    let cancel = crate::cancel::Cancel::new();
+    cancel.stop();
+
+    let report = run(
+        &plan,
+        RunOptions {
+            repo: Path::new("."),
+            scope: None,
+            triage_model: "",
+            cancel: cancel.clone(),
+            max_turns: 1,
+            timeout: Duration::from_secs(1),
+            api_key: None,
+            out_dir: None,
+            resume: false,
+            progress: None,
+        },
+    )
+    .await
+    .unwrap_or_else(|e| panic!("run failed: {e}"));
+
+    let cancelled: Vec<&Gap> = report
+        .gaps
+        .iter()
+        .filter(|gap| gap.reason.contains("cancelled"))
+        .collect();
+    assert_eq!(cancelled.len(), 2, "sweeps went missing rather than named");
+    assert!(report.to_text().contains("NOT SWEPT"));
 }
