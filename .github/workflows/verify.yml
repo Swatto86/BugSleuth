@@ -1,0 +1,45 @@
+# The gate, run on every push and pull request.
+#
+# Deliberately the same script a developer runs locally (`scripts/verify.ps1`),
+# rather than a re-listing of its steps here: two definitions of "green" drift,
+# and the one that drifts is always the one nobody reads.
+name: verify
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # From the lockfile, so CI installs what was committed rather than
+      # whatever resolves today.
+      - run: npm ci
+
+      # rust-toolchain.toml pins the version; this action honours it.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Frontend typecheck and tests
+        run: |
+          npx tsc --noEmit
+          npm test
+
+      - name: Gate (fmt, clippy, tests, release build, file caps)
+        shell: pwsh
+        run: ./scripts/verify.ps1

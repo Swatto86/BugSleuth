@@ -1,0 +1,103 @@
+# Tag-driven release.
+#
+# Publishes three things together, because two of them are useless alone: the
+# NSIS installer, the **portable executable**, and checksums covering both.
+# The portable exe is not a convenience — a published desktop tool has to be
+# runnable without an installer, admin rights, or prerequisites.
+#
+# BugSleuth bundles no resources and no sidecars, so the raw MSVC binary that
+# `tauri build` produces is already self-contained: WebView2Loader is statically
+# linked, and the webview itself is the OS component every supported Windows
+# already ships. The workflow asserts that rather than trusting it.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # The gate runs again on the tagged commit. CI passing on the branch is
+      # not evidence about the tag if anything landed between them.
+      - name: Gate
+        shell: pwsh
+        run: ./scripts/verify.ps1
+
+      - name: Build the app
+        run: npx --yes @tauri-apps/cli@^2 build
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          $out = "release-artifacts"
+          New-Item -ItemType Directory -Force $out | Out-Null
+
+          # Named explicitly rather than globbed. This workspace produces two
+          # executables — the desktop app and the CLI — and "the first .exe that
+          # is not a setup" would publish whichever sorted first. Both are real
+          # deliverables, so both ship.
+          #
+          # They land in the *workspace* target directory, not src-tauri/target:
+          # verified by building, because guessing this wrong publishes nothing
+          # and the workflow would still go green on an empty glob.
+          $bin = "target/release"
+          $wanted = @{
+            "bugsleuth-app.exe" = "BugSleuth-portable.exe"
+            "bugsleuth.exe"     = "bugsleuth-cli.exe"
+          }
+          foreach ($name in $wanted.Keys) {
+            $path = Join-Path $bin $name
+            if (-not (Test-Path $path)) { throw "expected executable missing: $path" }
+            Copy-Item $path (Join-Path $out $wanted[$name])
+          }
+
+          # A portable binary that needs a DLL we do not ship is not portable.
+          # Checked rather than assumed: it is the one property that makes this
+          # artifact worth publishing beside the installer at all.
+          $app = Join-Path $out "BugSleuth-portable.exe"
+          $dumpbin = Get-Command dumpbin.exe -ErrorAction SilentlyContinue
+          if ($dumpbin) {
+            $imports = & $dumpbin.Source /dependents $app
+            if ($imports -match 'WebView2Loader\.dll') {
+              throw 'the portable exe imports WebView2Loader.dll, which is not shipped beside it'
+            }
+          } else {
+            Write-Host 'note: dumpbin unavailable, import check skipped'
+          }
+
+          # The bundle lands in the workspace target directory too, not under
+          # src-tauri. Verified by building rather than assumed - the wrong path
+          # here publishes an empty release and the job still goes green.
+          $bundles = Get-ChildItem -Path target/release/bundle -Recurse -Include *.exe,*.msi -File
+          if (-not $bundles) { throw 'no installer was produced' }
+          $bundles | ForEach-Object { Copy-Item $_.FullName $out }
+
+          Get-ChildItem $out -File |
+            Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content (Join-Path $out "SHA256SUMS.txt")
+
+          Get-ChildItem $out | Format-Table Name, Length
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

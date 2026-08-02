@@ -1,0 +1,6 @@
+# Pinned so a local build, CI, and a release build are the same compiler.
+# An unpinned toolchain makes "works here, fails in CI" a matter of timing.
+[toolchain]
+channel = "1.96.1"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-pc-windows-msvc"]
