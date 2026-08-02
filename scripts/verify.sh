@@ -53,6 +53,21 @@ echo "frontend assets OK ($count referenced, all present)"
 say "frontend tests"
 npm test --silent
 
+say "version agreement"
+# The same version is written in three files. A release where they disagree
+# publishes artifacts labelled one thing by the installer and another by the
+# binary, and the tag matches whichever was remembered last.
+cargo_version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+tauri_version=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' src-tauri/tauri.conf.json | head -1)
+npm_version=$(sed -n 's/.*"version": "\(.*\)".*/\1/p' package.json | head -1)
+[ -n "$cargo_version" ] || { echo "no version in Cargo.toml"; exit 1; }
+if [ "$cargo_version" != "$tauri_version" ] || [ "$cargo_version" != "$npm_version" ]; then
+  echo "  Cargo.toml $cargo_version, tauri.conf.json $tauri_version, package.json $npm_version"
+  echo "  These must agree before a release is cut."
+  exit 1
+fi
+echo "version agreement OK ($cargo_version)"
+
 say "script permissions"
 # A shell script committed from Windows arrives without its executable bit, and
 # nothing on Windows ever notices. The workflows call this file as
