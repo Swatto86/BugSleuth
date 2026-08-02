@@ -85,8 +85,17 @@ pub fn run(
     // unbounded amount of output, and a pipe that fills up while we are not
     // reading it would block the child forever — the exact hang the timeout
     // below exists to prevent.
-    let scratch = dir.join("target").join("bugsleuth");
-    let _ = std::fs::create_dir_all(&scratch);
+    // **Outside the reviewed tree.** These used to be written to
+    // `<repo>/target/bugsleuth/`, which the repository under review controls:
+    // a committed symlink at that path is materialised on checkout, and
+    // `File::create` follows it and truncates whatever it points at. That is
+    // arbitrary file destruction chosen by the code being reviewed — the same
+    // escape the anchor check was hardened against, in the one place that
+    // writes rather than reads.
+    //
+    // Created exclusively so the directory is ours because creating it proved
+    // it did not exist, and removed when the run is done.
+    let scratch = private_log_dir()?;
     let out_path = scratch.join("test-stdout.log");
     let err_path = scratch.join("test-stderr.log");
     let open = |path: &Path| {
@@ -113,6 +122,8 @@ pub fn run(
     let status = wait_with_timeout(&mut child, timeout);
     let stdout = std::fs::read_to_string(&out_path).unwrap_or_default();
     let stderr = std::fs::read_to_string(&err_path).unwrap_or_default();
+    // Ours, and nobody else's business once read.
+    let _ = std::fs::remove_dir_all(&scratch);
 
     let outcome = match status {
         Some(status) => classify(status.success(), &stdout, &stderr),
@@ -200,6 +211,42 @@ fn classify(success: bool, stdout: &str, stderr: &str) -> Outcome {
 }
 
 /// Cargo test filters are module paths: alphanumerics, `_`, and `::`.
+/// A private directory for one test run's output, outside the reviewed tree.
+///
+/// `create_dir` rather than `create_dir_all`: the failure when the path already
+/// exists is the point — it is what proves the directory is ours rather than
+/// something a reviewed repository, or another process, put there first.
+fn private_log_dir() -> Result<std::path::PathBuf, TestError> {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+
+    let base = std::env::temp_dir();
+    let pid = std::process::id();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+
+    for attempt in 0..64 {
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = base.join(format!("bugsleuth-testrun-{pid}-{nanos:08x}-{n}-{attempt}"));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(source) => {
+                return Err(TestError::Spawn {
+                    command: "creating a private log directory".to_string(),
+                    source,
+                });
+            }
+        }
+    }
+    Err(TestError::Spawn {
+        command: "creating a private log directory".to_string(),
+        source: std::io::Error::other("no unused name was available"),
+    })
+}
+
 fn is_safe_test_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 200

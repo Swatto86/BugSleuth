@@ -145,8 +145,18 @@ pub fn write_all(
     // Found by BugSleuth reviewing itself, by both vendors, and it is exactly
     // the destroy-before-commit class the correctness mandate was taught to
     // hunt for the day before.
+    // Staged and renamed, not truncated in place. The ordering above stops a
+    // failed bundle destroying the *previous* per-defect files; it did nothing
+    // for the bundle itself, which `fs::write` truncates before it writes — so
+    // a failure left an empty fix-prompt.md where the last run's whole work
+    // order had been.
     let bundle = dir.join("fix-prompt.md");
-    std::fs::write(&bundle, prompt(repo, ranked, not_reviewed, sweeps))?;
+    let staged = dir.join(".fix-prompt.md.writing");
+    std::fs::write(&staged, prompt(repo, ranked, not_reviewed, sweeps))?;
+    if let Err(error) = std::fs::rename(&staged, &bundle) {
+        let _ = std::fs::remove_file(&staged);
+        return Err(error);
+    }
 
     let mut written: Vec<String> = Vec::new();
     for entry in ranked {
@@ -163,6 +173,7 @@ pub fn write_all(
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_lowercase();
             let stale = name.starts_with("fix-prompt-")
+                && !name.ends_with(".writing")
                 && name.ends_with(".md")
                 && !written.contains(&name);
             if stale {
@@ -363,5 +374,31 @@ mod tests {
         let text = prompt("C:/repo", &[ranked_of(1)], &[], 2);
         assert!(text.contains("could not see"), "{text}");
         assert!(text.contains("Only code inside this repository"), "{text}");
+    }
+
+    #[test]
+    fn the_bundle_is_replaced_whole_and_leaves_no_staging_file() {
+        // fs::write truncates first, so a failed write left an empty
+        // fix-prompt.md where the previous run's entire work order had been.
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-handoff-atomic")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let entries = vec![ranked_of(1)];
+        assert!(write_all(&dir, "C:/repo", &entries, &[], 1).is_ok());
+        assert!(write_all(&dir, "C:/repo", &entries, &[], 1).is_ok());
+
+        let names: Vec<String> = std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.iter().any(|n| n == "fix-prompt.md"), "{names:?}");
+        assert!(
+            !names.iter().any(|n| n.ends_with(".writing")),
+            "a staging file was left behind: {names:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
