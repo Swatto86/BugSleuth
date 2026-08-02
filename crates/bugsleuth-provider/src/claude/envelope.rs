@@ -60,6 +60,23 @@ pub(crate) fn parse(stdout: &str) -> Result<ResultEnvelope, ProviderError> {
             detail: format!("{e}; output began {:?}", head(stdout, 200)),
         })?;
 
+    // A turn-budget exhaustion is recoverable and must be reported as such
+    // whatever the exit code was. This used to be detected only on the
+    // non-zero-exit path, so the identical failure delivered with a clean exit
+    // fell through to a generic error and the whole sweep was thrown away —
+    // exactly the loss the salvage exists to prevent.
+    if envelope.is_error
+        && envelope
+            .subtype
+            .as_deref()
+            .is_some_and(|s| s.contains("max_turns"))
+    {
+        return Err(ProviderError::TurnsExhausted {
+            vendor: VENDOR,
+            session: envelope.session_id.filter(|id| !id.trim().is_empty()),
+        });
+    }
+
     if envelope.is_error {
         let detail = envelope
             .result
@@ -119,5 +136,26 @@ mod tests {
         assert!(failure_text("panicked at src/main.rs: oh no").contains("oh no"));
         assert!(failure_text(r#"{"is_error":true,"#).contains("is_error"));
         assert!(failure_text("   ").is_empty());
+    }
+
+    #[test]
+    fn a_turn_exhaustion_is_recoverable_whatever_the_exit_code_was() {
+        // Detected only on the non-zero-exit path for a while, so the identical
+        // failure delivered with a clean exit fell through to a generic error
+        // and the sweep was discarded rather than salvaged.
+        let stdout =
+            r#"{"is_error":true,"subtype":"error_max_turns","session_id":"s-1","result":""}"#;
+        match parse(stdout) {
+            Err(ProviderError::TurnsExhausted { session, .. }) => {
+                assert_eq!(session.as_deref(), Some("s-1"));
+            }
+            other => panic!("expected a recoverable exhaustion, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn any_other_envelope_error_is_still_an_ordinary_failure() {
+        let stdout = r#"{"is_error":true,"subtype":"error_during_execution","result":"boom"}"#;
+        assert!(matches!(parse(stdout), Err(ProviderError::Failed { .. })));
     }
 }

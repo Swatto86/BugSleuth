@@ -150,3 +150,24 @@ async fn a_cancelled_run_names_every_sweep_it_never_reached() {
     assert_eq!(cancelled.len(), 2, "sweeps went missing rather than named");
     assert!(report.to_text().contains("NOT SWEPT"));
 }
+
+#[test]
+fn a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted() {
+    // The comment beside this code demanded it for weeks while the code only
+    // printed a warning, so the unit vanished from the report - which reads
+    // exactly like a lane that ran and found nothing. Found by this tool
+    // reviewing itself.
+    let report = RunReport {
+        ranked: vec![],
+        triage: Default::default(),
+        swept: vec![],
+        gaps: vec![Gap {
+            lane: Lane::Correctness,
+            model: None,
+            reason: "a sweep failed to complete and produced nothing: task panicked".into(),
+        }],
+    };
+    let text = report.to_text();
+    assert!(text.contains("NOT SWEPT"), "{text}");
+    assert!(text.contains("produced nothing"), "{text}");
+}

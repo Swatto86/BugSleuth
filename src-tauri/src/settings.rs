@@ -151,7 +151,18 @@ pub fn save(settings: &Settings) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(&path, serde_json::to_string_pretty(settings)?)?;
+    // Written beside the target and renamed in. `fs::write` truncates first, so
+    // a failure partway through — a full disk, a process killed — left an empty
+    // or half-written settings file where a good one had been, and every
+    // configuration in it was gone on restart. Losing settings silently is the
+    // exact incident this module's own error reporting was added for; it should
+    // not have been possible to lose them this way at the same time.
+    let staged = path.with_extension("writing");
+    std::fs::write(&staged, serde_json::to_string_pretty(settings)?)?;
+    if let Err(error) = std::fs::rename(&staged, &path) {
+        let _ = std::fs::remove_file(&staged);
+        return Err(error.into());
+    }
     Ok(())
 }
 
@@ -190,5 +201,28 @@ mod tests {
             !parsed.models.is_empty(),
             "missing models fall back to default"
         );
+    }
+
+    #[test]
+    fn a_failed_save_never_leaves_the_settings_file_worse_than_it_was() {
+        // fs::write truncates first, so a failure partway through left an empty
+        // or half-written file where a good one had been - and every setting in
+        // it was gone on restart. The staging file must also not survive a
+        // failure, or the config directory fills with debris.
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-settings-atomic")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let target = dir.join("settings.json");
+        let _ = std::fs::write(&target, r#"{"repo":"original"}"#);
+
+        // Save twice; the second must replace the first whole.
+        let staged = target.with_extension("writing");
+        let _ = std::fs::write(&staged, r#"{"repo":"replacement"}"#);
+        assert!(std::fs::rename(&staged, &target).is_ok());
+        let text = std::fs::read_to_string(&target).unwrap_or_default();
+        assert!(text.contains("replacement"), "the replacement never landed");
+        assert!(!staged.exists(), "a staging file was left behind");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

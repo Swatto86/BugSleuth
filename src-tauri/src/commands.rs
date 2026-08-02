@@ -252,11 +252,23 @@ fn checked_repo(raw: &str) -> CommandResult<PathBuf> {
 /// Where a run's per-sweep JSON goes: beside the app's settings, keyed by the
 /// repository name, so runs are findable and removable without hunting.
 fn run_output_dir(repo: &std::path::Path) -> PathBuf {
+    // The leaf name alone is not a key. Two checkouts of the same project — a
+    // worktree beside the original, a clone under a different parent — share a
+    // folder name, and sharing a run directory means resume hands one of them
+    // the other's sweeps and the report states the wrong provenance.
+    //
+    // The full path decides, shortened to a hash so the directory name stays a
+    // directory name, with the leaf kept in front so a person can still tell
+    // which is which by looking.
+    use std::hash::{Hash, Hasher};
     let name = repo
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "repo".to_string());
-    settings::data_dir().join("runs").join(name)
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    repo.hash(&mut hasher);
+    let key = format!("{}-{:016x}", name, hasher.finish());
+    settings::data_dir().join("runs").join(key)
 }
 
 fn non_empty(value: &str) -> Option<&str> {
@@ -360,5 +372,21 @@ mod tests {
             prompt.contains("not evidence that they are clean"),
             "nothing warns that the unreviewed lanes are not known-good"
         );
+    }
+
+    #[test]
+    fn two_checkouts_with_the_same_folder_name_do_not_share_a_run_directory() {
+        // A worktree beside the original, or a clone under a different parent,
+        // has the same leaf name. Sharing a run directory means resume hands
+        // one of them the other's sweeps and the report states the wrong
+        // provenance - the same lossy-key defect as the report filenames.
+        let a = run_output_dir(std::path::Path::new("C:/work/bugsleuth"));
+        let b = run_output_dir(std::path::Path::new("C:/scratch/bugsleuth"));
+        assert_ne!(a, b);
+        // The leaf stays visible so a person can still tell which is which.
+        assert!(a.to_string_lossy().contains("bugsleuth"));
+        // And the same path always resolves to the same directory, or resume
+        // would never find anything.
+        assert_eq!(a, run_output_dir(std::path::Path::new("C:/work/bugsleuth")));
     }
 }

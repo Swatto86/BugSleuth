@@ -171,6 +171,10 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
 
     caution(plan, options.repo);
 
+    // Sweeps whose task died outright. Carried out of the batch loop so they
+    // can be reported as gaps rather than only logged.
+    let mut panicked: Vec<String> = Vec::new();
+
     let outstanding = take_reusable(plan, &options, &mut findings, &mut swept);
 
     let remaining = Plan {
@@ -201,7 +205,7 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         }
 
         // Everything in a batch is a different vendor, so these run at once.
-        for report in run_batch(batch, &options).await {
+        for report in run_batch(batch, &options, &mut panicked).await {
             if let (Some(dir), Some(name)) = (options.out_dir, report.file_name.as_ref())
                 && let Err(error) = write_report(dir, name, &report.lane_report)
             {
@@ -260,6 +264,7 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
     let triage = crate::triage::grade(&mut clusters, &options).await;
 
     note_cancelled(&options, &remaining_units, &mut gaps);
+    note_panicked(&panicked, &mut gaps);
 
     Ok(RunReport {
         ranked: rank(clusters),
@@ -346,7 +351,31 @@ fn note_cancelled(options: &RunOptions<'_>, remaining: &[Unit], gaps: &mut Vec<G
     }
 }
 
-async fn run_batch(batch: &[Unit], options: &RunOptions<'_>) -> Vec<SweepOutcome> {
+/// Name every sweep whose task died outright.
+///
+/// The comment beside the `JoinSet` demanded this for weeks while the code only
+/// printed a warning, so a panicking sweep simply vanished from the report —
+/// which reads exactly like a lane that ran and found nothing. Found by this
+/// tool reviewing itself.
+///
+/// The lane is unknown by the time a task has panicked, so these are recorded
+/// against Correctness with the error, rather than dropped for want of a
+/// perfect label.
+fn note_panicked(panicked: &[String], gaps: &mut Vec<Gap>) {
+    for error in panicked {
+        gaps.push(Gap {
+            lane: Lane::Correctness,
+            model: None,
+            reason: format!("a sweep failed to complete and produced nothing: {error}"),
+        });
+    }
+}
+
+async fn run_batch(
+    batch: &[Unit],
+    options: &RunOptions<'_>,
+    panicked: &mut Vec<String>,
+) -> Vec<SweepOutcome> {
     let mut tasks = tokio::task::JoinSet::new();
 
     for unit in batch {
@@ -398,8 +427,15 @@ async fn run_batch(batch: &[Unit], options: &RunOptions<'_>) -> Vec<SweepOutcome
                     // A panicking sweep must not take the run down with it, and
                     // must not vanish either — the caller has to see a gap
                     // where it should be.
+                    //
+                    // For a while this comment described a fix that was not
+                    // made: the warning went to stderr and the unit simply
+                    // disappeared from the report, which reads exactly like a
+                    // lane that ran and found nothing. Found by this tool
+                    // reviewing itself.
                     Some(Err(error)) => {
                         eprintln!("warning: a sweep task failed to complete: {error}");
+                        panicked.push(error.to_string());
                     }
                 }
             }
