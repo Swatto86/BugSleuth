@@ -179,3 +179,58 @@ fn a_merged_report_of_an_unsandboxable_vendor_carries_the_caution_too() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A sweep that ran out of turns must say so after a merge, too.
+///
+/// The defect: `judge`'s own sweep type had no field for the flag, so reading a
+/// report file back off disk discarded it — the information was sitting in the
+/// JSON and the merged report presented a lane's partial list as its whole one.
+#[test]
+fn a_recovered_sweep_is_still_called_recovered_after_merging() {
+    let dir = scratch("salvaged-merge");
+    let path = write(
+        &dir,
+        "correctness-sonnet.json",
+        r#"{
+            "lane": "Correctness",
+            "model": "claude:sonnet",
+            "status": {"state": "swept", "turns": 30, "salvaged": true},
+            "findings": [],
+            "rejected": []
+        }"#,
+    );
+    let merged = merge(&[path]).expect("merge");
+    assert!(
+        merged.sources.iter().any(|s| s.salvaged),
+        "the flag did not survive being read back off disk"
+    );
+    let text = merged.to_text();
+    assert!(
+        text.contains("RECOVERED"),
+        "the merged report does not say so:\n{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// And a sweep that finished must not be labelled as cut short.
+#[test]
+fn a_complete_sweep_is_not_called_recovered() {
+    let dir = scratch("salvaged-clean");
+    let path = write(
+        &dir,
+        "correctness-sonnet.json",
+        r#"{
+            "lane": "Correctness",
+            "model": "claude:sonnet",
+            "status": {"state": "swept", "turns": 12, "salvaged": false},
+            "findings": [],
+            "rejected": []
+        }"#,
+    );
+    let text = merge(&[path]).expect("merge").to_text();
+    assert!(
+        !text.contains("RECOVERED"),
+        "a clean sweep was labelled recovered:\n{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

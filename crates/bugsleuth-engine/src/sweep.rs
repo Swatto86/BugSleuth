@@ -68,6 +68,20 @@ impl Vendor {
     }
 }
 
+/// The `vendor:model` a spec resolves to, exactly as a report records it.
+///
+/// One function, because the label was being built in one place and compared
+/// against a raw config string in another. A unit configured as `sonnet`
+/// produced a report saying `claude:sonnet`, and the equality test between them
+/// was never true — so a cancelled run counted every finished sweep as still
+/// outstanding and told the reader that lanes it had already swept were not
+/// reached.
+#[must_use]
+pub fn resolved_label(spec: &str) -> String {
+    let (vendor, model) = Vendor::parse(spec);
+    format!("{}:{model}", vendor.label())
+}
+
 pub struct Request<'a> {
     pub repo: &'a Path,
     pub lane: Lane,
@@ -86,7 +100,7 @@ pub struct Request<'a> {
 /// lane that quietly looks clean when it never ran.
 pub async fn run(request: Request<'_>) -> LaneReport {
     let (vendor, model) = Vendor::parse(request.model);
-    let model_label = format!("{}:{model}", vendor.label());
+    let model_label = resolved_label(request.model);
     let brief = brief::build(request.lane, request.scope, vendor.enforces_schema());
     // Recorded before anything runs, so even a failed sweep says what tree it
     // was pointed at.

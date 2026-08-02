@@ -60,11 +60,7 @@ impl RunReport {
             // A salvaged sweep is recovered work, not a clean run. Rendering
             // the two identically would let a review that was cut off partway
             // read as a thorough one that simply found little.
-            let salvaged = if sweep.salvaged {
-                " — RECOVERED after running out of turns, so this list is as far as it got"
-            } else {
-                ""
-            };
+            let salvaged = crate::caveats::salvaged(sweep.salvaged);
             out.push_str(&format!(
                 "  swept: {} lane by {} ({} findings{rejected}){salvaged}\n",
                 sweep.lane.title(),

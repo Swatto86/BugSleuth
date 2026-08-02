@@ -26,6 +26,23 @@ pub(crate) fn limits(indent: &str) -> String {
     )
 }
 
+/// What a recovered sweep is, said the same way wherever it is said.
+///
+/// A sweep that ran out of turns and was salvaged returned as far as it got.
+/// Its list is a prefix, not an inventory, and presenting it as a finished
+/// sweep tells the reader that everything there is to find in that lane is on
+/// the page. The run report said so; the merged `judge` report and the
+/// standalone `sweep` report both dropped it — one because its own type had no
+/// field for the flag, the other because a `..` pattern discarded it. Same rule
+/// missed twice, so it lives here once.
+pub(crate) fn salvaged(was_salvaged: bool) -> &'static str {
+    if was_salvaged {
+        " — RECOVERED after running out of turns, so this list is as far as it got"
+    } else {
+        ""
+    }
+}
+
 /// The caution owed when a vendor that cannot be sandboxed actually ran.
 ///
 /// Empty when none did — a caution printed on every report regardless is one
@@ -89,6 +106,21 @@ mod tests {
             assert!(
                 source.contains("caveats::limits"),
                 "{name} does not use the shared review limits"
+            );
+        }
+
+        // The recovered-sweep note, which went missing from two of the three
+        // documents that report sweeps — one had no field for the flag, the
+        // other discarded it with a `..` pattern.
+        let reporting_sweeps = [
+            ("the run report", include_str!("orchestrate/render.rs")),
+            ("the merged judge report", include_str!("merge.rs")),
+            ("the standalone sweep report", include_str!("report.rs")),
+        ];
+        for (name, source) in reporting_sweeps {
+            assert!(
+                source.contains("caveats::salvaged"),
+                "{name} does not say when a sweep was cut short"
             );
         }
     }

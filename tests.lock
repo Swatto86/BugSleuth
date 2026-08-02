@@ -211,8 +211,10 @@ rust lane::tests::the_ux_mandate_warns_about_native_keyboard_paths_it_measurably
 rust limits::tests::every_limit_is_a_statement_about_method_rather_than_a_hedge
 rust limits::tests::the_list_renders_one_bullet_per_limit
 rust limits::tests::the_unsandboxed_warning_says_what_is_and_is_not_contained
+rust merge::tests::a_complete_sweep_is_not_called_recovered
 rust merge::tests::a_failed_sweep_is_reported_as_unswept_and_never_counted_as_clean
 rust merge::tests::a_merged_report_of_an_unsandboxable_vendor_carries_the_caution_too
+rust merge::tests::a_recovered_sweep_is_still_called_recovered_after_merging
 rust merge::tests::an_unreadable_report_is_an_error_rather_than_a_silently_empty_merge
 rust merge::tests::sweeps_of_one_commit_and_reports_with_none_recorded_stay_quiet
 rust merge::tests::sweeps_of_two_different_commits_are_called_out_in_the_merged_report
@@ -269,9 +271,11 @@ rust orchestrate::render::tests::annotations::agreement_is_counted_against_model
 rust orchestrate::render::tests::annotations::rejected_findings_are_counted_in_the_sweep_line
 rust orchestrate::render::tests::annotations::repeating_a_model_does_not_inflate_the_model_count
 rust orchestrate::render::tests::two_models_on_one_lane_is_still_one_lane
+rust orchestrate::tests::a_bare_alias_resolves_to_the_label_a_report_records
 rust orchestrate::tests::a_cancelled_run_names_every_sweep_it_never_reached
 rust orchestrate::tests::a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model
 rust orchestrate::tests::a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted
+rust orchestrate::tests::the_report_label_and_the_comparison_come_from_one_function
 rust outcome::tests::a_vendor_that_cannot_prove_is_skipped_rather_than_attempted
 rust outcome::tests::nothing_provable_still_leaves_something_to_try
 rust outcome::tests::proving_uses_a_vendor_the_user_actually_configured
@@ -305,6 +309,8 @@ rust rank::tests::agreement_does_not_affect_the_order
 rust rank::tests::identical_severity_and_agreement_order_by_location_so_runs_are_stable
 rust rank::tests::positions_are_one_based_and_contiguous
 rust rank::tests::severity_decides_the_order
+rust report::salvaged_tests::a_finished_sweep_is_not_labelled_recovered
+rust report::salvaged_tests::a_recovered_sweep_says_so_in_the_standalone_report
 rust report::tests::a_swept_lane_with_nothing_found_says_so_explicitly
 rust report::tests::an_unswept_lane_is_never_rendered_as_having_no_findings
 rust report::tests::findings_rank_most_severe_first

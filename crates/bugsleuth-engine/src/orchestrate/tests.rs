@@ -171,3 +171,36 @@ fn a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted() {
     assert!(text.contains("NOT SWEPT"), "{text}");
     assert!(text.contains("produced nothing"), "{text}");
 }
+
+/// A model spelled as a bare alias must compare equal to the label a report
+/// records, or a cancelled run counts finished sweeps as still outstanding.
+///
+/// The defect: `remaining_units.retain` compared `unit.model` — the raw config
+/// string, "sonnet" — against `report.model`, the resolved "claude:sonnet".
+/// That is never equal, so nothing was ever removed and the cancellation
+/// summary told the reader that lanes it had already swept were not reached.
+#[test]
+fn a_bare_alias_resolves_to_the_label_a_report_records() {
+    use crate::sweep::resolved_label;
+    assert_eq!(resolved_label("sonnet"), "claude:sonnet");
+    assert_eq!(resolved_label("claude:sonnet"), "claude:sonnet");
+    assert_eq!(resolved_label("codex:"), "codex:");
+    assert_eq!(resolved_label("kilo:kimi"), "kilo:kimi");
+}
+
+/// And the run report builds its label the same way, so the two cannot drift.
+#[test]
+fn the_report_label_and_the_comparison_come_from_one_function() {
+    let sweep = include_str!("../sweep.rs");
+    let code: String = sweep
+        .split_once("#[cfg(test)]")
+        .map_or(sweep, |(before, _)| before)
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        code.contains("let model_label = resolved_label("),
+        "the sweep builds its label some other way, so the two can disagree again"
+    );
+}

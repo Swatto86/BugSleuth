@@ -197,8 +197,14 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
                 },
             );
 
-            remaining_units
-                .retain(|unit| unit.lane != report.lane || unit.model != report.lane_report.model);
+            // Both sides resolved. A unit configured as `sonnet` produced a
+            // report saying `claude:sonnet`, so this comparison was never true
+            // and every finished sweep stayed on the outstanding list — a
+            // cancelled run reported lanes it had already swept as not reached.
+            remaining_units.retain(|unit| {
+                unit.lane != report.lane
+                    || crate::sweep::resolved_label(&unit.model) != report.lane_report.model
+            });
 
             match &report.lane_report.status {
                 Status::Swept { .. } => {
@@ -334,6 +340,21 @@ async fn run_batch(
             // per-sweep timeout — up to forty-five minutes — after the user
             // asked to stop.
             () = options.cancel.cancelled() => {
+                // Anything already finished is collected before the set is
+                // dropped. `select!` picks at random among ready branches, so
+                // a sweep that had completed — minutes of real subscription
+                // quota, its result sitting right there — was discarded
+                // whenever cancellation happened to win the toss. This drains
+                // without waiting, so it costs nothing and still stops the
+                // in-flight work immediately.
+                while let Some(joined) = tasks.try_join_next() {
+                    match joined {
+                        Ok(outcome) => out.push(outcome),
+                        Err(error) => {
+                            eprintln!("warning: a sweep task failed to complete: {error}");
+                        }
+                    }
+                }
                 eprintln!("cancelled: stopping {} sweep(s) in flight. Sweeps already                            finished are on disk and a later --resume will reuse them.",
                           tasks.len());
                 break;

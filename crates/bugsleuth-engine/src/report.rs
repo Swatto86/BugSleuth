@@ -81,12 +81,16 @@ impl LaneReport {
                 ));
                 return out;
             }
-            Status::Swept { turns, .. } => {
+            // `salvaged` bound, not swallowed by `..`. It was, and this report
+            // presented a sweep that ran out of turns as a finished one — the
+            // reader was told a prefix of a lane's findings was the whole of it.
+            Status::Swept { turns, salvaged } => {
                 let turns = turns.map(|t| format!(" in {t} turns")).unwrap_or_default();
                 out.push_str(&format!(
-                    "  swept{turns} · {} verified, {} discarded\n",
+                    "  swept{turns} · {} verified, {} discarded{}\n",
                     self.findings.len(),
-                    self.rejected.len()
+                    self.rejected.len(),
+                    crate::caveats::salvaged(*salvaged)
                 ));
             }
         }
@@ -219,5 +223,40 @@ mod tests {
             order,
             vec![Severity::Critical, Severity::Medium, Severity::Low]
         );
+    }
+}
+
+#[cfg(test)]
+mod salvaged_tests {
+    use super::*;
+
+    fn swept(salvaged: bool) -> LaneReport {
+        LaneReport {
+            lane: "Correctness".into(),
+            model: "claude:sonnet".into(),
+            commit: None,
+            scope: None,
+            status: Status::Swept {
+                turns: Some(30),
+                salvaged,
+            },
+            findings: vec![],
+            rejected: vec![],
+        }
+    }
+
+    /// The standalone `sweep` report dropped this with a `..` pattern, so a
+    /// sweep that ran out of turns read as a finished one and its partial list
+    /// of findings read as the whole of what is there.
+    #[test]
+    fn a_recovered_sweep_says_so_in_the_standalone_report() {
+        let text = swept(true).to_text();
+        assert!(text.contains("RECOVERED"), "{text}");
+    }
+
+    #[test]
+    fn a_finished_sweep_is_not_labelled_recovered() {
+        let text = swept(false).to_text();
+        assert!(!text.contains("RECOVERED"), "{text}");
     }
 }

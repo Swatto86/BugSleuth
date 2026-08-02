@@ -32,8 +32,17 @@ struct SweepFile {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
 enum SweepStatus {
-    Swept,
-    NotSwept { reason: String },
+    /// `salvaged` is `#[serde(default)]` so reports written before the flag
+    /// existed still read; the flag itself was simply absent from this type,
+    /// so `judge` re-reading a report file from disk discarded information
+    /// that was sitting right there in the JSON.
+    Swept {
+        #[serde(default)]
+        salvaged: bool,
+    },
+    NotSwept {
+        reason: String,
+    },
 }
 
 pub struct Merged {
@@ -54,6 +63,10 @@ pub struct Source {
     pub lane: String,
     pub model: String,
     pub findings: usize,
+    /// Whether this sweep ran out of turns and was recovered part-way. Carried
+    /// through the merge because a prefix of a lane's findings must not be
+    /// presented as the whole of it.
+    pub salvaged: bool,
 }
 
 pub struct Unswept {
@@ -77,7 +90,7 @@ pub fn merge(paths: &[PathBuf]) -> Result<Merged> {
                 model: file.model,
                 reason,
             }),
-            SweepStatus::Swept => {
+            SweepStatus::Swept { salvaged } => {
                 if let Some(commit) = &file.commit
                     && !commits.contains(commit)
                 {
@@ -87,6 +100,7 @@ pub fn merge(paths: &[PathBuf]) -> Result<Merged> {
                     lane: file.lane,
                     model: file.model,
                     findings: file.findings.len(),
+                    salvaged,
                 });
                 all.extend(file.findings);
             }
@@ -155,6 +169,18 @@ impl Merged {
                 "  Those combinations were NOT reviewed. Their absence below means\n  \
                  nothing was looked for, not that nothing is there.\n",
             );
+        }
+
+        // Named one by one when any was cut short. A count of sweeps says
+        // nothing about whether one of them stopped part-way, and the reader
+        // needs to know which lane's list is a prefix rather than an inventory.
+        for source in self.sources.iter().filter(|s| s.salvaged) {
+            out.push_str(&format!(
+                "  {} lane by {}{}\n",
+                source.lane,
+                source.model,
+                crate::caveats::salvaged(true)
+            ));
         }
 
         let total: usize = self.sources.iter().map(|s| s.findings).sum();
