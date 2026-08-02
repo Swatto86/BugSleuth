@@ -183,6 +183,60 @@ test("a lane is spelled the same way in the window as in the engine", () => {
   );
 });
 
+test("a progress event carries the fields the window renders from", () => {
+  // The window turns each event into a line of the progress log. A field
+  // renamed in the engine does not fail anywhere: the property is simply
+  // undefined, and the log reads "Round undefined/undefined".
+  const engine = fs.readFileSync(
+    path.join(here, "..", "..", "crates", "bugsleuth-engine", "src", "orchestrate.rs"),
+    "utf8",
+  );
+  const enumeration = /pub enum RunEvent \{([\s\S]*?)\n\}/.exec(engine);
+  assert.ok(enumeration, "no RunEvent enum in the engine; the scan is broken");
+
+  // `#[serde(rename_all = "snake_case")]`, so `SweepFinished` arrives as
+  // `sweep_finished` and the variant names have to be converted to compare.
+  // One variant per chunk, however rustfmt chose to lay it out — a braced
+  // block over several lines or all on one. Matching each layout with its own
+  // pattern read two of the three and the missing one went unnoticed until the
+  // count was asserted, so there is one pattern and a count.
+  const variants = new Map<string, string[]>();
+  const body = enumeration[1]!.replace(/\/\/\/[^\n]*/g, " ");
+  for (const chunk of body.split(/\n(?=\s{4}[A-Z])/)) {
+    const name = /^\s*([A-Z]\w*)/.exec(chunk);
+    if (!name) continue;
+    const snake = name[1]!.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+    variants.set(snake, [...chunk.matchAll(/(\w+):\s*\w/g)].map((f) => f[1]!).sort());
+  }
+  assert.ok(variants.size >= 3, `read ${variants.size} variants out of the engine`);
+
+  // To the next line that starts at column zero, since every arm of the union
+  // is indented. Stopping at the first semicolon reads one arm of three —
+  // TypeScript separates the properties *inside* an object type with
+  // semicolons too, so the first one is a few words in.
+  const mirror = /export type RunEvent =([\s\S]*?)\n(?=\S)/.exec(frontend());
+  assert.ok(mirror, "no RunEvent mirror in the frontend; the scan is broken");
+  const mirrored = new Map<string, string[]>();
+  for (const arm of mirror[1]!.split("|").slice(1)) {
+    const kind = /kind:\s*"(\w+)"/.exec(arm);
+    if (!kind) continue;
+    const fields = [...arm.matchAll(/(\w+)\s*:/g)]
+      .map((f) => f[1]!)
+      .filter((f) => f !== "kind")
+      .sort();
+    mirrored.set(kind[1]!, fields);
+  }
+
+  assert.deepEqual(
+    [...mirrored.keys()].sort(),
+    [...variants.keys()].sort(),
+    "the window and the engine disagree about which events exist",
+  );
+  for (const [kind, fields] of variants) {
+    assert.deepEqual(mirrored.get(kind), fields, `the ${kind} event carries different fields`);
+  }
+});
+
 test("every event has both an emitter and a listener", () => {
   const sent = emitted();
   const heard = listened();

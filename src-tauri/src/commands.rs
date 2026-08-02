@@ -160,7 +160,6 @@ pub async fn start_run(
                     "text": text,
                     "prompt": prompt,
                     "promptPath": saved.map(|p| p.display().to_string()),
-                    "promptCount": report.ranked.len(),
                     "findings": crate::payload::findings(&repo.display().to_string(), &report),
                 })
             }
