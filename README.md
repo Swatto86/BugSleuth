@@ -9,9 +9,28 @@ model to review another model's output has correlated blind spots — especially
 within the same family — so BugSleuth asks several different vendors, each with a
 different mandate, and then makes them prove it.
 
-**Status: early, but there is now a desktop app as well as a command line.** See
-[NIGHT-REPORT.md](NIGHT-REPORT.md) for what has actually been measured, and
-[PROGRESS.md](PROGRESS.md) for where to pick up.
+See [PROGRESS.md](PROGRESS.md) for everything that has actually been measured,
+including where it falls short. [NIGHT-REPORT.md](NIGHT-REPORT.md) is the first
+night's record, kept as written; several of its numbers have been superseded.
+
+## Install
+
+Every release ships a **single file that runs with nothing installed** — no
+runtime, no admin, no installer — for each platform. Take that one unless you
+want the app in your start menu.
+
+| You want | Download |
+|---|---|
+| The desktop app, portable | `BugSleuth-portable-windows-x64.exe`, `-linux-x64`, `-macos-arm64` |
+| The desktop app, installed | `BugSleuth_x.y.z_x64-setup.exe`, `.msi`, `.deb`, `.dmg`, `.AppImage` |
+| The command line only | `bugsleuth-cli-windows-x64.exe`, `-linux-x64`, `-macos-arm64` |
+
+Checksums for each platform are published beside them as `SHA256SUMS-*.txt`.
+
+**You also need at least one vendor CLI**, signed in, on your `PATH`: `claude`,
+`codex` or `kilo`. BugSleuth drives them under your existing subscription — it
+holds no API key and bills nothing itself. The Providers panel says which ones
+it can start, though only a real sweep proves you are signed in.
 
 ## The two ideas
 
@@ -46,8 +65,7 @@ marks the empty column and says so in as many words.
 
 Dark and light both, following the system by default, switchable in the title
 bar. Settings live in `%APPDATA%\BugSleuth\settings.json`, and each run's
-per-sweep JSON goes in `%APPDATA%\BugSleuth
-uns\<repo>`.
+per-sweep JSON goes in `%APPDATA%\BugSleuth\runs\<repo>`.
 
 ## Using the command line
 

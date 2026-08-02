@@ -41,6 +41,7 @@ node every arm of a union is read, not just the first
 node every command the page calls exists in Rust and is exposed
 node every element the code looks up exists in the markup
 node every event has both an emitter and a listener
+node every platform the release builds for is offered in the README
 node every shipped preset covers all four lanes
 node every silent-failure opt-out gives a reason
 node interface fields come back without comments or nesting confusing them
@@ -58,6 +59,8 @@ node rounds are driven by the busiest vendor, not the total
 node settings saved before passes existed still estimate as one pass each
 node splitId agrees with vendorOf on every shape
 node splitting a model spec and rejoining it settles on one spelling
+node the README still promises a single file that runs with nothing installed
+node the README's download table names assets the workflow builds
 node the advertised cap and the enforced cap are the same number
 node the frontend actually calls into Rust, so this test is not vacuous
 node the precise scan sees each of the three ways a class is set
