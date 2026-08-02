@@ -1050,6 +1050,44 @@ is a question only the next self-review can settle.
   Both passes are committed as a fourth test corpus, and both new tests were
   confirmed to fail with the gate removed.
 
+## All ten confirmed defects fixed, each with a test that fails without it
+
+The 2 August self-review produced 17 findings. Fourteen were verified by an
+adversarial pass told to refute them; all fourteen survived, though four had
+their severity argued down. Four were fixed the same evening; the remaining ten
+are now done.
+
+| What was wrong | What a user was losing |
+|---|---|
+| A reply with no `findings` key parsed as an empty list | Real findings gone, reported as a clean sweep, no warning |
+| Resume matched on lane and model, never scope | A report claiming to have reviewed code it never opened |
+| A fixed three-backtick fence around quoted code | Reviewed code could address the fix-prompt's agent directly |
+| Clustering never compared lanes | A security defect merged into a correctness one and vanished |
+| "Cut short" flag dropped in two of three reports | A partial list of findings read as the complete one |
+| Cancellation discarded finished sweeps | Minutes of paid work thrown away on a coin toss |
+| Cancellation compared a bare alias to a resolved label | Lanes already swept reported as not reached |
+| Proving never said it runs your code unsandboxed | A security exposure the report left the reader to infer |
+| The proof cap existed only in the window | A hand-edited settings file could ask for any number |
+| The confirmation run ignored its own outcome | A timeout reported as "no test matches that name" |
+| Lane toggles dropped keyboard focus to the top of the page | A keyboard user re-tabbing in on every single tick |
+| The progress log replaced its whole text each event | A screen reader re-reading the entire log to announce one line |
+| Two runs shared a scratch directory | One run deleting the other's work mid-test |
+
+The two interface fixes were verified in a real browser rather than by reading:
+focus stays on the same control across a rebuild and falls to the top of the
+page without the fix, and the log appends without running lines together.
+
+## Shipping, not just building
+
+- **Install instructions that are true.** The release publishes fourteen
+  artifacts and the README opened by telling you to build from source. It now
+  leads with the single file that runs with nothing installed, and a check
+  compares the download table against the release workflow — renaming an asset
+  or dropping a platform fails the build. A download table is the first thing a
+  new user acts on and prose does not fail to compile.
+- **v0.2.2 published** on Windows, Linux and macOS: portable binaries,
+  installers, CLI binaries and checksums, all three CI jobs green.
+
 ## Next concrete step
 
 **Ten confirmed defects remain from the 2 August self-review**, verified and
