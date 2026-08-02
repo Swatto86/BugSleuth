@@ -69,7 +69,17 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // against a large repository the progress event arrived second and
     // replaced twenty ranked defects with a log of what had just happened.
     if (!running) return;
-    deps.output.textContent = progressLog.join(NEWLINE);
+    // Appended, not replaced. This element is `aria-live`, and replacing its
+    // whole text makes a screen reader announce the entire log again from the
+    // top on every event — by the end of a run that is a hundred lines read out
+    // to hear one new one. Appending announces only what is new, which is the
+    // whole point of a live region.
+    // The separator is decided by what is already on screen, not by how many
+    // events have arrived: the pane is seeded with "Starting…" before the first
+    // one, so keying off the log's length would run the first line into it.
+    const line = progressLog[progressLog.length - 1] ?? "";
+    const separator = deps.output.textContent === "" ? "" : NEWLINE;
+    deps.output.appendChild(document.createTextNode(separator + line));
     // Keep the newest line in view without stealing focus.
     deps.output.scrollTop = deps.output.scrollHeight;
   });

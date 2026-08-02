@@ -15,6 +15,8 @@ pub use finding::{
 };
 pub use ids::{FindingId, LaneId, ModelId, RunId};
 pub use lane::Lane;
-pub use limits::{REVIEW_LIMITS, UNSANDBOXED_VENDOR_WARNING, as_list as limits_list};
+pub use limits::{
+    PROVING_EXECUTION_WARNING, REVIEW_LIMITS, UNSANDBOXED_VENDOR_WARNING, as_list as limits_list,
+};
 pub use proof::{ProofClaim, ProofVerdict, proof_schema};
 pub use triage::{SEVERITY_RUBRIC, SeverityVerdict, SeverityVerdicts, triage_schema};

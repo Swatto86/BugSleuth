@@ -56,6 +56,22 @@ pub(super) fn judge(
         Some(claim.test_name.trim()),
         spec.test_timeout,
     )?;
+    // The run's own outcome first. It was computed and never read, so a
+    // confirmation that timed out or failed to build produced no test counts,
+    // fell through to `passed + failed == 0`, and was reported as "no test
+    // matches that name" — telling the reader the model had invented a test
+    // when in fact the run never got far enough to look for one.
+    if let Some(verdict) = from_confirmation(&single.outcome) {
+        let detail = match verdict {
+            ProofVerdict::DidNotBuild => first_error(&single.stderr),
+            _ => format!(
+                "the run of `{}` on its own was killed for taking too long, so                  nothing was settled either way",
+                claim.test_name
+            ),
+        };
+        return Ok((verdict, after_passed, after_failed, detail));
+    }
+
     let (single_passed, single_failed) = counts(&single.stdout);
     let verdict = from_named_test(single_passed, single_failed);
     let detail = match verdict {
@@ -88,6 +104,19 @@ fn from_suite(outcome: &Outcome, baseline_passed: u32, after_passed: u32) -> Opt
         Outcome::Passed => Some(ProofVerdict::TestDoesNotFail),
         Outcome::Failed if after_passed < baseline_passed => Some(ProofVerdict::SuiteSabotaged),
         Outcome::Failed => None,
+    }
+}
+
+/// What the confirmation run settles before its counts are even looked at.
+///
+/// Deliberately separate from [`from_suite`]: that one also decides
+/// `TestDoesNotFail` and `SuiteSabotaged` from a comparison against the
+/// baseline, and neither applies to a single test run on its own.
+fn from_confirmation(outcome: &Outcome) -> Option<ProofVerdict> {
+    match outcome {
+        Outcome::DidNotBuild => Some(ProofVerdict::DidNotBuild),
+        Outcome::TimedOut => Some(ProofVerdict::TimedOut),
+        Outcome::Passed | Outcome::Failed => None,
     }
 }
 

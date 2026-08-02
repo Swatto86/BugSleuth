@@ -261,6 +261,9 @@ export function matrixRows(
     const vendorCell = document.createElement("td");
     const vendorSelect = document.createElement("select");
     vendorSelect.setAttribute("aria-label", `Provider for row ${index + 1}`);
+    // Rebuilding the table replaces every element, so keyboard focus lands
+    // on <body>. These keys let the caller put it back where it was.
+    vendorSelect.dataset["focusKey"] = `vendor-${index}`;
     for (const name of VENDORS) {
       vendorSelect.append(option(name, name, name === vendor));
     }
@@ -322,6 +325,7 @@ export function matrixRows(
       cell.className = "lane-cell";
       const box = document.createElement("input");
       box.type = "checkbox";
+      box.dataset["focusKey"] = `lane-${index}-${lane}`;
       box.checked = model.lanes.includes(lane);
       // Named for a screen reader, which cannot see the column heading.
       box.setAttribute(
@@ -338,6 +342,7 @@ export function matrixRows(
     remove.type = "button";
     remove.textContent = "Remove";
     remove.setAttribute("aria-label", `Remove ${current || vendor}`);
+    remove.dataset["focusKey"] = `remove-${index}`;
     remove.addEventListener("click", () => handlers.onRemove(index));
     removeCell.append(remove);
     row.append(removeCell);

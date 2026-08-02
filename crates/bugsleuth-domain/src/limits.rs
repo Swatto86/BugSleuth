@@ -58,6 +58,25 @@ pub const REVIEW_LIMITS: [&str; 5] = [
 /// vendors run, so the user is owed the difference between them.
 pub const UNSANDBOXED_VENDOR_WARNING: &str = "This run includes Kilo, which cannot be restricted for a single invocation the way the other vendors can — it runs with whatever permissions your own Kilo configuration grants it. The throwaway checkout stops it modifying the code under review and nothing else. Since the repository being reviewed is untrusted, text inside it can address the agent directly, so only point a Kilo sweep at code you are willing to have an agent with your permissions read.";
 
+/// What proving does to the machine it runs on, said before it is too late.
+///
+/// Proving a defect means writing a test and running the repository's own test
+/// suite — three separate runs per defect: a baseline, the full suite after the
+/// model's change, and a named-test confirmation. Each is an ordinary process
+/// with the permissions of whoever started BugSleuth. A `build.rs`, a procedural
+/// macro, a test harness or a cargo config in the reviewed repository executes
+/// with those permissions and can read anything that account can read.
+///
+/// The throwaway worktree is not containment. It stops the reviewed repository
+/// being *modified*; it does nothing about what code inside it can reach.
+///
+/// This is stated rather than fixed because there is no honest way to fix it and
+/// still prove anything: proving a defect *is* running its test. What was wrong
+/// was leaving it unsaid — the review limits told the reader that code executed
+/// and left them to infer the rest, and this tool exists for people who cannot
+/// check that inference themselves.
+pub const PROVING_EXECUTION_WARNING: &str = "Proving ran this repository's own build and test commands on this machine, with your account's permissions and no sandbox — a build script, a procedural macro or a test fixture in the reviewed code executed as you. The throwaway checkout stops the reviewed code being modified and nothing else. Only ask for proof on a repository you would already be willing to run.";
+
 /// The limits as a markdown list, for the fix prompt and the report.
 pub fn as_list(bullet: &str) -> String {
     REVIEW_LIMITS

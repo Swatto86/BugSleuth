@@ -233,3 +233,24 @@ test("every event has both an emitter and a listener", () => {
     "Rust sends these and nothing is listening, so whatever they report is lost",
   );
 });
+
+test("the proof cap is the same number in the window, the markup and Rust", () => {
+  // Three places carry this: the TypeScript constant, the input's `max`
+  // attribute, and the Rust that now enforces it rather than trusting what it
+  // is sent. A limit enforced only by the sender is not a limit — but three
+  // copies of a number is exactly how they drift, so this compares all three.
+  const model = fs.readFileSync(path.join(here, "model.ts"), "utf8");
+  const inTs = /MAX_PROVE_TOP\s*=\s*(\d+)/.exec(model);
+  assert.ok(inTs, "no MAX_PROVE_TOP in model.ts");
+
+  const html = fs.readFileSync(path.join(here, "..", "index.html"), "utf8");
+  const inHtml = /id="prove-top"[^>]*max="(\d+)"/.exec(html);
+  assert.ok(inHtml, "the proof input has no max attribute");
+
+  const outcome = fs.readFileSync(path.join(rustDir, "outcome.rs"), "utf8");
+  const inRust = /const MAX_PROVE_TOP: usize = (\d+);/.exec(outcome);
+  assert.ok(inRust, "Rust does not define a proof cap; it is trusting the window again");
+
+  assert.equal(inHtml[1], inTs[1], "the markup and the window disagree");
+  assert.equal(inRust[1], inTs[1], "Rust and the window disagree");
+});

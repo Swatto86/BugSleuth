@@ -167,7 +167,34 @@ function renderPlanSummary(): void {
   ui.stop.classList.toggle("hidden", !isRunning());
 }
 
+/**
+ * Rebuild the model table, putting keyboard focus back where it was.
+ *
+ * Toggling a lane replaces every element in the table, so focus fell to
+ * `<body>` — on the app's busiest control, a keyboard user was thrown back to
+ * the top of the page on every single tick. There is no workaround for that
+ * except tabbing all the way in again, each time.
+ *
+ * The identity is a `data-focus-key` the row builder writes. Restoring by
+ * position would put focus on a different lane the moment a row is removed.
+ */
 function render(): void {
+  const focused = document.activeElement;
+  const key =
+    focused instanceof HTMLElement ? focused.dataset["focusKey"] : undefined;
+
+  renderRows();
+
+  if (key === undefined) return;
+  const restored = ui.matrixBody.querySelector<HTMLElement>(
+    `[data-focus-key="${CSS.escape(key)}"]`,
+  );
+  // Nothing to restore to when the row itself was just removed. Leaving focus
+  // where the browser put it beats guessing at a neighbour.
+  restored?.focus();
+}
+
+function renderRows(): void {
   ui.matrixBody.replaceChildren(
     ...matrixRows(settings.models, catalogue, {
       onRename: (index, id) => {

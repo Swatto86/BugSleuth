@@ -61,6 +61,7 @@ node splitting a model spec and rejoining it settles on one spelling
 node the advertised cap and the enforced cap are the same number
 node the frontend actually calls into Rust, so this test is not vacuous
 node the precise scan sees each of the three ways a class is set
+node the proof cap is the same number in the window, the markup and Rust
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous

@@ -69,6 +69,14 @@ fn prover(settings: &Settings) -> String {
         .to_string()
 }
 
+/// The most defects one run will attempt to prove.
+///
+/// The same number the window puts in the input's `max`, and a test asserts the
+/// two agree. Enforced here as well because the window is not the only way to
+/// reach this: settings are a JSON file a person can edit, and each attempt
+/// costs a model invocation and a full test run.
+const MAX_PROVE_TOP: usize = 25;
+
 pub(crate) async fn prove_top(
     app: &tauri::AppHandle,
     settings: &Settings,
@@ -78,6 +86,11 @@ pub(crate) async fn prove_top(
     if settings.prove_top == 0 {
         return String::new();
     }
+    // The window caps this at MAX_PROVE_TOP; the backend did not, so a settings
+    // file edited by hand asked for as many proof attempts as it liked, and
+    // each one is a model invocation plus a full test run. A limit enforced
+    // only by the thing sending the value is not a limit.
+    let requested = settings.prove_top.min(MAX_PROVE_TOP);
     // These read as one paragraph on screen, so the continuations matter: a
     // multi-line literal without them bakes the source indentation into the
     // message, and both of these shipped with a run of spaces mid-sentence.
@@ -99,7 +112,7 @@ pub(crate) async fn prove_top(
             "kind": "batch_started",
             "index": 1,
             "total": 1,
-            "units": [format!("proving the top {} defects", settings.prove_top)],
+            "units": [format!("proving the top {requested} defects")],
         }),
     );
 
@@ -109,7 +122,7 @@ pub(crate) async fn prove_top(
             repo,
             model: &prover(settings),
             test_command: command,
-            top: settings.prove_top,
+            top: requested,
             max_turns: 40,
             timeout: Duration::from_secs(2700),
             test_timeout: Duration::from_secs(600),

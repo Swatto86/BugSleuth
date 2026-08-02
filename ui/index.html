@@ -120,6 +120,13 @@
             the expensive part — one model invocation and a full test run each — so
             it is off unless you ask for it.
           </p>
+         <p class="hint warning-banner">
+            Proving runs the reviewed repository's own build and test commands on
+            this machine, with your permissions and no sandbox. A build script or
+            test fixture in that code executes as you. The throwaway checkout stops
+            it changing the code under review and nothing else — so only ask for
+            proof on a repository you would already be willing to run.
+          </p>
           <div class="row">
             <label class="field" style="flex: 0 0 190px">
               <span>Prove top N defects</span>

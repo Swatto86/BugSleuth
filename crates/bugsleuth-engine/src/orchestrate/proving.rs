@@ -147,6 +147,12 @@ pub fn to_text(results: &[Proved], ranked_total: usize) -> String {
     }
 
     let mut out = String::from("\n=== proof ===\n");
+    // Said here because this is the section that exists only when proof was
+    // attempted, and attempting it is what ran the reviewed repository's own
+    // build and test code with the user's permissions. The review limits noted
+    // that code executed; they left the reader to work out the rest, and this
+    // tool is for people who cannot check that inference for themselves.
+    out.push_str(&crate::caveats::proving(true, "  "));
     let proven: Vec<&Proved> = results.iter().filter(|r| r.verdict.is_proof()).collect();
     // An attempt that never ran is not evidence about the defect, and saying so
     // in the same breath as "this resisted a test" told the reader the opposite
