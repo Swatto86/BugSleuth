@@ -118,6 +118,71 @@ test("no command is exposed to the page that the page never calls", () => {
   );
 });
 
+/** The field names of a `pub struct` in the Rust behind the window. */
+function rustFields(name: string): string[] {
+  const struct = new RegExp(`pub struct ${name} \\{([\\s\\S]*?)\\n\\}`).exec(rust());
+  assert.ok(struct, `no "pub struct ${name}" in src-tauri; the scan is broken`);
+  // Serde renames would break the mapping silently, so refuse to guess.
+  assert.ok(
+    !/#\[serde\(rename/.test(struct[1]!),
+    `${name} renames a field for the wire; this scan compares Rust names directly`,
+  );
+  const fields = [...struct[1]!.matchAll(/^\s*pub ([a-z_]+):/gm)].map((m) => m[1]!).sort();
+  // Two empty lists compare equal, so a scan that stops matching turns the
+  // comparison below into a pass. It happened to the lane check in this file.
+  assert.ok(fields.length >= 3, `read no fields out of Rust's ${name}`);
+  return fields;
+}
+
+/** The property names of an `export interface` in the frontend. */
+function tsFields(name: string): string[] {
+  const iface = new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`).exec(frontend());
+  assert.ok(iface, `no "export interface ${name}" in the frontend; the scan is broken`);
+  const withoutComments = iface[1]!.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
+  const fields = [...withoutComments.matchAll(/^\s*([a-z_]+)\??\s*:/gm)].map((m) => m[1]!).sort();
+  assert.ok(fields.length >= 3, `read no fields out of the frontend's ${name}`);
+  return fields;
+}
+
+test("the settings the window writes are the settings Rust reads", () => {
+  // Settings cross this boundary as JSON, so a field added on one side alone
+  // does not fail: it is simply absent, and serde fills in a default nobody
+  // chose. The symptom is a control that appears to work and changes nothing.
+  for (const shape of ["Settings", "ModelSetting"]) {
+    assert.deepEqual(
+      tsFields(shape),
+      rustFields(shape),
+      `${shape} does not have the same fields on both sides of the boundary`,
+    );
+  }
+});
+
+test("a lane is spelled the same way in the window as in the engine", () => {
+  // model.test.ts asserts the titles against a copy written out by hand, which
+  // is the same two-places problem one level up. This reads the engine.
+  const lane = fs.readFileSync(
+    path.join(here, "..", "..", "crates", "bugsleuth-domain", "src", "lane.rs"),
+    "utf8",
+  );
+  const titles = new Set([...lane.matchAll(/Lane::\w+ => "([^"]+)"/g)].map((m) => m[1]!));
+  assert.ok(titles.size >= 4, "found almost no lane titles in the engine");
+
+  // Anchored on the declaration. Matching bare `LANE_TITLES` finds the import
+  // in another module first and reads the wrong block — which it did, and the
+  // empty set it produced made this test pass while the lane was renamed.
+  const table = /\bconst LANE_TITLES[^{]*\{([\s\S]*?)\n\}/.exec(frontend());
+  assert.ok(table, "no LANE_TITLES table in the frontend; the scan is broken");
+  const shown = new Set([...table[1]!.matchAll(/:\s*"([^"]+)"/g)].map((m) => m[1]!));
+  assert.ok(shown.size >= 4, `read no titles out of the table: ${table[1]!}`);
+
+  assert.deepEqual(
+    [...shown].filter((t) => !titles.has(t)),
+    [],
+    "the window shows these lane names and the engine writes something else, " +
+      "so one lane is named two ways in one product",
+  );
+});
+
 test("every event has both an emitter and a listener", () => {
   const sent = emitted();
   const heard = listened();
