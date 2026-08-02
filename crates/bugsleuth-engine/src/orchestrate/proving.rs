@@ -104,9 +104,11 @@ pub async fn prove_top(ranked: &[Ranked], options: &ProveOptions<'_>) -> Vec<Pro
         let (verdict, detail) = match attempt {
             Ok(report) => (report.verdict, report.detail),
             // A proof attempt that could not run says nothing about the defect.
-            // It must not be reported as though the defect were disproved.
+            // It must not be reported as though the defect were disproved — and
+            // for a while it was, because `NoTestWritten` is bucketed with the
+            // genuine failures and explained as a defect that resisted a test.
             Err(error) => (
-                ProofVerdict::NoTestWritten,
+                ProofVerdict::NotAttempted,
                 format!("the proof attempt could not be run: {error}"),
             ),
         };
@@ -115,10 +117,14 @@ pub async fn prove_top(ranked: &[Ranked], options: &ProveOptions<'_>) -> Vec<Pro
             "proof {}/{}: {} - {}",
             entry.position,
             options.top,
-            if verdict.is_proof() {
-                "PROVED"
-            } else {
-                "not proved"
+            match verdict {
+                ProofVerdict::Proved => "PROVED",
+                // The live line has to make the same distinction the report
+                // does, or someone watching a run sees twenty "not proved"
+                // lines and concludes the findings were weak when the CLI was
+                // simply not there.
+                ProofVerdict::NotAttempted => "could not attempt",
+                _ => "not proved",
             },
             finding.title
         );
@@ -142,14 +148,41 @@ pub fn to_text(results: &[Proved], ranked_total: usize) -> String {
 
     let mut out = String::from("\n=== proof ===\n");
     let proven: Vec<&Proved> = results.iter().filter(|r| r.verdict.is_proof()).collect();
-    let unproven: Vec<&Proved> = results.iter().filter(|r| !r.verdict.is_proof()).collect();
+    // An attempt that never ran is not evidence about the defect, and saying so
+    // in the same breath as "this resisted a test" told the reader the opposite
+    // of the truth: nothing had been tried. A missing CLI became "may need
+    // concurrency, I/O or timing to reproduce".
+    let unattempted: Vec<&Proved> = results
+        .iter()
+        .filter(|r| r.verdict == ProofVerdict::NotAttempted)
+        .collect();
+    let unproven: Vec<&Proved> = results
+        .iter()
+        .filter(|r| !r.verdict.is_proof() && r.verdict != ProofVerdict::NotAttempted)
+        .collect();
 
     out.push_str(&format!(
-        "  attempted the top {} of {ranked_total} defects: {} proved, {} not\n",
+        "  attempted the top {} of {ranked_total} defects: {} proved, {} not, \
+         {} could not be attempted\n",
         results.len(),
         proven.len(),
-        unproven.len()
+        unproven.len(),
+        unattempted.len()
     ));
+
+    if !unattempted.is_empty() {
+        out.push_str(
+            "\n  COULD NOT BE ATTEMPTED - the attempt itself failed to run, so these say\n  \
+             nothing either way about the defect. Usually a missing or signed-out CLI,\n  \
+             or a rate limit:\n",
+        );
+        for entry in &unattempted {
+            out.push_str(&format!(
+                "    #{} {}\n       {}\n",
+                entry.position, entry.title, entry.detail
+            ));
+        }
+    }
 
     if !proven.is_empty() {
         out.push_str(
@@ -264,5 +297,30 @@ mod tests {
             "an edited working tree is dirty, and proving would silently miss it"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_attempt_that_never_ran_is_not_reported_as_a_defect_resisting_a_test() {
+        // A missing or signed-out CLI used to land under "NOT PROVED - a defect
+        // that resists a test is often one that needs concurrency, I/O or
+        // timing to reproduce". That told the reader the defect was hard to
+        // reproduce when in truth nothing had been tried at all.
+        let text = to_text(&[proved(1, ProofVerdict::NotAttempted)], 1);
+        assert!(text.contains("COULD NOT BE ATTEMPTED"), "{text}");
+        assert!(text.contains("nothing either way"), "{text}");
+        assert!(
+            !text.contains("resists a test"),
+            "an unrun attempt is still described as a stubborn defect: {text}"
+        );
+    }
+
+    #[test]
+    fn a_genuine_failure_to_prove_still_reads_as_one() {
+        // The distinction has to cut both ways: a test that was written and
+        // demonstrated nothing is a result, and must not be excused as a
+        // failure to run.
+        let text = to_text(&[proved(1, ProofVerdict::TestDoesNotFail)], 1);
+        assert!(text.contains("NOT PROVED"), "{text}");
+        assert!(!text.contains("COULD NOT BE ATTEMPTED"), "{text}");
     }
 }

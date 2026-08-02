@@ -54,6 +54,15 @@ pub enum ProofVerdict {
     NoTestWritten,
     /// The test run was killed for running too long.
     TimedOut,
+    /// The attempt never ran: the CLI was missing, rate-limited, or died before
+    /// it produced anything.
+    ///
+    /// Deliberately not folded in with the verdicts above. Those are *results* —
+    /// a test was written and it demonstrated nothing. This is the absence of a
+    /// result, and reporting the two together told the reader that a defect had
+    /// resisted a test when in fact nothing had been tried, which is the exact
+    /// confusion this project exists to prevent everywhere else.
+    NotAttempted,
 }
 
 impl ProofVerdict {
@@ -64,6 +73,7 @@ impl ProofVerdict {
 
     pub fn describe(self) -> &'static str {
         match self {
+            ProofVerdict::NotAttempted => "not attempted - the attempt could not run",
             ProofVerdict::Proved => "proved by a failing test",
             ProofVerdict::TestDoesNotFail => "the test written for it passes, so it proves nothing",
             ProofVerdict::SuiteSabotaged => {

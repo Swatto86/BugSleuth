@@ -155,7 +155,9 @@ pub async fn attempt(spec: Attempt<'_>) -> anyhow::Result<AttemptReport> {
         Ok((claim, turns)) => ProveOutcome { claim, turns },
         Err(error) => {
             return Ok(AttemptReport {
-                verdict: ProofVerdict::NoTestWritten,
+                // Not NoTestWritten: nothing was tried, so this is the absence
+                // of a result rather than a result.
+                verdict: ProofVerdict::NotAttempted,
                 claim: None,
                 baseline_passed,
                 after_passed: 0,
