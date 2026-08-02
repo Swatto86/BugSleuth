@@ -45,6 +45,7 @@ pub async fn triage(spec: TriageRequest<'_>) -> Result<SeverityVerdicts, Provide
         timeout: spec.timeout,
         binary: spec.binary,
         api_key: spec.api_key,
+        resume: None,
     })
     .await?;
 

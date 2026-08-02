@@ -54,6 +54,7 @@ pub async fn prove(request: ProveRequest<'_>) -> Result<ProveResult, ProviderErr
         timeout: request.timeout,
         binary: request.binary,
         api_key: request.api_key,
+        resume: None,
     })
     .await?;
 

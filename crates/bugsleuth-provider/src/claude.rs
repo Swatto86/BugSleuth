@@ -20,6 +20,7 @@ use discover::resolve_binary;
 mod discover;
 mod envelope;
 mod prove;
+mod salvage;
 mod triage;
 
 pub use envelope::Usage;
@@ -71,7 +72,7 @@ pub struct SweepResult {
 /// Run one lane sweep.
 pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> {
     let _ = spec.lane;
-    let outcome = invoke(Run {
+    let first = invoke(Run {
         repo: spec.repo,
         model: spec.model,
         effort: spec.effort,
@@ -83,8 +84,31 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
         timeout: spec.timeout,
         binary: spec.binary,
         api_key: spec.api_key,
+        resume: None,
     })
-    .await?;
+    .await;
+
+    // A sweep that ran out of turns did the expensive part and then lost it.
+    // Ask the same conversation for its answer once before giving up on a lane.
+    let outcome = match first {
+        Ok(outcome) => outcome,
+        Err(ProviderError::TurnsExhausted {
+            session: Some(session),
+            ..
+        }) => {
+            salvage::salvage(
+                spec.repo,
+                spec.model,
+                &session,
+                finding_schema(),
+                spec.binary,
+                spec.api_key,
+                spec.timeout,
+            )
+            .await?
+        }
+        Err(other) => return Err(other),
+    };
 
     let findings = crate::json::structured(&outcome.result)?;
     Ok(SweepResult {
@@ -110,6 +134,10 @@ pub(crate) struct Run<'a> {
     pub(crate) timeout: Duration,
     pub(crate) binary: Option<&'a str>,
     pub(crate) api_key: Option<&'a str>,
+    /// Continue an existing conversation instead of starting one. Only the
+    /// salvage path uses this: everything else must start clean, or a sweep
+    /// would inherit whatever the last one was thinking.
+    pub(crate) resume: Option<&'a str>,
 }
 
 pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
@@ -138,6 +166,15 @@ pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ProviderError
 
     if !output.succeeded() {
         let code = output.code.unwrap_or(-1);
+        // A turn-budget exhaustion is not an ordinary failure: the review may
+        // already be finished inside the conversation this names, so it is
+        // reported distinctly rather than collapsed into "exited non-zero".
+        if let Some(session) = salvage::exhausted_session(&output.stdout) {
+            return Err(ProviderError::TurnsExhausted {
+                vendor: VENDOR,
+                session: Some(session),
+            });
+        }
         // stderr first, then stdout. `--output-format json` means this CLI puts
         // its own account of a failure in the envelope on stdout, and reading
         // only stderr reported "produced no diagnostic output" for two real
@@ -235,6 +272,10 @@ fn build_args(run: &Run<'_>) -> Vec<String> {
         args.push("--disallowedTools".into());
         args.push(run.denied.into());
     }
+    if let Some(session) = run.resume {
+        args.push("--resume".into());
+        args.push(session.to_string());
+    }
     if !run.model.trim().is_empty() {
         args.push("--model".into());
         args.push(run.model.trim().to_string());
@@ -280,6 +321,7 @@ mod tests {
             timeout: Duration::from_secs(60),
             binary: None,
             api_key: None,
+            resume: None,
         }
     }
 
@@ -323,5 +365,37 @@ mod tests {
         let mut spec = run("sonnet");
         spec.denied = "";
         assert!(!build_args(&spec).iter().any(|a| a == "--disallowedTools"));
+    }
+
+    #[test]
+    fn a_salvage_run_resumes_the_session_rather_than_starting_a_new_one() {
+        // Without --resume the salvage would open a fresh conversation, which
+        // knows nothing about the review it is meant to be transcribing - and
+        // would answer confidently from nothing.
+        let mut spec = run("sonnet");
+        spec.resume = Some("session-abc");
+        let args = build_args(&spec);
+        let index = args.iter().position(|a| a == "--resume");
+        assert_eq!(
+            index.and_then(|i| args.get(i + 1)).map(String::as_str),
+            Some("session-abc")
+        );
+        // And an ordinary sweep must never inherit a conversation.
+        assert!(!build_args(&run("sonnet")).iter().any(|a| a == "--resume"));
+    }
+
+    #[test]
+    fn a_turn_budget_exhaustion_is_reported_as_its_own_failure_not_a_generic_one() {
+        // It is the one failure worth resuming: the review may already be done
+        // inside the conversation. Collapsing it into "exited non-zero" threw
+        // the whole sweep away, which happened three times in one day.
+        let exhausted = ProviderError::TurnsExhausted {
+            vendor: VENDOR,
+            session: Some("abc".into()),
+        };
+        assert!(exhausted.to_string().contains("turn budget"));
+        // And it is not transient: retrying from scratch would hit the same
+        // ceiling. Salvage is the answer, not another attempt.
+        assert!(!exhausted.is_transient());
     }
 }

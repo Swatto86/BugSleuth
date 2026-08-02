@@ -36,6 +36,19 @@ pub enum ProviderError {
         vendor: &'static str,
         detail: String,
     },
+    /// The run used its whole turn budget before answering.
+    ///
+    /// Distinct from a plain failure because the review itself may already be
+    /// done: everything the model found is still in the conversation this
+    /// carries the id of, so it can be asked for the answer rather than paid
+    /// for again from scratch.
+    #[error(
+        "the {vendor} CLI used its whole turn budget before answering — raise --max-turns, or narrow the scope"
+    )]
+    TurnsExhausted {
+        vendor: &'static str,
+        session: Option<String>,
+    },
 }
 
 impl ProviderError {
