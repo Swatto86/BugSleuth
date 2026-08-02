@@ -1,0 +1,8 @@
+# The test inventory is compared line by line by the gate. A checkout that
+# converts its line endings makes every test read as both missing and new, so
+# it is pinned to LF regardless of anyone's autocrlf setting.
+tests.lock text eol=lf
+
+# Shell scripts must keep LF or they will not run on the platforms that need
+# them, and the gate already refuses a .sh without its executable bit.
+*.sh text eol=lf

@@ -114,9 +114,22 @@ if [ "$recorded_on" != "$(platform)" ]; then
 else
 current=$(mktemp)
 scripts/test-inventory.sh "$current" > /dev/null
-gone=$(LC_ALL=C comm -23 tests.lock "$current" || true)
-added=$(LC_ALL=C comm -13 tests.lock "$current" || true)
-rm -f "$current"
+# Both sides through the same filter before comparing: drop the platform
+# header, which is not a test name and does not sort with them, and strip any
+# carriage returns, because a checkout with autocrlf on gives every line a
+# trailing \r and every single test then reads as both missing and new.
+#
+# `comm` warns on stderr when its input is not sorted and still produces
+# output, so the first version of this printed 356 spurious differences behind
+# a warning nobody read. Sorting both sides here means there is nothing to warn
+# about.
+strip() { tail -n +2 "$1" | tr -d '\r' | LC_ALL=C sort; }
+mine=$(mktemp); theirs=$(mktemp)
+strip tests.lock > "$mine"
+strip "$current" > "$theirs"
+gone=$(LC_ALL=C comm -23 "$mine" "$theirs")
+added=$(LC_ALL=C comm -13 "$mine" "$theirs")
+rm -f "$current" "$mine" "$theirs"
 if [ -n "$gone" ]; then
   echo "  these tests are in tests.lock and no longer run:"
   printf '%s\n' "$gone" | head -20 | sed 's/^/    /'
