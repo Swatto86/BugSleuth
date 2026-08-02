@@ -390,6 +390,35 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## Repeat runs: the recall result is a rate now, not an anecdote
+
+The fair criticism of every number above was that each condition ran once. A
+single run cannot tell a mandate that works from a model that got lucky. So the
+two decisive conditions were repeated.
+
+| Condition | Ground truth | Runs | Found |
+|---|---|---|---|
+| D2, security | `ruleSummary()` interpolated into `innerHTML` | 3 | **3 of 3** |
+| D3, contract | frontend size guard above the backend budget | 2 | **2 of 2** |
+
+Both were **missed by both vendors** before the mandates named their class, so
+the before/after is not one lucky run either side.
+
+**The per-vendor split is the interesting part, and it is not flattering to the
+premise.** On D2 the ground-truth defect was found by Claude in all three runs
+and by Codex in none — Codex found the *other*, louder injection in that file
+every time and stopped, which is exactly the behaviour the "do not stop at the
+first one" instruction was written for, still happening in the vendor it was
+written for. On D3 both vendors found it in both runs.
+
+So the mandates hold up across repeats, and one vendor still reliably stops at
+the first sink. That is a real limit of the current security lane, measured
+rather than suspected.
+
+A repeat run also turned up a defect nobody was looking for — a frontend
+filename sanitiser that omits the Windows reserved names — which is a small
+argument for repetition beyond measurement.
+
 ## The acceptance harness was never able to pass, and why that took eight runs
 
 Worth recording as a method failure, not just a fix.
