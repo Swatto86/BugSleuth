@@ -20,6 +20,18 @@ package=0
 
 say() { printf '\n== %s ==\n' "$1"; }
 
+# One stable name per operating system, so a version bump is not a new platform.
+# `uname -s` under Git Bash carries the Windows build number, and using it raw
+# meant a routine OS update would read as a different platform and quietly
+# switch a check off.
+platform() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) echo windows ;;
+    Darwin) echo macos ;;
+    *) echo linux ;;
+  esac
+}
+
 say "rust fmt"
 cargo fmt --all -- --check
 
@@ -91,6 +103,15 @@ say "no test has gone missing"
 # twice in one day. The suite stayed green with less of it running, and the
 # count did not move because two tests were added in the same change. Names are
 # the only thing a comparison can be trusted on.
+recorded_on=$(sed -n 's/^platform //p' tests.lock | head -1)
+if [ "$recorded_on" != "$(platform)" ]; then
+  # Some tests are #[cfg(windows)] and do not exist elsewhere, so a lock taken
+  # on one platform lists names another cannot run. Comparing anyway would fail
+  # every run on the other two for no defect, and a check that cries wolf gets
+  # switched off. This runs on every local gate and on the matching CI job,
+  # which is where a file split that loses tests actually happens.
+  echo "skipped: tests.lock was recorded on $recorded_on, this is $(platform)"
+else
 current=$(mktemp)
 scripts/test-inventory.sh "$current" > /dev/null
 gone=$(LC_ALL=C comm -23 tests.lock "$current" || true)
@@ -107,7 +128,8 @@ if [ -n "$added" ]; then
   printf '    %s\n' $added | head -10
   exit 1
 fi
-echo "no test has gone missing OK ($(wc -l < tests.lock) recorded)"
+echo "no test has gone missing OK ($(($(wc -l < tests.lock) - 1)) recorded)"
+fi
 
 say "file sizes"
 # 400 lines is the hard cap. Generated, vendored and lock files are exempt, as

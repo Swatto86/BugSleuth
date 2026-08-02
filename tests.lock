@@ -1,3 +1,4 @@
+platform windows
 node a bare Claude model never gains a redundant prefix
 node a bare voided call is not handled
 node a chain ending in .catch is handled, however many statements are inside it

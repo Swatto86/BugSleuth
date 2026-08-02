@@ -20,6 +20,16 @@ cd "$root"
 
 out="${1:-tests.lock}"
 
+# One stable name per operating system, so a version bump is not a new platform.
+platform() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) echo windows ;;
+    Darwin) echo macos ;;
+    *) echo linux ;;
+  esac
+}
+
+
 # Rust: every test the workspace would run, whatever crate it lives in.
 rust=$(cargo test --workspace -- --list 2>/dev/null | sed -n 's/: test$//p' | sed 's/^/rust /')
 # Frontend: node's own reporter, one line per test that ran. Matched on the
@@ -40,5 +50,16 @@ if [ "$rust_count" -lt 100 ] || [ "$node_count" -lt 20 ]; then
   exit 1
 fi
 
-printf '%s\n%s\n' "$rust" "$node" | LC_ALL=C sort -u > "$out"
-echo "$rust_count rust + $node_count node = $(wc -l < "$out") tests recorded in $out"
+{
+  # Which platform this was taken on, because some tests are #[cfg(windows)]
+  # and simply do not exist elsewhere. A lock taken on one platform reports
+  # those as missing on another, which is a false alarm, and a check that cries
+  # wolf gets switched off. The gate compares strictly on the recording
+  # platform and says plainly that it is skipping elsewhere.
+  # A stable token, not `uname -s` raw: Git Bash reports the Windows build
+  # number in it, so a routine OS update would have looked like a different
+  # platform and quietly switched the check off.
+  echo "platform $(platform)"
+  printf '%s\n%s\n' "$rust" "$node" | LC_ALL=C sort -u
+} > "$out"
+echo "$rust_count rust + $node_count node recorded in $out (on $(platform))"
