@@ -1,0 +1,333 @@
+node a bare Claude model never gains a redundant prefix
+node a class built from a prefix counts as used, not as dead style
+node a handled call is not reported just because its chain contains a semicolon
+node a lane is spelled the same way in the window as in the engine
+node a model listed twice with different passes counts like the engine: max, not sum
+node a model with no id contributes nothing
+node a progress event carries the fields the window renders from
+node a proof count is always an integer the backend can deserialize
+node a proof count is clamped to the cap the field advertises
+node a repeated pass is a whole extra sweep, and an extra round
+node a reused sweep says it was reused rather than pretending to be fresh
+node a round names what is about to run and where it sits in the sequence
+node a run needs both a repository and at least one sweep
+node a single finding is not reported as '1 findings'
+node a sweep that found nothing is not confusable with one that never ran
+node an awaited call in an event listener is not treated as handled
+node an empty configuration needs no rounds
+node an identical duplicate row adds nothing, exactly like the engine
+node an uncovered lane is reported
+node an unknown prefix is treated as a Claude model, colon and all
+node both sides are actually being read
+node both themes define the same set of colours
+node dark theme meets WCAG AA everywhere the UI uses it
+node every command the page calls exists in Rust and is exposed
+node every element the code looks up exists in the markup
+node every event has both an emitter and a listener
+node every shipped preset covers all four lanes
+node every silent-failure opt-out gives a reason
+node lane titles match the engine's own names, including UX
+node light theme meets WCAG AA everywhere the UI uses it
+node names are joined the way English does
+node no CSS rule styles a class nothing uses
+node no call into Rust can fail without the user being told
+node no command is exposed to the page that the page never calls
+node no element asks for a class the stylesheet does not define
+node one vendor doing everything is one round per lane
+node rounds are driven by the busiest vendor, not the total
+node settings saved before passes existed still estimate as one pass each
+node splitId agrees with vendorOf on every shape
+node splitting a model spec and rejoining it settles on one spelling
+node the advertised cap and the enforced cap are the same number
+node the frontend actually calls into Rust, so this test is not vacuous
+node the precise scan sees each of the three ways a class is set
+node the scans find things at all, so a passing run means something
+node the settings the window writes are the settings Rust reads
+node the two themes are actually different
+node toggling a lane leaves other models untouched
+node toggling a lane off removes exactly it, and twice on is idempotent
+node two models on one lane is two sweeps, because that is the point
+node unknown lane names are ignored rather than counted
+node vendor parsing matches the engine, including bare and colon-containing names
+rust agreement_counts_distinct_vendors
+rust anchor::tests::a_directory_link_out_of_the_repository_is_refused
+rust anchor::tests::a_snippet_occurring_twice_anchors_to_the_occurrence_nearest_the_claim
+rust anchor::tests::a_symlink_out_of_the_repository_is_refused_even_though_its_path_looks_innocent
+rust anchor::tests::accepts_a_snippet_that_really_is_at_the_claimed_line
+rust anchor::tests::an_ordinary_file_inside_the_repository_still_verifies
+rust anchor::tests::corrects_a_line_number_the_model_got_wrong_instead_of_discarding_the_finding
+rust anchor::tests::matches_a_multi_line_quote_across_a_blank_line
+rust anchor::tests::rejects_a_file_that_does_not_exist
+rust anchor::tests::rejects_a_path_that_climbs_out_of_the_repository
+rust anchor::tests::rejects_code_that_does_not_exist_in_the_file
+rust anchor::tests::tolerates_re_indented_code
+rust atomic::tests::a_file_is_replaced_whole
+rust atomic::tests::a_path_that_names_no_file_is_an_error_rather_than_a_panic
+rust atomic::tests::no_durable_write_bypasses_this_module
+rust atomic::tests::nothing_is_left_beside_the_file_afterwards
+rust atomic::tests::the_previous_file_survives_a_failed_write
+rust atomic::tests::the_staging_file_is_a_sibling_so_the_rename_cannot_cross_a_filesystem
+rust brief::tests::a_path_scope_appears_only_when_one_was_given
+rust brief::tests::a_vendor_without_schema_enforcement_gets_the_schema_in_the_prompt
+rust brief::tests::each_lane_gets_its_own_mandate_and_not_another_lanes
+rust brief::tests::only_the_vendor_that_needs_the_schema_is_given_it
+rust brief::tests::the_brief_always_explains_that_a_bad_quote_discards_the_finding
+rust brief::tests::the_example_reply_is_actually_valid
+rust brief::tests::the_proof_brief_forbids_fixing_the_defect
+rust cancel::tests::a_waiter_started_after_the_stop_does_not_wait_at_all
+rust cancel::tests::a_waiter_started_before_the_stop_is_woken_by_it
+rust cancel::tests::nothing_is_cancelled_until_it_is_asked_for
+rust cancel::tests::stopping_twice_is_harmless
+rust catalogue::tests::a_vendor_answers_about_effort_either_for_the_cli_or_for_each_model
+rust caveats::tests::every_report_renderer_uses_the_shared_caveats
+rust caveats::tests::nothing_is_said_at_all_when_no_sweeps_ran
+rust caveats::tests::the_caution_fires_for_a_kilo_vendor_and_not_for_a_model_merely_named_one
+rust caveats::tests::the_limits_carry_the_surrounding_documents_indent
+rust claude::envelope::tests::a_failure_is_explained_from_the_envelope_when_stderr_says_nothing
+rust claude::envelope::tests::a_normal_envelope_is_read_without_complaint
+rust claude::envelope::tests::a_turn_exhaustion_is_recoverable_whatever_the_exit_code_was
+rust claude::envelope::tests::an_envelope_with_no_result_falls_back_to_its_subtype
+rust claude::envelope::tests::an_error_envelope_becomes_an_error_not_an_empty_sweep
+rust claude::envelope::tests::any_other_envelope_error_is_still_an_ordinary_failure
+rust claude::envelope::tests::output_that_is_not_an_envelope_is_still_shown_rather_than_dropped
+rust claude::prove::tests::a_proof_attempt_may_write_and_run_tests_but_not_reach_the_network
+rust claude::salvage::tests::a_turn_limit_failure_offers_its_session_for_salvage
+rust claude::salvage::tests::a_turn_limit_with_no_session_id_cannot_be_salvaged
+rust claude::salvage::tests::any_other_failure_is_not_worth_resuming
+rust claude::salvage::tests::the_salvage_prompt_forbids_investigating_and_inventing
+rust claude::tests::a_salvage_is_never_itself_salvaged
+rust claude::tests::a_salvage_run_resumes_the_session_rather_than_starting_a_new_one
+rust claude::tests::a_turn_budget_exhaustion_is_reported_as_its_own_failure_not_a_generic_one
+rust claude::tests::an_empty_denylist_omits_the_flag_rather_than_passing_an_empty_value
+rust claude::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
+rust claude::tests::customizations_are_disabled_so_the_reviewed_repo_cannot_alter_the_review
+rust claude::tests::read_only_sweeps_cannot_be_granted_write_tools
+rust claude::tests::the_schema_is_passed_as_one_argv_entry_not_shell_text
+rust cluster::tests::a_cluster_reports_the_most_severe_assessment_not_the_mildest
+rust cluster::tests::a_triage_grade_decides_the_severity_and_the_original_is_still_readable
+rust cluster::tests::clustering_does_not_depend_on_the_order_findings_arrive_in
+rust cluster::tests::findings_from_different_lanes_are_never_merged
+rust cluster::tests::one_model_reporting_a_defect_twice_counts_as_agreement_of_one
+rust cluster::tests::the_cluster_speaks_through_whichever_finding_brought_a_fix_plan
+rust cluster::tests::the_same_kind_of_defect_in_different_files_stays_separate
+rust cluster::tests::two_different_defects_one_line_apart_stay_separate
+rust cluster::tests::two_models_in_one_lane_still_merge
+rust cluster::tests::two_vendors_reporting_the_same_defect_become_one_cluster_with_agreement_two
+rust cluster::tests::without_a_triage_pass_the_models_own_grade_stands
+rust codex::scratch::tests::a_directory_already_sitting_at_the_chosen_name_is_never_adopted
+rust codex::scratch::tests::a_failure_event_on_stdout_is_preferred_over_empty_stderr
+rust codex::scratch::tests::a_plain_error_event_is_also_read
+rust codex::scratch::tests::each_scratch_directory_is_new_rather_than_reused
+rust codex::scratch::tests::output_that_is_not_events_yields_no_error_rather_than_a_wrong_one
+rust codex::scratch::tests::the_scratch_directory_is_outside_the_reviewed_repository
+rust codex::tests::a_proof_attempt_may_write_because_it_has_to_add_a_test
+rust codex::tests::a_sweep_runs_read_only_and_ignores_the_reviewed_repos_own_config
+rust codex::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
+rust codex::tests::the_prompt_comes_from_stdin_so_a_long_brief_cannot_overflow_the_command_line
+rust codex::tests::the_schema_and_answer_paths_are_passed_as_files_not_inline_json
+rust commands::tests::a_path_that_does_not_exist_is_refused_rather_than_used
+rust commands::tests::a_real_directory_resolves_without_the_extended_length_prefix
+rust commands::tests::an_empty_repository_path_is_refused_with_something_actionable
+rust commands::tests::settings_map_onto_the_engine_config_without_losing_lanes
+rust commands::tests::the_fix_prompt_carries_the_repo_and_every_unreviewed_lane
+rust commands::tests::two_checkouts_with_the_same_folder_name_do_not_share_a_run_directory
+rust defects_only_one_vendor_found_survive_the_merge
+rust error::tests::a_rate_limit_message_is_recognised_however_it_is_worded
+rust error::tests::a_silent_failure_is_worth_retrying_but_a_missing_binary_is_not
+rust find::tests::finds_a_command_that_is_always_present
+rust find::tests::returns_none_for_a_command_that_cannot_exist
+rust finding::tests::a_finding_with_no_fix_plan_still_lands_rather_than_sinking_the_sweep
+rust finding::tests::a_reply_with_no_findings_key_is_malformed_rather_than_a_clean_sweep
+rust finding::tests::an_explicitly_empty_list_is_still_a_clean_sweep
+rust finding::tests::empty_findings_array_parses_as_a_clean_sweep
+rust finding::tests::schema_and_type_agree_on_required_field_names
+rust finding::tests::severity_tells_the_model_what_the_levels_mean
+rust genuinely_different_defects_are_not_merged
+rust handoff::tests::a_gap_line_does_not_smuggle_another_models_findings_into_the_prompt
+rust handoff::tests::a_gap_with_no_quoted_output_is_left_alone
+rust handoff::tests::a_single_defect_prompt_stands_on_its_own
+rust handoff::tests::the_bundle_is_replaced_whole_and_leaves_no_staging_file
+rust handoff::tests::the_bundle_states_its_own_size_and_how_to_avoid_being_truncated
+rust handoff::tests::the_fix_prompt_tells_the_agent_what_the_review_could_not_see
+rust handoff::tests::writing_prompts_clears_a_previous_runs_per_defect_files
+rust handoff::work_order::fence_tests::a_longer_run_inside_is_still_beaten
+rust handoff::work_order::fence_tests::a_snippet_containing_a_fence_gets_a_longer_one
+rust handoff::work_order::fence_tests::an_ordinary_snippet_still_gets_the_usual_three
+rust handoff::work_order::tests::a_corrected_line_number_is_called_out_so_the_right_one_is_used
+rust handoff::work_order::tests::a_defect_with_no_fix_plan_says_so_rather_than_going_quiet
+rust handoff::work_order::tests::the_work_order_carries_every_part_of_the_plan
+rust handoff::work_order::tests::the_work_order_shows_the_graded_severity_not_the_finders_own
+rust ids::tests::ids_round_trip_through_json_as_bare_strings
+rust json::tests::a_backtick_run_inside_a_snippet_does_not_truncate_the_json
+rust json::tests::a_reply_missing_required_fields_is_rejected
+rust json::tests::a_reply_that_is_not_findings_is_rejected_rather_than_silently_empty
+rust json::tests::reads_findings_delivered_as_a_json_object
+rust json::tests::reads_findings_delivered_as_a_json_string
+rust json::tests::reads_findings_wrapped_in_a_code_fence
+rust kilo::events::tests::a_malformed_event_is_skipped_rather_than_discarding_the_whole_review
+rust kilo::events::tests::a_message_repeated_by_the_stream_is_not_glued_to_itself
+rust kilo::events::tests::a_stream_with_no_text_events_yields_nothing_rather_than_panicking
+rust kilo::events::tests::narration_from_earlier_messages_is_not_mixed_into_the_answer
+rust kilo::events::tests::the_older_flat_event_shape_is_still_read
+rust kilo::repair::tests::a_very_long_malformed_reply_is_truncated_rather_than_sent_whole
+rust kilo::repair::tests::the_repair_is_pointed_at_an_empty_directory_of_its_own
+rust kilo::repair::tests::the_repair_prompt_forbids_inventing_and_forbids_reviewing_again
+rust kilo::repair::tests::the_scratch_directory_is_removed_when_the_repair_ends
+rust kilo::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
+rust kilo::tests::an_id_with_no_prefix_leaves_the_choice_to_kilo
+rust kilo::tests::every_route_can_be_described_to_a_person
+rust kilo::tests::external_plugins_are_skipped_so_the_machine_cannot_change_the_review
+rust kilo::tests::the_model_id_says_which_account_a_sweep_will_spend_from
+rust kilo::tests::the_working_directory_is_pinned_explicitly
+rust lane::tests::every_lane_parses_back_from_its_own_slug
+rust lane::tests::the_contract_mandate_asks_about_a_rule_written_down_on_both_sides
+rust lane::tests::the_correctness_mandate_asks_for_the_two_classes_it_measurably_missed
+rust lane::tests::the_security_mandate_asks_for_the_other_uses_of_a_sink_it_measurably_missed
+rust lane::tests::the_ux_mandate_warns_about_native_keyboard_paths_it_measurably_missed
+rust limits::tests::every_limit_is_a_statement_about_method_rather_than_a_hedge
+rust limits::tests::the_list_renders_one_bullet_per_limit
+rust limits::tests::the_unsandboxed_warning_says_what_is_and_is_not_contained
+rust merge::tests::a_failed_sweep_is_reported_as_unswept_and_never_counted_as_clean
+rust merge::tests::a_merged_report_of_an_unsandboxable_vendor_carries_the_caution_too
+rust merge::tests::an_unreadable_report_is_an_error_rather_than_a_silently_empty_merge
+rust merge::tests::sweeps_of_one_commit_and_reports_with_none_recorded_stay_quiet
+rust merge::tests::sweeps_of_two_different_commits_are_called_out_in_the_merged_report
+rust merge::tests::the_merged_report_states_the_methods_blind_spots_too
+rust merge::tests::the_same_defect_from_two_vendors_merges_and_records_agreement
+rust merging_reduces_the_list_without_collapsing_it
+rust models::kilo_catalogue::tests::a_record_whose_json_is_unreadable_keeps_its_model_selectable
+rust models::kilo_catalogue::tests::each_model_gets_its_own_efforts_rather_than_the_vendors
+rust models::kilo_catalogue::tests::the_banner_is_not_mistaken_for_a_model
+rust models::kilo_catalogue::tests::the_byok_flag_is_read_per_record_and_does_not_leak
+rust models::kilo_catalogue::tests::unknown_effort_names_sort_after_known_ones_rather_than_at_random
+rust models::tests::a_kilo_model_billed_to_your_own_plan_is_not_filed_under_the_subscription
+rust models::tests::efforts_are_recorded_per_model_and_only_where_the_model_has_any
+rust models::tests::kilo_has_no_vendor_wide_effort_list_because_it_has_no_such_thing
+rust one_defect_anchored_five_lines_apart_by_two_vendors_still_merges
+rust orchestrate::persist::tests::a_failed_sweep_is_retried_not_reused
+rust orchestrate::persist::tests::a_legacy_file_belonging_to_a_different_model_is_not_adopted
+rust orchestrate::persist::tests::a_report_is_replaced_whole_or_not_at_all
+rust orchestrate::persist::tests::a_report_written_under_the_old_naming_is_still_reused
+rust orchestrate::persist::tests::a_second_pass_writes_beside_the_first_rather_than_over_it
+rust orchestrate::persist::tests::a_successful_sweep_is_reused_rather_than_paid_for_twice
+rust orchestrate::persist::tests::a_sweep_of_a_different_scope_is_not_reused
+rust orchestrate::persist::tests::a_truncated_report_is_swept_again_rather_than_failing_the_run
+rust orchestrate::persist::tests::an_effort_spelling_the_pass_suffix_cannot_collide_with_a_real_second_pass
+rust orchestrate::persist::tests::an_encoded_name_can_never_reach_outside_the_run_directory
+rust orchestrate::persist::tests::each_unit_gets_a_distinct_file_so_sweeps_cannot_overwrite_each_other
+rust orchestrate::persist::tests::every_sweep_writes_to_its_own_file
+rust orchestrate::persist::tests::nothing_is_reused_unless_resume_was_asked_for
+rust orchestrate::persist::tests::the_current_name_wins_over_a_legacy_file_for_the_same_unit
+rust orchestrate::persist::tests::the_legacy_name_does_not_smuggle_a_differently_scoped_sweep_back_in
+rust orchestrate::persist::tests::two_model_ids_that_differ_only_in_punctuation_get_different_files
+rust orchestrate::progress::tests::a_failed_sweep_reads_as_a_failure_rather_than_as_zero_findings
+rust orchestrate::proving::tests::a_dirty_repository_is_detected_and_a_clean_one_is_not
+rust orchestrate::proving::tests::a_failed_proof_is_not_presented_as_the_defect_being_disproved
+rust orchestrate::proving::tests::a_genuine_failure_to_prove_still_reads_as_one
+rust orchestrate::proving::tests::an_attempt_that_never_ran_is_not_reported_as_a_defect_resisting_a_test
+rust orchestrate::proving::tests::defects_below_the_cut_are_reported_as_unattempted_not_unproven
+rust orchestrate::proving::tests::proven_and_unproven_findings_are_never_mixed_together
+rust orchestrate::proving::tests::proving_nothing_renders_nothing_rather_than_an_empty_heading
+rust orchestrate::render::tests::a_complete_run_says_nothing_about_unswept_lanes
+rust orchestrate::render::tests::a_failed_sweep_is_named_with_its_reason
+rust orchestrate::render::tests::a_lane_with_no_model_is_named_in_the_report
+rust orchestrate::render::tests::a_multi_lane_report_warns_that_severities_are_not_comparable
+rust orchestrate::render::tests::a_report_says_when_its_severities_were_never_graded_together
+rust orchestrate::render::tests::a_single_lane_report_does_not_warn_about_comparing_lanes
+rust orchestrate::render::tests::a_swept_lane_that_found_nothing_is_not_confused_with_a_gap
+rust orchestrate::render::tests::annotations::a_fully_graded_multi_lane_report_stops_warning_that_lanes_cannot_be_compared
+rust orchestrate::render::tests::annotations::a_graded_report_says_how_much_moved
+rust orchestrate::render::tests::annotations::a_moved_grade_is_shown_with_what_it_moved_from_and_why
+rust orchestrate::render::tests::annotations::a_report_says_what_the_method_could_not_see_even_when_every_lane_ran
+rust orchestrate::render::tests::annotations::a_run_that_used_an_unsandboxable_vendor_says_so_in_the_report
+rust orchestrate::render::tests::annotations::a_salvaged_sweep_does_not_read_like_a_clean_one
+rust orchestrate::render::tests::annotations::agreement_is_counted_against_models_not_sweeps
+rust orchestrate::render::tests::annotations::rejected_findings_are_counted_in_the_sweep_line
+rust orchestrate::render::tests::annotations::repeating_a_model_does_not_inflate_the_model_count
+rust orchestrate::render::tests::two_models_on_one_lane_is_still_one_lane
+rust orchestrate::tests::a_cancelled_run_names_every_sweep_it_never_reached
+rust orchestrate::tests::a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model
+rust orchestrate::tests::a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted
+rust outcome::tests::a_vendor_that_cannot_prove_is_skipped_rather_than_attempted
+rust outcome::tests::nothing_provable_still_leaves_something_to_try
+rust outcome::tests::proving_uses_a_vendor_the_user_actually_configured
+rust payload::tests::a_regrade_reaches_the_window_as_data_with_both_grades_and_the_reason
+rust payload::tests::an_unmoved_grade_sends_no_regrade_fields_so_the_card_stays_quiet
+rust payload::tests::each_card_carries_a_standalone_prompt_for_that_one_defect
+rust plan::tests::a_bare_model_name_is_treated_as_the_claude_vendor_for_batching
+rust plan::tests::a_configuration_that_would_run_nothing_is_an_error_not_an_empty_report
+rust plan::tests::a_fully_covered_run_reports_no_gaps
+rust plan::tests::a_lane_with_no_model_is_reported_rather_than_quietly_omitted
+rust plan::tests::a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed
+rust plan::tests::an_effort_the_vendor_does_not_accept_is_refused_before_anything_is_paid_for
+rust plan::tests::an_unknown_lane_name_is_rejected_rather_than_silently_skipped
+rust plan::tests::batching_runs_every_unit_exactly_once
+rust plan::tests::every_effort_the_vendor_documents_is_accepted
+rust plan::tests::no_two_sweeps_of_the_same_vendor_share_a_batch
+rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
+rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
+rust process::tests::captures_stdout_and_a_zero_exit_code
+rust process::tests::kills_a_child_that_outlives_its_timeout
+rust process::tests::reports_a_nonzero_exit_code_rather_than_erroring
+rust proof::tests::only_a_clean_proof_counts_as_proof
+rust proof::tests::the_schema_required_set_builds_a_claim
+rust prove::judge::tests::a_broken_build_is_not_a_demonstrated_defect
+rust prove::judge::tests::a_green_suite_proves_nothing
+rust prove::judge::tests::a_red_suite_that_kept_every_passing_test_needs_the_named_test_checked
+rust prove::judge::tests::breaking_existing_tests_is_never_accepted_as_proof
+rust prove::judge::tests::only_a_named_test_that_actually_ran_and_failed_is_proof
+rust prove::tests::every_non_proved_verdict_reports_as_not_proved
+rust rank::tests::agreement_does_not_affect_the_order
+rust rank::tests::identical_severity_and_agreement_order_by_location_so_runs_are_stable
+rust rank::tests::positions_are_one_based_and_contiguous
+rust rank::tests::severity_decides_the_order
+rust report::tests::a_swept_lane_with_nothing_found_says_so_explicitly
+rust report::tests::an_unswept_lane_is_never_rendered_as_having_no_findings
+rust report::tests::findings_rank_most_severe_first
+rust settings::tests::the_default_covers_every_lane_so_a_first_run_has_no_silent_holes
+rust settings::tests::the_default_does_not_prove_anything_until_asked
+rust settings::tests::unknown_fields_and_missing_fields_both_survive_a_round_trip
+rust similarity::tests::a_longer_description_never_scores_worse_for_saying_more
+rust similarity::tests::a_repeated_word_does_not_dominate_the_score
+rust similarity::tests::an_identifier_matches_the_same_name_written_as_words
+rust similarity::tests::empty_text_never_matches_anything
+rust similarity::tests::identical_text_scores_one_and_unrelated_text_scores_zero
+rust similarity::tests::one_terse_and_one_thorough_account_of_a_defect_still_merge
+rust similarity::tests::stopwords_alone_do_not_make_two_findings_look_alike
+rust similarity::tests::the_same_defect_described_by_two_vendors_scores_high_enough_to_merge
+rust similarity::tests::two_different_defects_in_the_same_function_score_far_lower
+rust sweep::isolate::tests::a_rules_directory_goes_whole
+rust sweep::isolate::tests::instruction_files_go_and_code_stays
+rust sweep::isolate::tests::matching_ignores_case_because_windows_does
+rust sweep::isolate::tests::the_git_directory_is_never_touched
+rust sweep::tests::a_bare_model_name_means_claude_so_the_common_case_stays_short
+rust sweep::tests::a_vendor_prefix_selects_that_vendor
+rust sweep::tests::an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped
+rust sweep::tests::kilo_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode
+rust sweep::tests::only_kilo_needs_the_schema_spelled_out_in_its_prompt
+rust testrun::tests::a_compile_error_is_not_mistaken_for_a_demonstrated_bug
+rust testrun::tests::a_green_run_is_recognised
+rust testrun::tests::a_non_zero_exit_with_no_test_output_counts_as_not_built
+rust testrun::tests::a_real_test_failure_is_recognised
+rust testrun::tests::a_test_name_may_not_carry_shell_or_flag_characters
+rust testrun::tests::an_unsafe_test_name_is_refused_rather_than_run
+rust the_real_repo_corpus_merges_four_findings_into_three_defects
+rust the_same_defect_described_by_each_vendor_is_merged
+rust the_same_defect_seen_twice_by_one_model_still_merges
+rust the_two_vendors_findings_load_and_are_the_expected_size
+rust three_different_defects_within_ten_lines_are_not_collapsed_into_one
+rust triage::prompt_tests::a_recovered_grading_is_not_presented_as_a_full_comparison
+rust triage::prompt_tests::the_prompt_never_offers_tools_the_pass_does_not_have
+rust triage::tests::a_single_defect_is_not_paid_to_be_compared_with_nothing
+rust triage::tests::a_verdict_reply_parses_into_verdicts
+rust triage::tests::every_defect_is_offered_under_an_id_the_reply_can_name
+rust triage::tests::the_prompt_forbids_the_three_things_that_would_damage_the_report
+rust triage::tests::the_prompt_says_what_each_defect_was_already_graded
+rust triage::tests::the_rubric_the_sweep_is_given_is_the_rubric_triage_applies
+rust unrelated_defects_in_the_same_real_crate_stay_separate
+rust worktree::tests::a_label_cannot_smuggle_path_or_flag_characters_into_a_branch_name
+rust worktree::tests::a_long_absolute_path_gets_the_extended_length_prefix_on_windows
+rust worktree::tests::a_long_label_is_truncated_rather_than_producing_an_unusable_path
+rust worktree::tests::a_path_that_already_has_the_prefix_is_not_given_a_second_one
+rust worktree::tests::creating_a_worktree_outside_a_git_repository_is_refused
+rust worktree::tests::dropping_a_worktree_deletes_it_even_with_deeply_nested_build_output

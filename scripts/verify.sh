@@ -86,6 +86,29 @@ done < <(git ls-files -s -- '*.sh')
 [ "$notexec" -eq 0 ] || exit 1
 echo "script permissions OK"
 
+say "no test has gone missing"
+# Splitting a file under the line cap dropped a whole `#[cfg(test)]` module
+# twice in one day. The suite stayed green with less of it running, and the
+# count did not move because two tests were added in the same change. Names are
+# the only thing a comparison can be trusted on.
+current=$(mktemp)
+scripts/test-inventory.sh "$current" > /dev/null
+gone=$(LC_ALL=C comm -23 tests.lock "$current" || true)
+added=$(LC_ALL=C comm -13 tests.lock "$current" || true)
+rm -f "$current"
+if [ -n "$gone" ]; then
+  echo "  these tests are in tests.lock and no longer run:"
+  printf '    %s\n' $gone | head -20
+  echo "  If you deleted them on purpose, run scripts/test-inventory.sh and say why in the commit."
+  exit 1
+fi
+if [ -n "$added" ]; then
+  echo "  new tests are not in tests.lock yet. Run: scripts/test-inventory.sh"
+  printf '    %s\n' $added | head -10
+  exit 1
+fi
+echo "no test has gone missing OK ($(wc -l < tests.lock) recorded)"
+
 say "file sizes"
 # 400 lines is the hard cap. Generated, vendored and lock files are exempt, as
 # are the fixtures, which are deliberately awful on purpose.
