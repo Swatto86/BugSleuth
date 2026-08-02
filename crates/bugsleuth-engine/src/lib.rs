@@ -11,6 +11,7 @@
 //! deserialize, a call in here, and a serialize.
 
 pub mod brief;
+mod caveats;
 pub mod handoff;
 pub mod merge;
 /// What each vendor can be asked to run, and how hard.

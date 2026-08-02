@@ -105,24 +105,14 @@ impl RunReport {
             );
         }
 
-        // A vendor with no per-invocation sandbox actually ran, so this belongs
-        // in the written record and not only in a warning at start-up that
-        // scrolled past twenty minutes ago.
-        if self
-            .swept
-            .iter()
-            .any(|sweep| sweep.model.starts_with("kilo"))
-        {
-            out.push_str(&format!(
-                "\n  Caution: {}\n",
-                bugsleuth_domain::UNSANDBOXED_VENDOR_WARNING
-            ));
-        }
-
-        // Stated once, after the count and before the list, because it changes
-        // how the whole list should be read rather than any one entry of it.
-        out.push_str("\n  What this review could not see:\n");
-        out.push_str(&bugsleuth_domain::limits_list("  - "));
+        // Both caveats come from one place. Each was once added to a single
+        // renderer and forgotten in the other, so the same report read more
+        // reassuringly depending only on which command produced it.
+        out.push_str(&crate::caveats::unsandboxed(
+            self.swept.iter().map(|sweep| &sweep.model),
+            "  ",
+        ));
+        out.push_str(&crate::caveats::limits("  "));
 
         for entry in &self.ranked {
             let cluster = &entry.cluster;

@@ -151,27 +151,13 @@ impl Merged {
             self.ranked.len()
         ));
 
-        // Both renderers carry this for the same reason they carry the limits:
-        // whether an agent with the user's own permissions was pointed at
-        // untrusted code is part of the record, not a start-up nicety.
-        if self.sources.iter().any(|s| s.model.starts_with("kilo")) {
-            out.push_str(&format!(
-                "
-  Caution: {}
-",
-                bugsleuth_domain::UNSANDBOXED_VENDOR_WARNING
-            ));
-        }
-
-        // Both report renderers say this, because both are handed to someone
-        // deciding whether the code is in good shape. A list with no stated
-        // blind spots reads as the whole answer either way.
-        out.push_str(
-            "
-  What this review could not see:
-",
-        );
-        out.push_str(&bugsleuth_domain::limits_list("  - "));
+        // From the shared module, so a caveat added here cannot go missing
+        // from the run report - which is how both of these got out of step.
+        out.push_str(&crate::caveats::unsandboxed(
+            self.sources.iter().map(|source| &source.model),
+            "  ",
+        ));
+        out.push_str(&crate::caveats::limits("  "));
 
         for entry in &self.ranked {
             let cluster = &entry.cluster;

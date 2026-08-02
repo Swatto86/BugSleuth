@@ -43,8 +43,7 @@ pub fn prompt(repo: &str, ranked: &[Ranked], not_reviewed: &[String], sweeps: us
     // three defects reads as "the three problems" rather than "three of the
     // problems a reader of source can find" — and the agent acting on it draws
     // the same wrong conclusion the human would.
-    out.push_str("\n## What this review could not see\n\n");
-    out.push_str(&bugsleuth_domain::limits_list("- "));
+    out.push_str(&crate::caveats::limits(""));
 
     out.push_str(&format!(
         "\n## The defects, worst first ({})\n",
