@@ -390,6 +390,26 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## v0.2.0 published on one platform, and why
+
+The first tag failed exactly where the gap it was closing had always been.
+
+`tauri build` produces the app and nothing else. The CLI binary existed in
+`target/release` on Windows only because `verify.ps1` builds it as part of the
+gate — and `verify.sh`, written the same afternoon, did not. So the release
+workflow found the CLI on Windows, published there, and failed on Linux and
+macOS with *"expected executable missing: target/release/bugsleuth"*.
+
+Two gates that build different things are two different definitions of green.
+That is the third time today the two disagreed: first on how to count lines,
+then on which file types to check, now on what to build. Each time the second
+platform found it, and each time the fault was in the older, Windows-only side.
+
+Fixed forward rather than by deleting a tag: the release workflow now builds
+the CLI explicitly instead of relying on a previous step's leftovers, `verify.sh`
+performs the same release build `verify.ps1` does, and **v0.2.1** carries both.
+v0.2.0 remains published with Windows-only artifacts and is superseded.
+
 ## v0.2.0, and what it is and is not verified by
 
 Cut from `c94822e`, with the gate green on **Windows, Linux and macOS** — the

@@ -65,7 +65,18 @@ jobs:
 
       # Default features only. WebDriver support is test-only and must not be
       # in anything published; the check below proves it is not.
-      - name: Build
+      # Two separate builds, because `tauri build` produces the app and nothing
+      # else. The CLI existed on Windows only as a side effect of the gate's
+      # release build, which verify.sh did not do — so v0.2.0 published Windows
+      # artifacts and failed on both other platforms with "expected executable
+      # missing". Publish what you intend to build, rather than what a previous
+      # step happened to leave behind.
+      - name: Build the CLI
+        run: cargo build --release -p bugsleuth-cli
+
+      # Default features only. WebDriver support is test-only and must not be
+      # in anything published; the check below proves it is not.
+      - name: Build the app
         run: npx --yes @tauri-apps/cli@^2 build
 
       - name: Collect and verify artifacts
