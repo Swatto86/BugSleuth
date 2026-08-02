@@ -29,13 +29,23 @@ import { frontendFiles, interfaceFields, unionArms } from "./ast.test.ts";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const rustDir = path.join(here, "..", "..", "src-tauri", "src");
 
-/** Every `.rs` file behind the window, as one string. */
+/**
+ * Every `.rs` file behind the window, as one string.
+ *
+ * Recursive. It read only the top level, so the moment a command moved into a
+ * submodule the scan stopped seeing it and reported a live command as
+ * undefined — the same "matched less than existed" shape this file exists to
+ * catch, in the file that catches it. Its own assertion is what found it, which
+ * is the argument for these checks failing loudly rather than quietly.
+ */
 function rust(): string {
-  return fs
-    .readdirSync(rustDir)
-    .filter((n) => n.endsWith(".rs"))
-    .map((n) => fs.readFileSync(path.join(rustDir, n), "utf8"))
-    .join("\n");
+  const read = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return read(full);
+      return entry.name.endsWith(".rs") ? [fs.readFileSync(full, "utf8")] : [];
+    });
+  return read(rustDir).join("\n");
 }
 
 /** Every non-test frontend module, as one string. */

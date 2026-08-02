@@ -146,3 +146,62 @@ mod tests {
         assert!(rendered.starts_with("- "));
     }
 }
+
+#[cfg(test)]
+mod prose_tests {
+    /// No message a user reads carries a run of stray spaces.
+    ///
+    /// Two did: a cancellation notice printed on every cancelled run, and the
+    /// triage note rendered verbatim into the report. Both were multi-line
+    /// string literals whose continuation lost its `\` at some point, baking the
+    /// source's own indentation into the sentence. Nothing objected — a string
+    /// is a string — and the one test touching the triage note hand-built the
+    /// value and asserted on unrelated substrings, so it reproduced the same
+    /// broken spacing rather than catching it.
+    #[test]
+    fn no_user_facing_string_carries_stray_indentation() {
+        let sources = [
+            (
+                "the cancellation notice",
+                include_str!("../../bugsleuth-engine/src/orchestrate/batch.rs"),
+            ),
+            (
+                "the triage note",
+                include_str!("../../bugsleuth-engine/src/triage.rs"),
+            ),
+            (
+                "the run report",
+                include_str!("../../bugsleuth-engine/src/orchestrate/render.rs"),
+            ),
+            (
+                "the merged report",
+                include_str!("../../bugsleuth-engine/src/merge.rs"),
+            ),
+            ("the review limits", include_str!("limits.rs")),
+        ];
+        let mut bad: Vec<String> = Vec::new();
+        for (name, source) in sources {
+            for (number, line) in source.lines().enumerate() {
+                // A run of spaces *inside* a line, after a word — not leading
+                // indentation, and not the aligned `\` continuations rustfmt
+                // itself produces at the end of a line.
+                let trimmed = line.trim_start();
+                if let Some(at) = trimmed.find("  ")
+                    && at > 0
+                    && trimmed[..at].ends_with(|c: char| c.is_ascii_alphanumeric() || c == ',')
+                    && trimmed[at..]
+                        .trim_start()
+                        .starts_with(|c: char| c.is_ascii_lowercase())
+                    && !trimmed.contains("//")
+                {
+                    bad.push(format!("{name} line {}: {trimmed}", number + 1));
+                }
+            }
+        }
+        assert!(
+            bad.is_empty(),
+            "these read with a gap in the middle of a sentence:\n{}",
+            bad.join("\n")
+        );
+    }
+}

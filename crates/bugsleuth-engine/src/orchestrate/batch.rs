@@ -77,8 +77,7 @@ pub(super) async fn run_batch(
                         }
                     }
                 }
-                eprintln!("cancelled: stopping {} sweep(s) in flight. Sweeps already                            finished are on disk and a later --resume will reuse them.",
-                          tasks.len());
+                eprintln!("cancelled: stopping {} sweep(s) in flight. Sweeps already finished are on disk and a later --resume will reuse them.", tasks.len());
                 break;
             }
             joined = tasks.join_next() => {

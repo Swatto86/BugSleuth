@@ -117,9 +117,17 @@ export function rejectionIsHandled(source: ts.SourceFile, call: ts.CallExpressio
 
     if (ts.isAwaitExpression(parent)) awaited = true;
 
-    // A `try` reached without leaving the function catches an awaited call.
-    if (ts.isTryStatement(parent) && parent.tryBlock.getStart(source) <= call.getStart(source)) {
-      if (awaited) return true;
+    // A `try` catches an awaited call only if the call is in its *try block*.
+    //
+    // The first version compared positions with a lower bound only, so a call
+    // inside the `catch` or the `finally` of that same statement — which is
+    // outside its protection, not inside it — was read as handled. Latent
+    // rather than exploited: no shipped call sits there today. But this
+    // function is the whole enforcement of "no call into Rust can fail without
+    // the user being told", and the folder-picker defect it was written for was
+    // exactly a call the rule wrongly believed was covered.
+    if (ts.isTryStatement(parent) && node === parent.tryBlock && awaited) {
+      return true;
     }
 
     // Crossing a function boundary ends the question: anything outside holds a
@@ -246,6 +254,37 @@ test("an awaited call in a discarded callback is not handled", () => {
   const call = callsTo(source, "invoke").find((c) => stringArgument(c) === "b");
   assert.ok(call, "did not find the listener call");
   assert.equal(rejectionIsHandled(source, call), false);
+});
+
+test("an awaited call in a catch or finally is not covered by that try", () => {
+  // The hole the audit found. A `try` protects its try block; a call sitting in
+  // the `catch` or the `finally` of the same statement is outside that
+  // protection, and reading it as handled would let exactly the folder-picker
+  // defect through again — a call the rule wrongly believed was covered.
+  const source = parse(
+    "s.ts",
+    `
+async function handler(): Promise<void> {
+  try {
+    thing();
+  } catch {
+    await invoke("in-catch");
+  } finally {
+    await invoke("in-finally");
+  }
+  await invoke("after");
+}
+`,
+  );
+  for (const command of ["in-catch", "in-finally", "after"]) {
+    const call = callsTo(source, "invoke").find((c) => stringArgument(c) === command);
+    assert.ok(call, `did not find the ${command} call`);
+    assert.equal(
+      rejectionIsHandled(source, call),
+      false,
+      `a call in "${command}" was read as protected by a try that does not cover it`,
+    );
+  }
 });
 
 test("an awaited call inside its own try is handled", () => {

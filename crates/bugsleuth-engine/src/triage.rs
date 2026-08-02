@@ -167,7 +167,7 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
             // decided. Worth applying, and worth not presenting as the full
             // side-by-side comparison the pass is supposed to be.
             format!(
-                "the triage pass ran out of turns and its grades were recovered afterwards,                  so {graded} of {} defects were compared rather than all of them",
+                "the triage pass ran out of turns and its grades were recovered afterwards, so {graded} of {} defects were compared rather than all of them",
                 clusters.len()
             )
         } else if missing == 0 {

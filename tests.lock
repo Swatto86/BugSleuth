@@ -22,6 +22,9 @@ node a round names what is about to run and where it sits in the sequence
 node a run needs both a repository and at least one sweep
 node a single finding is not reported as '1 findings'
 node a sweep that found nothing is not confusable with one that never ran
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
@@ -218,6 +221,7 @@ rust lane::tests::the_contract_mandate_asks_about_a_rule_written_down_on_both_si
 rust lane::tests::the_correctness_mandate_asks_for_the_two_classes_it_measurably_missed
 rust lane::tests::the_security_mandate_asks_for_the_other_uses_of_a_sink_it_measurably_missed
 rust lane::tests::the_ux_mandate_warns_about_native_keyboard_paths_it_measurably_missed
+rust limits::prose_tests::no_user_facing_string_carries_stray_indentation
 rust limits::tests::every_limit_is_a_statement_about_method_rather_than_a_hedge
 rust limits::tests::the_list_renders_one_bullet_per_limit
 rust limits::tests::the_unsandboxed_warning_says_what_is_and_is_not_contained
