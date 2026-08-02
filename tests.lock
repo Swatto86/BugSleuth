@@ -310,6 +310,7 @@ rust plan::tests::every_effort_the_vendor_documents_is_accepted
 rust plan::tests::no_two_sweeps_of_the_same_vendor_share_a_batch
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
+rust process::prompt_delivery_tests::the_result_of_writing_the_prompt_is_still_consumed
 rust process::tests::captures_stdout_and_a_zero_exit_code
 rust process::tests::kills_a_child_that_outlives_its_timeout
 rust process::tests::reports_a_nonzero_exit_code_rather_than_erroring
@@ -355,6 +356,9 @@ rust sweep::tests::a_vendor_prefix_selects_that_vendor
 rust sweep::tests::an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped
 rust sweep::tests::kilo_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode
 rust sweep::tests::only_kilo_needs_the_schema_spelled_out_in_its_prompt
+rust testrun::private_log_dir_tests::a_directory_already_there_is_not_taken_over
+rust testrun::private_log_dir_tests::the_log_directory_is_outside_any_reviewed_repository
+rust testrun::private_log_dir_tests::two_runs_never_get_the_same_directory
 rust testrun::tests::a_compile_error_is_not_mistaken_for_a_demonstrated_bug
 rust testrun::tests::a_green_run_is_recognised
 rust testrun::tests::a_non_zero_exit_with_no_test_output_counts_as_not_built

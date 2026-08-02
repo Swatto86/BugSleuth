@@ -210,7 +210,6 @@ fn classify(success: bool, stdout: &str, stderr: &str) -> Outcome {
     }
 }
 
-/// Cargo test filters are module paths: alphanumerics, `_`, and `::`.
 /// A private directory for one test run's output, outside the reviewed tree.
 ///
 /// `create_dir` rather than `create_dir_all`: the failure when the path already
@@ -304,5 +303,61 @@ mod tests {
             Duration::from_secs(1),
         );
         assert!(matches!(result, Err(TestError::UnsafeTestName(_))));
+    }
+}
+
+#[cfg(test)]
+mod private_log_dir_tests {
+    use super::*;
+
+    /// The log directory must never be inside the repository under review.
+    ///
+    /// It used to be `<repo>/target/bugsleuth/`. The reviewed repository is
+    /// untrusted by design and a proof attempt runs its build, so a symlink at
+    /// that path pointed this run's writes wherever the repository chose —
+    /// arbitrary file destruction, using our own permissions.
+    ///
+    /// This fix shipped with no test at all, which an independent audit found
+    /// while checking the claim that every fix had one. It has one now.
+    #[test]
+    fn the_log_directory_is_outside_any_reviewed_repository() {
+        let dir = private_log_dir().expect("a private directory");
+        assert!(
+            dir.starts_with(std::env::temp_dir()),
+            "logs land at {dir:?}, which is not under the temp directory and could \
+             therefore be inside the tree being reviewed"
+        );
+        assert!(dir.exists(), "the directory was not actually created");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Exclusive creation, so two runs cannot share one directory.
+    ///
+    /// `create_dir` rather than `create_dir_all` is the whole mechanism: the
+    /// failure when the path exists is what proves the directory is ours and
+    /// not something a reviewed repository — or a second BugSleuth — put there.
+    #[test]
+    fn two_runs_never_get_the_same_directory() {
+        let first = private_log_dir().expect("first");
+        let second = private_log_dir().expect("second");
+        assert_ne!(first, second, "two runs would write over each other");
+        for dir in [&first, &second] {
+            assert!(dir.exists());
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// And an existing directory is stepped over rather than adopted.
+    #[test]
+    fn a_directory_already_there_is_not_taken_over() {
+        // Occupy what the next call would otherwise choose, then confirm the
+        // call still returns something, and something else.
+        let taken = private_log_dir().expect("seed");
+        let next = private_log_dir().expect("after");
+        assert_ne!(taken, next);
+        assert!(next.exists());
+        for dir in [&taken, &next] {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 }

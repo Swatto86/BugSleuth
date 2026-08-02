@@ -283,3 +283,38 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod prompt_delivery_tests {
+    /// A prompt that never reached the child must not be reported as a sweep.
+    ///
+    /// The defect: `let _ = stdin.write_all(&bytes).await`. A failed write was
+    /// discarded, so a truncated or empty prompt looked exactly like a normal
+    /// run — the model answered whatever it had received, possibly nothing, and
+    /// that was presented as a review of the code.
+    ///
+    /// **Structural, and honest about it.** The behavioural version needs a
+    /// child that closes stdin mid-write, which is a race rather than a test.
+    /// What can be checked deterministically is that the result is still
+    /// consumed: the fix was shipped claiming a test it did not have, which an
+    /// independent audit found by reverting it and watching every existing test
+    /// pass. This is the assertion that would have failed.
+    #[test]
+    fn the_result_of_writing_the_prompt_is_still_consumed() {
+        let source = include_str!("process.rs");
+        let code = source
+            .split_once("#[cfg(test)]")
+            .map_or(source, |(before, _)| before);
+
+        assert!(
+            !code.contains("let _ = stdin.write_all"),
+            "the prompt write is discarded again, so a prompt that never arrived \
+             would be reported as a completed sweep"
+        );
+        assert!(
+            code.contains("fed.map_err"),
+            "nothing consumes the outcome of writing the prompt, so a failed \
+             write cannot become a failed invocation"
+        );
+    }
+}
