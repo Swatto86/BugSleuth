@@ -3,7 +3,7 @@
 **Written for a session with zero context.** If you are resuming, read this file
 and `DECISIONS.md`, then continue from "Next concrete step".
 
-Last updated: 1 August 2026 (afternoon).
+Last updated: 2 August 2026.
 
 ## Where we are
 
@@ -839,6 +839,49 @@ minor — and the test asserts every level is defined. The fix prompt also now s
 outright that the ordering is a guide rather than an authority, and that if a
 defect looks worse than its label it should be treated as worse.
 
+## Attacking the arrival rate, not the detection rate
+
+**The concern this answers:** the tool keeps finding real defects in its own
+fresh work, and a codebase producing them at that rate is a capable internal
+tool rather than a finished product. Finding them faster does not fix that.
+Making whole classes of them impossible to commit does.
+
+Five of the classes BugSleuth has repeatedly found in itself now fail the build
+mechanically. Each was mutation-tested — the defect was reintroduced on purpose
+and the build was watched to fail — because a check nobody has seen fail is a
+check nobody should believe.
+
+| Class | What now catches it | Proven by |
+|---|---|---|
+| A call into Rust whose failure is ignored | Every `invoke` must handle rejection or carry a written reason | The Stop-button defect, re-created |
+| A class name with no style rule | Markup, code and stylesheet compared both ways | Deleting the dialog CSS again |
+| An element id the markup no longer has | Every lookup checked against `index.html` | Renaming an id and a whole prefix |
+| A name that crosses between the window and Rust | Commands, events, settings fields and lane names all compared | Renaming each, one at a time |
+| Destroying a file before its replacement is safe | One atomic write, and a test that nothing bypasses it | Blocking the staging path mid-write |
+
+**Two of them found live defects the moment they were written.** `plan_run` was
+exposed over the app's command channel with no caller anywhere — surface with no
+user. And the command line truncated your `--json-out` and `--patch-out` in
+place, so a failure partway through destroyed the previous report: the same
+destroy-before-commit defect the tool had already found in three other places
+and had fixed three separate times, each with its own copy of the same six
+lines. There is one copy now.
+
+**Two of the new checks were themselves wrong first time, and that is the
+uncomfortable part.** The rejection rule reported a correctly-handled call as
+unhandled because it stopped reading at the first semicolon. The lane-name check
+matched the wrong block, produced an empty list, and *passed* while a lane was
+renamed — an empty set satisfies every assertion downstream of it. Both were
+caught by testing the checks rather than trusting them, and every derived list
+in that code now has to prove it is non-empty before anything is concluded from
+it. The lesson generalises: the failure mode of a check is silence, not noise.
+
+**What this does not claim.** These close five classes; they do not lower the
+rate at which every other kind of defect arrives, and no re-measurement has been
+run since. The count that matters — findings in a fresh self-review — has not
+been taken again. Claiming a drop from this work alone would be exactly the
+thin-evidence reasoning this file has criticised elsewhere.
+
 ## Known gaps
 
 - **Kilo cannot prove.** Claude and Codex both can. Kilo is refused with a stated
@@ -960,18 +1003,31 @@ defect looks worse than its label it should be treated as worse.
 
 ## Next concrete step
 
-**Measure recall properly on real code.** Revert several known bug-fix commits in
-a real repository and count how many each vendor finds, per lane. Cheap now that
-`run` and `--resume` exist:
+**Re-measure the self-defect rate.** The last count was 14 findings, 6 critical,
+two of them introduced the same day. Five classes have since been made
+impossible to commit, and nobody has counted since. Until that run happens the
+honest statement is "five classes closed, rate unknown".
+
+Same conditions as before, or the numbers are not comparable: four lanes, the
+same two vendors, a stripped worktree.
 
 ```bash
-cargo run -p bugsleuth-cli -- run --repo <clone> --config bugsleuth.example.json --out-dir runs/ --resume
+cargo run -p bugsleuth-cli -- run --repo . --config bugsleuth.example.json --out-dir runs/ --resume
 ```
 
-Two things to fix in the experiment design first, both learned the hard way:
+Two things to hold to when reading the result:
 
-1. **Check every planted defect is actually absent from the code**, and every
-   fabricated one actually false. A draft control in the M1 eval turned out to be
-   *true* on inspection and would have measured the opposite of its intent.
-2. **Point the right lane at it.** The banner bug is a UX-mandate defect in a
-   backend file — see the design gap above.
+1. **A lower count is not the same as a lower rate.** Much of the code reviewed
+   last time has not changed, so its defects will simply be found again. The
+   number worth watching is defects in code written *since* that run.
+2. **Check what the new checks did not catch.** Every finding outside the five
+   closed classes is the answer to "what should be closed next", and it is a
+   better answer than any guess made in advance.
+
+After that, the two remaining classes the tool has found in itself more than
+once and that nothing mechanical catches:
+
+- **A comment that describes behaviour the code does not implement.** Seen twice.
+  No mechanical check is obvious; a lane mandate may be the only route.
+- **Stopping at the first match when every match matters.** Seen in the product
+  and then, this session, twice in the checks written to prevent it.
