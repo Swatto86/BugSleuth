@@ -8,6 +8,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorktreeError {
@@ -33,6 +34,13 @@ pub struct Worktree {
     branch: String,
 }
 
+/// Distinguishes worktrees made by one process, as the process id cannot.
+///
+/// Two runs in different processes get different ids; two worktrees inside one
+/// process would not, and the orchestrator is free to grow a second proof in
+/// flight. A counter costs nothing and removes the question.
+static NEXT: AtomicU64 = AtomicU64::new(0);
+
 impl Worktree {
     /// Create a worktree of `repo` at `commit`, on a new throwaway branch.
     pub fn create(repo: &Path, commit: &str, label: &str) -> Result<Self, WorktreeError> {
@@ -40,14 +48,29 @@ impl Worktree {
             return Err(WorktreeError::NotAGitRepo(repo.display().to_string()));
         }
 
-        let slug = sanitize(label);
+        // Unique per process. The path used to be `<slug>` alone, so two
+        // BugSleuth runs against one repository chose the same directory and
+        // branch — and the second one's "clear the wreckage" step deleted the
+        // first one's *live* worktree, taking a test run and the minutes it had
+        // cost with it. Nothing warned; the losing run simply started failing.
+        let slug = format!(
+            "{}-{}-{}",
+            sanitize(label),
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        );
         let branch = format!("bugsleuth/{slug}");
         let path = repo.join(".bugsleuth-worktrees").join(&slug);
 
-        // A previous run that was killed rather than dropped can leave both
-        // behind; clear them so a retry is not blocked by its own wreckage.
+        // Only this run's own path, which no other process can now be using.
         remove(repo, &path);
         let _ = git(repo, &["branch", "-D", &branch]);
+
+        // A run killed rather than dropped leaves a directory behind, and the
+        // unique path above means nothing will ever reuse and clean it. Git is
+        // the authority on which of them are still worktrees: anything under
+        // our directory that it no longer lists is wreckage.
+        remove_orphans(repo);
 
         git(
             repo,
@@ -140,6 +163,51 @@ fn remove(repo: &Path, path: &Path) {
 
 /// Windows' extended-length path form, which raises the 260-character limit.
 /// A no-op elsewhere, and on paths that already carry the prefix.
+/// Delete anything under our directory that git no longer calls a worktree.
+///
+/// Paths carry the creating process's id, so nothing else will ever reuse a
+/// directory left behind by a run that was killed. Rather than guess whether
+/// some other BugSleuth still owns one — process ids are reused, and checking
+/// liveness portably is its own problem — this asks git, which knows exactly
+/// which worktrees exist. Anything it does not list is wreckage.
+///
+/// Best effort throughout: failing to tidy up is not a reason to refuse to
+/// start a review.
+fn remove_orphans(repo: &Path) {
+    let Ok(listing) = git(repo, &["worktree", "list", "--porcelain"]) else {
+        return;
+    };
+    let live: Vec<PathBuf> = listing
+        .lines()
+        .filter_map(|line| line.strip_prefix("worktree "))
+        .map(|path| PathBuf::from(path.trim()))
+        .collect();
+
+    let ours = repo.join(".bugsleuth-worktrees");
+    let Ok(entries) = std::fs::read_dir(&ours) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        // Compared canonically: git reports forward slashes and its own
+        // spelling of the drive, so a textual comparison would call every live
+        // worktree an orphan and delete the lot.
+        let canonical = path.canonicalize().ok();
+        let still_live = live.iter().any(|known| {
+            known
+                .canonicalize()
+                .ok()
+                .is_some_and(|k| Some(&k) == canonical.as_ref())
+        });
+        if !still_live {
+            remove(repo, &path);
+        }
+    }
+}
+
 fn long_path(path: &Path) -> PathBuf {
     if !cfg!(windows) {
         return path.to_path_buf();
@@ -189,108 +257,5 @@ fn sanitize(label: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_label_cannot_smuggle_path_or_flag_characters_into_a_branch_name() {
-        assert_eq!(sanitize("correctness/1"), "correctness-1");
-        assert_eq!(sanitize("../../escape"), "escape");
-        assert_eq!(sanitize("--force"), "force");
-        assert_eq!(sanitize(""), "run");
-        assert_eq!(sanitize("!!!"), "run");
-    }
-
-    #[test]
-    fn a_long_label_is_truncated_rather_than_producing_an_unusable_path() {
-        let slug = sanitize(&"a".repeat(200));
-        assert_eq!(slug.len(), 48);
-    }
-
-    #[test]
-    fn a_long_absolute_path_gets_the_extended_length_prefix_on_windows() {
-        let path = Path::new(r"C:\Users\x\repo\.bugsleuth-worktrees\run");
-        let converted = long_path(path);
-        if cfg!(windows) {
-            assert!(
-                converted.to_string_lossy().starts_with(r#"\\?\"#),
-                "got {}",
-                converted.display()
-            );
-        } else {
-            assert_eq!(converted, path);
-        }
-    }
-
-    #[test]
-    fn a_path_that_already_has_the_prefix_is_not_given_a_second_one() {
-        let path = Path::new(r#"\\?\C:\repo\wt"#);
-        assert_eq!(long_path(path), path);
-    }
-
-    /// A throwaway git repository with one commit.
-    fn temp_repo(name: &str) -> Option<PathBuf> {
-        let dir = std::env::temp_dir()
-            .join("bugsleuth-worktree-tests")
-            .join(format!("{}-{name}", std::process::id()));
-        let _ = std::fs::remove_dir_all(long_path(&dir));
-        std::fs::create_dir_all(&dir).ok()?;
-        git(&dir, &["init", "-q"]).ok()?;
-        git(&dir, &["config", "user.email", "t@example.invalid"]).ok()?;
-        git(&dir, &["config", "user.name", "test"]).ok()?;
-        std::fs::write(dir.join("a.txt"), "hello\n").ok()?;
-        git(&dir, &["add", "-A"]).ok()?;
-        git(&dir, &["commit", "-qm", "base"]).ok()?;
-        Some(dir)
-    }
-
-    #[test]
-    fn dropping_a_worktree_deletes_it_even_with_deeply_nested_build_output() {
-        let Some(repo) = temp_repo("deep") else {
-            // No usable git in this environment; the other tests still cover the
-            // pure logic. Better to skip than to fail for an unrelated reason.
-            return;
-        };
-
-        let path = {
-            let worktree = match Worktree::create(&repo, "HEAD", "deep") {
-                Ok(worktree) => worktree,
-                Err(_) => return,
-            };
-            let path = worktree.path().to_path_buf();
-
-            // Imitate what `cargo test` leaves behind inside a proof worktree:
-            // paths long enough that `git worktree remove` fails on Windows with
-            // "Filename too long" and silently leaves the directory in place.
-            let mut deep = path.join("target");
-            for segment in 0..12 {
-                deep = deep.join(format!(
-                    "{segment}-a-rather-long-directory-name-like-cargo-makes"
-                ));
-            }
-            let _ = std::fs::create_dir_all(long_path(&deep));
-            let _ = std::fs::write(long_path(&deep.join("artifact.bin")), b"x");
-            assert!(path.exists(), "the worktree should exist before the drop");
-            path
-        };
-
-        assert!(
-            !path.exists(),
-            "the worktree survived its own drop at {}; it would dirty the reviewed repository",
-            path.display()
-        );
-        assert!(
-            !repo.join(".bugsleuth-worktrees").exists(),
-            "the container directory was left behind in the reviewed repository"
-        );
-        let _ = std::fs::remove_dir_all(long_path(&repo));
-    }
-
-    #[test]
-    fn creating_a_worktree_outside_a_git_repository_is_refused() {
-        let not_a_repo = std::env::temp_dir().join("bugsleuth-not-a-repo");
-        let _ = std::fs::create_dir_all(&not_a_repo);
-        let result = Worktree::create(&not_a_repo, "HEAD", "x");
-        assert!(matches!(result, Err(WorktreeError::NotAGitRepo(_))));
-    }
-}
+#[path = "worktree/tests.rs"]
+mod tests;
