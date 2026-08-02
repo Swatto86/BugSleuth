@@ -122,7 +122,9 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
         }
     };
 
+    let salvaged = verdicts.salvaged;
     let by_id: BTreeMap<String, (Severity, String)> = verdicts
+        .verdicts
         .verdicts
         .into_iter()
         .map(|v| (v.id, (v.severity, v.reason)))
@@ -148,7 +150,15 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
     Outcome {
         changed,
         graded,
-        note: if missing == 0 {
+        note: if salvaged {
+            // The grading model was cut off and asked afterwards what it had
+            // decided. Worth applying, and worth not presenting as the full
+            // side-by-side comparison the pass is supposed to be.
+            format!(
+                "the triage pass ran out of turns and its grades were recovered afterwards,                  so {graded} of {} defects were compared rather than all of them",
+                clusters.len()
+            )
+        } else if missing == 0 {
             String::new()
         } else {
             // Named rather than silently left at the model's own grade: a
@@ -315,5 +325,20 @@ mod prompt_tests {
             assert!(!prompt.contains(offer), "the prompt still offers: {offer}");
         }
         assert!(prompt.contains("no tools"), "{prompt}");
+    }
+
+    #[test]
+    fn a_recovered_grading_is_not_presented_as_a_full_comparison() {
+        // The whole mechanism is comparison. A grading model that was cut off
+        // and asked afterwards what it had decided compared some of the list,
+        // and the report has to say which.
+        let outcome = Outcome {
+            graded: 4,
+            changed: 1,
+            note: "the triage pass ran out of turns and its grades were recovered afterwards,                    so 4 of 9 defects were compared rather than all of them"
+                .into(),
+        };
+        assert!(outcome.note.contains("recovered afterwards"));
+        assert!(outcome.note.contains("rather than all of them"));
     }
 }

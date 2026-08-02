@@ -25,7 +25,7 @@ mod triage;
 
 pub use envelope::Usage;
 pub use prove::{ProveRequest, ProveResult, prove};
-pub use triage::{TriageRequest, triage};
+pub use triage::{TriageRequest, TriageResult, triage};
 
 /// Tools a read-only review may use. An explicit allowlist rather than
 /// `--dangerously-skip-permissions`: a sweep that *cannot* write is a far
@@ -96,27 +96,8 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
 
     // A sweep that ran out of turns did the expensive part and then lost it.
     // Ask the same conversation for its answer once before giving up on a lane.
-    let mut salvaged = false;
-    let outcome = match first {
-        Ok(outcome) => outcome,
-        Err(ProviderError::TurnsExhausted {
-            session: Some(session),
-            ..
-        }) => {
-            salvaged = true;
-            salvage::salvage(
-                spec.repo,
-                spec.model,
-                &session,
-                finding_schema(),
-                spec.binary,
-                spec.api_key,
-                spec.timeout,
-            )
-            .await?
-        }
-        Err(other) => return Err(other),
-    };
+    let outcome = first?;
+    let salvaged = outcome.salvaged;
 
     let findings = crate::json::structured(&outcome.result)?;
     Ok(SweepResult {
@@ -149,7 +130,40 @@ pub(crate) struct Run<'a> {
     pub(crate) resume: Option<&'a str>,
 }
 
+/// Run the CLI, and recover a turn-budget exhaustion once.
+///
+/// The retry lives here rather than in each caller because every one of them
+/// has the same problem: the expensive work is done inside a conversation that
+/// then fails to answer. Sweeps, the severity triage pass and proof attempts
+/// all lost whole invocations to it — the triage pass most often, and it has no
+/// repository to read at all.
 pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
+    // Held before `run` is consumed: the salvage needs the same model, binary
+    // and schema, and none of them can be read back out of a moved value.
+    let (repo, model, binary, api_key, timeout) =
+        (run.repo, run.model, run.binary, run.api_key, run.timeout);
+    let schema = run.schema.clone();
+    let already_resuming = run.resume.is_some();
+
+    match invoke_once(run).await {
+        Ok(outcome) => Ok(outcome),
+        // A salvage that itself runs out of turns is not salvaged again: the
+        // second failure says the conversation cannot answer, and a third
+        // attempt would only spend more of the budget saying so.
+        Err(ProviderError::TurnsExhausted {
+            session: Some(session),
+            ..
+        }) if !already_resuming => {
+            let mut recovered =
+                salvage::salvage(repo, model, &session, schema, binary, api_key, timeout).await?;
+            recovered.salvaged = true;
+            Ok(recovered)
+        }
+        Err(other) => Err(other),
+    }
+}
+
+pub(super) async fn invoke_once(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
     let binary = match run.binary {
         Some(path) => PathBuf::from(path),
         None => resolve_binary().ok_or_else(not_found)?,
@@ -299,6 +313,10 @@ fn build_args(run: &Run<'_>) -> Vec<String> {
 /// Response envelope from `--output-format json`.
 #[derive(Debug, Deserialize)]
 pub(crate) struct ResultEnvelope {
+    /// Set by us, never by the CLI: true when this answer was recovered from a
+    /// session that ran out of turns rather than produced by the run itself.
+    #[serde(skip)]
+    pub(crate) salvaged: bool,
     #[serde(default)]
     pub(crate) result: Value,
     #[serde(default)]
@@ -406,5 +424,15 @@ mod tests {
         // And it is not transient: retrying from scratch would hit the same
         // ceiling. Salvage is the answer, not another attempt.
         assert!(!exhausted.is_transient());
+    }
+
+    #[test]
+    fn a_salvage_is_never_itself_salvaged() {
+        // The guard that stops a cycle: a resumed run that also runs out of
+        // turns has said the conversation cannot answer, and a third attempt
+        // would only spend more budget hearing it again.
+        let mut spec = run("sonnet");
+        spec.resume = Some("abc");
+        assert!(spec.resume.is_some(), "the wrapper keys off exactly this");
     }
 }

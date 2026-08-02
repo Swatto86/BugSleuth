@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use super::{ResultEnvelope, Run, invoke};
+use super::{ResultEnvelope, Run, invoke_once};
 use crate::error::ProviderError;
 
 /// Enough to answer from what is already in the conversation, and no more. A
@@ -71,7 +71,9 @@ pub(super) async fn salvage(
     api_key: Option<&str>,
     timeout: Duration,
 ) -> Result<ResultEnvelope, ProviderError> {
-    invoke(Run {
+    // `invoke_once`, not `invoke`: a salvage is a single attempt by definition,
+    // and going through the salvaging wrapper would be a cycle.
+    invoke_once(Run {
         repo,
         model,
         effort: "",

@@ -31,7 +31,16 @@ pub struct TriageRequest<'a> {
     pub api_key: Option<&'a str>,
 }
 
-pub async fn triage(spec: TriageRequest<'_>) -> Result<SeverityVerdicts, ProviderError> {
+/// The verdicts, and whether they had to be recovered from a cut-off session.
+pub struct TriageResult {
+    pub verdicts: SeverityVerdicts,
+    /// True when the grading model ran out of turns and was asked afterwards
+    /// what it had decided. A partial grading is still worth applying, but the
+    /// report must not present it as a full comparison.
+    pub salvaged: bool,
+}
+
+pub async fn triage(spec: TriageRequest<'_>) -> Result<TriageResult, ProviderError> {
     let outcome = invoke(Run {
         repo: spec.repo,
         model: spec.model,
@@ -49,5 +58,8 @@ pub async fn triage(spec: TriageRequest<'_>) -> Result<SeverityVerdicts, Provide
     })
     .await?;
 
-    crate::json::structured(&outcome.result)
+    Ok(TriageResult {
+        verdicts: crate::json::structured(&outcome.result)?,
+        salvaged: outcome.salvaged,
+    })
 }
