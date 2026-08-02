@@ -38,6 +38,38 @@ interface Site {
   line: number;
   statement: string;
   precedingComments: string;
+  /** Whether a `try {` sits between the call and the top of its function. */
+  insideTry: boolean;
+}
+
+/**
+ * Whether the call at `index` has a `try {` between it and its function's top.
+ *
+ * This exists because the first version of this file exempted every `await
+ * invoke` on the reasoning that an awaited call propagates to its caller's
+ * try/catch. That is true of a function with a caller. It is false of an
+ * `async` callback handed to `addEventListener`, which throws the promise away
+ * — and BugSleuth found exactly that on the folder-picker button, where a
+ * rejection reached nobody and the button simply appeared broken.
+ *
+ * So the question is not "is it awaited" but "is anything catching it here".
+ * Walk up through the enclosing lines, stopping at the line that opens the
+ * function, and look for a `try` on the way.
+ */
+function inTryBlock(lines: string[], index: number): boolean {
+  const indentOf = (line: string) => line.length - line.trimStart().length;
+  const own = indentOf(lines[index]!);
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const line = lines[i]!;
+    if (!line.trim()) continue;
+    if (indentOf(line) >= own) continue;
+    if (/^\s*try\s*\{/.test(line)) return true;
+    // The line that opens the enclosing function: anything above it is a
+    // different scope, and a try out there does not catch a rejection that
+    // happens after this function has already returned its promise.
+    if (/(=>|\bfunction\b)[^)]*\{\s*$/.test(line)) return false;
+  }
+  return false;
 }
 
 /** Every `invoke(...)` call in the frontend, with enough context to judge it. */
@@ -87,6 +119,7 @@ function invokeSites(): Site[] {
         line: index + 1,
         statement: statement.join("\n"),
         precedingComments: comments.join("\n"),
+        insideTry: inTryBlock(lines, index),
       });
     });
   }
@@ -101,8 +134,9 @@ test("the frontend actually calls into Rust, so this test is not vacuous", () =>
 
 test("no call into Rust can fail without the user being told", () => {
   const unhandled = invokeSites().filter((site) => {
-    // An awaited call propagates to its caller's try/catch; that is handled.
-    if (/\bawait\s+invoke/.test(site.statement)) return false;
+    // An awaited call is handled only if something here actually catches it.
+    // Awaiting is not itself a rejection handler — see inTryBlock.
+    if (/\bawait\s+invoke/.test(site.statement) && site.insideTry) return false;
     // A returned promise is the caller's responsibility.
     if (/\breturn\s+invoke/.test(site.statement)) return false;
     if (site.statement.includes(".catch(")) return false;
@@ -143,4 +177,22 @@ test("a handled call is not reported just because its chain contains a semicolon
     persist[0]!.statement.includes(".catch("),
     "the extracted statement stopped before the rejection handler",
   );
+});
+
+test("an awaited call in an event listener is not treated as handled", () => {
+  // The hole BugSleuth found in this very file. The folder-picker button was
+  //     ui.browse.addEventListener("click", async () => {
+  //       const picked = await invoke<string | null>("pick_directory");
+  // and this test passed it, because the first version exempted every `await`.
+  // addEventListener discards the promise, so there was no caller and the
+  // rejection reached nobody: the button did nothing and said nothing.
+  const listener = [
+    'ui.browse.addEventListener("click", async () => {',
+    '  const picked = await invoke<string | null>("pick_directory");',
+    "});",
+  ];
+  assert.equal(inTryBlock(listener, 1), false, "an event listener has no caller to catch for it");
+
+  const guarded = ["async function boot() {", "  try {", "    await invoke(\"preflight\");", "  } catch {}", "}"];
+  assert.equal(inTryBlock(guarded, 2), true, "a try in the same function does catch it");
 });

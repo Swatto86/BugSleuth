@@ -272,13 +272,21 @@ function bind(): void {
     refresh();
   });
 
-  ui.browse.addEventListener("click", async () => {
-    const picked = await invoke<string | null>("pick_directory");
-    if (picked) {
-      settings.repo = picked;
-      ui.repo.value = picked;
-      refresh();
-    }
+  ui.browse.addEventListener("click", () => {
+    // Not an `async` listener. addEventListener throws away the promise it gets
+    // back, so an `await` that rejects inside one has no caller to propagate to
+    // and reaches nobody: the folder picker did nothing, said nothing, and left
+    // someone clicking a button that appeared to be broken.
+    invoke<string | null>("pick_directory")
+      .then((picked) => {
+        if (!picked) return;
+        settings.repo = picked;
+        ui.repo.value = picked;
+        refresh();
+      })
+      .catch((error: unknown) => {
+        setStatus(`Could not open the folder picker: ${String(error)}`, "error");
+      });
   });
 
   ui.addModel.addEventListener("click", () => {
