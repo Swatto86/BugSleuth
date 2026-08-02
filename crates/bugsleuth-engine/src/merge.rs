@@ -151,6 +151,18 @@ impl Merged {
             self.ranked.len()
         ));
 
+        // Both renderers carry this for the same reason they carry the limits:
+        // whether an agent with the user's own permissions was pointed at
+        // untrusted code is part of the record, not a start-up nicety.
+        if self.sources.iter().any(|s| s.model.starts_with("kilo")) {
+            out.push_str(&format!(
+                "
+  Caution: {}
+",
+                bugsleuth_domain::UNSANDBOXED_VENDOR_WARNING
+            ));
+        }
+
         // Both report renderers say this, because both are handed to someone
         // deciding whether the code is in good shape. A list with no stated
         // blind spots reads as the whole answer either way.
@@ -372,6 +384,26 @@ mod tests {
         let text = merged.to_text();
         assert!(text.contains("could not see"), "{text}");
         assert!(text.contains("Nothing was run"), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_merged_report_of_an_unsandboxable_vendor_carries_the_caution_too() {
+        // The limits had exactly this gap: added to one renderer and missed in
+        // the other, so the same report read differently depending on which
+        // command produced it.
+        let dir = scratch_dir("kilo-caution");
+        let a = dir.join("a.json");
+        let _ = std::fs::write(
+            &a,
+            r#"{"lane":"Security","model":"kilo:kimi","status":{"state":"swept"},"findings":[]}"#,
+        );
+        let merged = merge(&[a]).unwrap_or_else(|e| panic!("merge failed: {e}"));
+        assert!(
+            merged.to_text().contains("Caution:"),
+            "{}",
+            merged.to_text()
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

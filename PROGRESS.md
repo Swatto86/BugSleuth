@@ -390,6 +390,37 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## The second self-review found three more, and the salvage paid for itself
+
+Run again after the mandate work, on a frozen worktree of HEAD with every
+project document stripped. Three findings, none overlapping the three fixed
+after the first pass, all three confirmed real by reading the code:
+
+- **Kilo sweeps run with the user's own permissions** — and the throwaway
+  worktree, which is easy to read as containment, only stops Kilo modifying the
+  code under review. Since the reviewed repository is untrusted by design, text
+  inside it can address the agent directly. This is not fixable in BugSleuth:
+  Kilo has no per-invocation permission flag the way Claude has a tool allowlist
+  and Codex has `--sandbox read-only`. So it is now *stated* — before the run
+  while the choice is still free, and in both report renderers afterwards.
+- **The proof-count cap was advertised and never enforced.** `max="25"` on a
+  number input only marks the field invalid when a value is typed; it neither
+  clamps nor blocks reading. Typing 500 asked for 500 proof attempts, each a
+  model invocation and a full test run.
+- **The proof count was never made an integer**, so `1.5` reached Tauri as a
+  JSON float, failed to deserialize into `usize`, and stopped settings saving
+  *and* runs starting — with a raw deserialization error.
+
+The last two are the same defect class the contract mandate had just been taught
+to look for: one rule written on both sides of a boundary with nothing making
+the two agree. A test now reads `index.html` and asserts the advertised cap and
+the enforced cap are the same number, so they cannot drift apart again.
+
+**The salvage feature paid for itself on its first real run.** Two of the four
+sweeps hit `error_max_turns` and were recovered; both are marked RECOVERED in
+the report. One of them is where Claude's contract finding came from — under the
+previous build that whole sweep, and that finding, would have been lost.
+
 ## Security and contract, measured at last: 3 of 3 after naming two classes
 
 Correctness had a recall number and UX had a precision number. These two lanes

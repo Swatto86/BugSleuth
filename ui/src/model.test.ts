@@ -8,12 +8,19 @@
  */
 
 import { strict as assert } from "node:assert";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 import {
   LANES,
   LANE_TITLES,
+  MAX_PROVE_TOP,
   batchCount,
+  boundedProveTop,
   canRun,
   joinId,
   preset,
@@ -206,4 +213,35 @@ test("an identical duplicate row adds nothing, exactly like the engine", () => {
     { id: "sonnet", lanes: ["correctness"] },
   ];
   assert.equal(unitCount(models), 1);
+});
+
+test("a proof count is clamped to the cap the field advertises", () => {
+  // Typing (rather than spinning) past the max only marks the field invalid;
+  // the value still reads straight through. 500 here is 500 model invocations
+  // and 500 full test runs.
+  assert.equal(boundedProveTop("500"), MAX_PROVE_TOP);
+  assert.equal(boundedProveTop("-3"), 0);
+  assert.equal(boundedProveTop("7"), 7);
+});
+
+test("a proof count is always an integer the backend can deserialize", () => {
+  // prove_top is a usize in Rust. A float reached Tauri as JSON and failed to
+  // deserialize, which stopped settings saving and runs starting - with a raw
+  // deserialization error rather than anything a user could act on.
+  assert.equal(boundedProveTop("1.5"), 1);
+  assert.equal(boundedProveTop("0.9"), 0);
+  assert.equal(boundedProveTop(""), 0);
+  assert.equal(boundedProveTop("abc"), 0);
+  for (const raw of ["500", "-3", "1.5", "", "abc", "2e3"]) {
+    assert.ok(Number.isInteger(boundedProveTop(raw)), `${raw} produced a non-integer`);
+  }
+});
+
+test("the advertised cap and the enforced cap are the same number", () => {
+  // The same rule written down on both sides of a boundary, with nothing making
+  // them agree, is the defect class that produced this pair in the first place.
+  const html = fs.readFileSync(path.join(here, "..", "index.html"), "utf8");
+  const declared = /id="prove-top"[^>]*max="(\d+)"/.exec(html);
+  assert.ok(declared, "the prove-top input no longer declares a max");
+  assert.equal(Number(declared![1]), MAX_PROVE_TOP);
 });

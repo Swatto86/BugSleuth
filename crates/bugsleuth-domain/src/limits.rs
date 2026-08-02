@@ -40,6 +40,22 @@ pub const REVIEW_LIMITS: [&str; 5] = [
      defects, which is encouraging and is not a guarantee about yours.",
 ];
 
+/// What cannot be promised about a vendor that has no per-invocation sandbox.
+///
+/// Claude takes a tool allowlist and Codex takes `--sandbox read-only`, so
+/// neither can write or reach the network during a sweep. Kilo has no
+/// equivalent: its permissions come from the user's own global configuration,
+/// and BugSleuth cannot narrow them for one invocation. The throwaway worktree
+/// stops it modifying the repository under review — that is all it stops.
+///
+/// This matters because the reviewed repository is untrusted input by design.
+/// Text in it can address the agent directly, and an agent whose global
+/// configuration permits file access and network can be told to read something
+/// outside the repository and send it somewhere. Found by BugSleuth reviewing
+/// itself, and stated rather than quietly accepted: the user chooses which
+/// vendors run, so the user is owed the difference between them.
+pub const UNSANDBOXED_VENDOR_WARNING: &str = "This run includes Kilo, which cannot be restricted for a single invocation the way the other vendors can — it runs with whatever permissions your own Kilo configuration grants it. The throwaway checkout stops it modifying the code under review and nothing else. Since the repository being reviewed is untrusted, text inside it can address the agent directly, so only point a Kilo sweep at code you are willing to have an agent with your permissions read.";
+
 /// The limits as a markdown list, for the fix prompt and the report.
 pub fn as_list(bullet: &str) -> String {
     REVIEW_LIMITS
@@ -66,6 +82,15 @@ mod tests {
             );
             assert!(limit.len() > 80, "too vague to act on: {limit}");
         }
+    }
+
+    #[test]
+    fn the_unsandboxed_warning_says_what_is_and_is_not_contained() {
+        // The worktree is real containment and easy to over-read. The warning
+        // has to say what it does stop and what it does not.
+        assert!(UNSANDBOXED_VENDOR_WARNING.contains("throwaway checkout"));
+        assert!(UNSANDBOXED_VENDOR_WARNING.contains("nothing else"));
+        assert!(UNSANDBOXED_VENDOR_WARNING.contains("untrusted"));
     }
 
     #[test]

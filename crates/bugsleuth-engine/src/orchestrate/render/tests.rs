@@ -337,3 +337,29 @@ fn a_salvaged_sweep_does_not_read_like_a_clean_one() {
     // An ordinary sweep says nothing of the sort.
     assert!(!report(Vec::new()).to_text().contains("RECOVERED"));
 }
+
+#[test]
+fn a_run_that_used_an_unsandboxable_vendor_says_so_in_the_report() {
+    // The start-up warning scrolled past twenty minutes ago. Whether an agent
+    // with the user's own permissions was pointed at untrusted code belongs in
+    // the written record, beside the findings it produced.
+    let with_kilo = RunReport {
+        ranked: vec![],
+        triage: Default::default(),
+        swept: vec![Swept {
+            model: "kilo:kimi".into(),
+            lane: Lane::Security,
+            findings: 1,
+            rejected: 0,
+            salvaged: false,
+        }],
+        gaps: vec![],
+    };
+    let text = with_kilo.to_text();
+    assert!(text.contains("Caution:"), "{text}");
+    assert!(text.contains("nothing else"), "{text}");
+
+    // And a run of only sandboxable vendors says nothing, or the caution
+    // becomes background noise nobody reads.
+    assert!(!report(Vec::new()).to_text().contains("Caution:"));
+}

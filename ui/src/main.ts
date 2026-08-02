@@ -14,6 +14,7 @@ import {
   type Preset,
   type Settings,
   batchCount,
+  boundedProveTop,
   canRun,
   preset,
   toggleLane,
@@ -256,7 +257,7 @@ function bind(): void {
     refresh();
   });
   ui.proveTop.addEventListener("input", () => {
-    settings.prove_top = Math.max(0, Number(ui.proveTop.value) || 0);
+    settings.prove_top = boundedProveTop(ui.proveTop.value);
     refresh();
   });
   ui.testCommand.addEventListener("input", () => {

@@ -22,7 +22,7 @@ use crate::plan::{Plan, Unit};
 use crate::report::Status;
 use crate::sweep;
 
-mod persist;
+pub(crate) mod persist;
 pub mod progress;
 pub mod proving;
 pub mod render;
@@ -116,6 +116,42 @@ pub struct Gap {
     pub reason: String,
 }
 
+/// Everything worth saying before any quota is spent.
+///
+/// Both of these inform a choice the reader can still make for free — commit
+/// first, or point this vendor somewhere else — and neither is worth anything
+/// once twelve sweeps have run. Grouped because they are one moment in the run,
+/// not because they are one subject.
+fn caution(plan: &Plan, repo: &std::path::Path) {
+    // Vendors that must run in a worktree read HEAD; the others read the working
+    // tree. On a dirty repository those are different code, so one run would be
+    // reviewing two versions at once and the merged report would silently mix
+    // them. Say so rather than let the reader assume one consistent review.
+    if crate::orchestrate::proving::has_uncommitted_changes(repo)
+        && plan
+            .units
+            .iter()
+            .any(|unit| crate::sweep::Vendor::parse(&unit.model).0.needs_isolation())
+    {
+        eprintln!(
+            "warning: the repository has uncommitted changes, and this run includes a\n         \
+             vendor that must review a throwaway checkout of HEAD. Those vendors will\n         \
+             not see your uncommitted work while the others will, so the merged report\n         \
+             would span two versions of the code. Commit or stash first."
+        );
+    }
+
+    // Said before anything is paid for, because the choice it informs — whether
+    // to point this vendor at this code at all — can still be made here.
+    if plan
+        .units
+        .iter()
+        .any(|unit| crate::sweep::Vendor::parse(&unit.model).0.needs_isolation())
+    {
+        eprintln!("warning: {}", bugsleuth_domain::UNSANDBOXED_VENDOR_WARNING);
+    }
+}
+
 pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
     let mut findings: Vec<Finding> = Vec::new();
     let mut swept = Vec::new();
@@ -129,23 +165,7 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         })
         .collect();
 
-    // Vendors that must run in a worktree read HEAD; the others read the working
-    // tree. On a dirty repository those are different code, so one run would be
-    // reviewing two versions at once and the merged report would silently mix
-    // them. Say so rather than let the reader assume one consistent review.
-    if crate::orchestrate::proving::has_uncommitted_changes(options.repo)
-        && plan
-            .units
-            .iter()
-            .any(|unit| crate::sweep::Vendor::parse(&unit.model).0.needs_isolation())
-    {
-        eprintln!(
-            "warning: the repository has uncommitted changes, and this run includes a\n         \
-             vendor that must review a throwaway checkout of HEAD. Those vendors will\n         \
-             not see your uncommitted work while the others will, so the merged report\n         \
-             would span two versions of the code. Commit or stash first."
-        );
-    }
+    caution(plan, options.repo);
 
     let outstanding = take_reusable(plan, &options, &mut findings, &mut swept);
 
@@ -334,103 +354,5 @@ async fn run_batch(batch: &[Unit], options: &RunOptions<'_>) -> Vec<SweepOutcome
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The whole orchestration path, end to end, with no model involved.
-    ///
-    /// Every unit is pre-seeded as a completed sweep and resumed, so this
-    /// exercises planning, reuse, merging and reporting for real while costing
-    /// nothing. Without it, the only proof `run` works would be having watched
-    /// it once.
-    #[tokio::test]
-    async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() {
-        use crate::plan::{Config, ModelPlan};
-
-        let dir = std::env::temp_dir()
-            .join("bugsleuth-run-tests")
-            .join(format!("{}-resumed", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-
-        // Two vendors reporting the same defect in different words.
-        let seed = |model: &str, title: &str, explanation: &str| {
-            let report = format!(
-                r#"{{"lane":"Correctness","model":"{model}","status":{{"state":"swept"}},
-                    "findings":[{{"id":"x","lane":"correctness","model":"{model}",
-                      "title":"{title}","severity":"high",
-                      "anchor":{{"file":"src/a.rs","line":10,"claimed_line":10,"snippet":"code"}},
-                      "explanation":"{explanation}","failure_scenario":"f"}}],
-                    "rejected":[]}}"#
-            );
-            let unit = Unit {
-                model: model.to_string(),
-                lane: Lane::Correctness,
-                effort: String::new(),
-                pass: 1,
-            };
-            let _ = std::fs::create_dir_all(&dir);
-            let _ = std::fs::write(dir.join(file_name_for(&unit)), report);
-        };
-        seed(
-            "claude:sonnet",
-            "average_price divides by zero on an empty inventory",
-            "No check for an empty inventory before dividing by the item count.",
-        );
-        seed(
-            "codex:",
-            "Calculating the average price of an empty inventory panics",
-            "An empty inventory has length zero so this integer division panics.",
-        );
-
-        let plan = crate::plan::plan(&Config {
-            models: vec![
-                ModelPlan {
-                    id: "claude:sonnet".into(),
-                    lanes: vec!["correctness".into()],
-                    effort: String::new(),
-                    passes: 1,
-                },
-                ModelPlan {
-                    id: "codex:".into(),
-                    lanes: vec!["correctness".into()],
-                    effort: String::new(),
-                    passes: 1,
-                },
-            ],
-        })
-        .unwrap_or_else(|e| panic!("plan failed: {e}"));
-
-        let report = run(
-            &plan,
-            RunOptions {
-                repo: Path::new("."),
-                scope: None,
-                triage_model: "",
-                max_turns: 1,
-                timeout: Duration::from_secs(1),
-                api_key: None,
-                out_dir: Some(&dir),
-                resume: true,
-                progress: None,
-            },
-        )
-        .await
-        .unwrap_or_else(|e| panic!("run failed: {e}"));
-
-        assert_eq!(report.swept.len(), 2, "both sweeps should have been reused");
-        assert_eq!(
-            report.ranked.len(),
-            1,
-            "the same defect from two vendors should merge into one"
-        );
-        assert_eq!(report.ranked[0].cluster.agreement, 2);
-
-        // Three lanes had no model, and must be visible as holes.
-        assert_eq!(report.gaps.len(), 3);
-        let text = report.to_text();
-        assert!(text.contains("NOT SWEPT"));
-        assert!(text.contains("found by 2 of 2 models"));
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
+#[path = "orchestrate/tests.rs"]
+mod tests;
