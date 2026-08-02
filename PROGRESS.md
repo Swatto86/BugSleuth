@@ -390,6 +390,52 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## The last two lanes reviewed BugSleuth, and the salvage saved the haul
+
+Correctness and UX had never been pointed at this repository. Seventeen findings
+between them; these are the ones confirmed by reading the code and fixed.
+
+**The whole correctness haul was salvaged.** Claude's sweep ran out of turns and
+was recovered — all ten of its findings, including the two below, would have
+been lost entirely under the build from that morning.
+
+Correctness found, and both vendors independently found the first:
+
+- **`write_all` deleted the previous run's work orders before writing anything.**
+  A bundle write that failed left the old files gone and the new ones never
+  created — tens of minutes of paid sweeping destroyed by a failure that had
+  nothing to do with it. This is the *destroy-before-commit* class the mandate
+  was taught to hunt the day before, found in code written the same week.
+- **`write_report` truncated in place**, so a process killed mid-write left half
+  a report. Resume treats an unparseable report as absent, so the cost was
+  paying twice for one sweep and losing the first result.
+- **Agreement was counted against the number of sweeps, not models.** Every
+  report produced that day printed "found by 1 of 3 models" when two models had
+  run. The denominator stops being the model count the moment one model covers
+  two lanes or repeats a pass.
+
+UX found, against the app's own window:
+
+- **The Quit button's tooltip described what closing the window does** — "Close
+  the window to keep BugSleuth running in the tray" — on the button that exits
+  immediately. A user reading it mid-run would believe they were backgrounding
+  the app.
+- **Quitting during a run threw away the review without asking**, and a preset
+  button replaced the entire matrix with no confirmation and no undo, sitting
+  one click away from "Add model".
+- **The status bar had no `aria-live`.** That bar is the app's only channel for
+  "settings are not being saved" — the silent failure a comment three lines
+  above describes as a real prior incident — and a screen-reader user was never
+  told.
+
+Both confirmations only fire when something would actually be lost. Switching
+between untouched presets asks nothing, because a confirmation that appears when
+there is nothing at stake teaches people to click through without reading.
+
+**Left undone deliberately:** there is still no way to cancel a run once
+started. That is a real gap and a real feature, not a one-line guard, so it is
+recorded here rather than half-built.
+
 ## The second self-review found three more, and the salvage paid for itself
 
 Run again after the mandate work, on a frozen worktree of HEAD with every

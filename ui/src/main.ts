@@ -69,6 +69,35 @@ const ui = {
  */
 const TRIAGE_MODEL = "haiku";
 
+const QUIT_DURING_RUN =
+  "A review is running. Quitting now abandons it, and every sweep not yet " +
+  "written to disk is lost along with the subscription quota it cost.\n\n" +
+  "Quit anyway?";
+
+const PRESET_OVERWRITES =
+  "This replaces every row in the matrix with the preset, and cannot be " +
+  "undone.\n\nReplace your configuration?";
+
+/**
+ * Whether a row is still exactly as some preset shipped it.
+ *
+ * Used to decide whether replacing the matrix would destroy anything: asking
+ * for confirmation when there is nothing to lose is how people learn to click
+ * through confirmations without reading them.
+ */
+function isShipped(model: Settings["models"][number]): boolean {
+  return (["cheap", "balanced", "deep"] as Preset[]).some((name) =>
+    preset(name).some(
+      (shipped) =>
+        shipped.id === model.id &&
+        shipped.effort === model.effort &&
+        (shipped.passes ?? 1) === (model.passes ?? 1) &&
+        shipped.lanes.length === model.lanes.length &&
+        shipped.lanes.every((lane) => model.lanes.includes(lane)),
+    ),
+  );
+}
+
 let settings: Settings = {
   repo: "",
   scope: "",
@@ -294,6 +323,10 @@ function bind(): void {
 
   for (const name of ["cheap", "balanced", "deep"] as Preset[]) {
     el<HTMLButtonElement>(`preset-${name}`).addEventListener("click", () => {
+      // A preset replaces the whole matrix. Sitting beside "Add model", it is
+      // an easy misclick, and there is no undo — several minutes of chosen
+      // vendors, lanes, efforts and passes would simply be gone.
+      if (!settings.models.every(isShipped) && !window.confirm(PRESET_OVERWRITES)) return;
       settings.models = preset(name);
       render();
     });
@@ -303,7 +336,14 @@ function bind(): void {
 
   // Closing the window only hides it. This is the reachable, keyboard-navigable
   // way to actually exit, so the tray is not the single point of failure.
-  ui.quit.addEventListener("click", () => void invoke("quit"));
+  //
+  // Guarded while a run is in flight: a sweep is tens of minutes of paid
+  // subscription quota, and quitting throws away every lane not yet written to
+  // disk. One misplaced click should not be able to do that silently.
+  ui.quit.addEventListener("click", () => {
+    if (isRunning() && !window.confirm(QUIT_DURING_RUN)) return;
+    void invoke("quit");
+  });
 
   ui.copyPrompt.addEventListener("click", () => {
     void navigator.clipboard.writeText(currentFixPrompt()).then(

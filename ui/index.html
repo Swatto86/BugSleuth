@@ -27,7 +27,7 @@
         </svg>
         <h1>BugSleuth</h1>
         <span class="spacer"></span>
-        <button id="quit" type="button" title="Close the window to keep BugSleuth running in the tray">
+        <button id="quit" type="button" title="Exit BugSleuth completely. To keep it running in the tray, close the window instead.">
           Quit
         </button>
         <label class="field" style="flex: 0 0 auto">
@@ -157,7 +157,7 @@
 
       <footer>
         <span class="spinner hidden" id="spinner"></span>
-        <span class="status" id="status">Ready</span>
+        <span class="status" id="status" role="status" aria-live="polite">Ready</span>
         <span class="spacer" style="flex: 1"></span>
         <span id="plan-summary"></span>
         <button class="primary" id="run" type="button">Run review</button>
