@@ -53,6 +53,24 @@ echo "frontend assets OK ($count referenced, all present)"
 say "frontend tests"
 npm test --silent
 
+say "script permissions"
+# A shell script committed from Windows arrives without its executable bit, and
+# nothing on Windows ever notices. The workflows call this file as
+# ./scripts/verify.sh, so both non-Windows runners failed with "permission
+# denied" until the bit was set in the index — a full CI round-trip to learn
+# something git knew locally.
+notexec=0
+while IFS= read -r entry; do
+  mode=${entry%% *}
+  file=${entry#*$'\t'}
+  if [ "$mode" != "100755" ]; then
+    echo "  not executable in git: $file (git update-index --chmod=+x '$file')"
+    notexec=$((notexec + 1))
+  fi
+done < <(git ls-files -s -- '*.sh')
+[ "$notexec" -eq 0 ] || exit 1
+echo "script permissions OK"
+
 say "file sizes"
 # 400 lines is the hard cap. Generated, vendored and lock files are exempt, as
 # are the fixtures, which are deliberately awful on purpose.
