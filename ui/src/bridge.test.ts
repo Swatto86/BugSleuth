@@ -24,6 +24,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+import { frontendFiles, interfaceFields, unionArms } from "./ast.test.ts";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const rustDir = path.join(here, "..", "..", "src-tauri", "src");
 
@@ -134,23 +136,15 @@ function rustFields(name: string): string[] {
   return fields;
 }
 
-/** The property names of an `export interface` in the frontend. */
-function tsFields(name: string): string[] {
-  const iface = new RegExp(`export interface ${name} \\{([\\s\\S]*?)\\n\\}`).exec(frontend());
-  assert.ok(iface, `no "export interface ${name}" in the frontend; the scan is broken`);
-  const withoutComments = iface[1]!.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
-  const fields = [...withoutComments.matchAll(/^\s*([a-z_]+)\??\s*:/gm)].map((m) => m[1]!).sort();
-  assert.ok(fields.length >= 3, `read no fields out of the frontend's ${name}`);
-  return fields;
-}
-
 test("the settings the window writes are the settings Rust reads", () => {
   // Settings cross this boundary as JSON, so a field added on one side alone
   // does not fail: it is simply absent, and serde fills in a default nobody
   // chose. The symptom is a control that appears to work and changes nothing.
   for (const shape of ["Settings", "ModelSetting"]) {
+    const window = interfaceFields(frontendFiles(), shape);
+    assert.ok(window, `no "${shape}" interface in the frontend; the scan is broken`);
     assert.deepEqual(
-      tsFields(shape),
+      window,
       rustFields(shape),
       `${shape} does not have the same fields on both sides of the boundary`,
     );
@@ -197,9 +191,7 @@ test("a progress event carries the fields the window renders from", () => {
   // `#[serde(rename_all = "snake_case")]`, so `SweepFinished` arrives as
   // `sweep_finished` and the variant names have to be converted to compare.
   // One variant per chunk, however rustfmt chose to lay it out — a braced
-  // block over several lines or all on one. Matching each layout with its own
-  // pattern read two of the three and the missing one went unnoticed until the
-  // count was asserted, so there is one pattern and a count.
+  // block over several lines or all on one.
   const variants = new Map<string, string[]>();
   const body = enumeration[1]!.replace(/\/\/\/[^\n]*/g, " ");
   for (const chunk of body.split(/\n(?=\s{4}[A-Z])/)) {
@@ -210,22 +202,11 @@ test("a progress event carries the fields the window renders from", () => {
   }
   assert.ok(variants.size >= 3, `read ${variants.size} variants out of the engine`);
 
-  // To the next line that starts at column zero, since every arm of the union
-  // is indented. Stopping at the first semicolon reads one arm of three —
-  // TypeScript separates the properties *inside* an object type with
-  // semicolons too, so the first one is a few words in.
-  const mirror = /export type RunEvent =([\s\S]*?)\n(?=\S)/.exec(frontend());
-  assert.ok(mirror, "no RunEvent mirror in the frontend; the scan is broken");
-  const mirrored = new Map<string, string[]>();
-  for (const arm of mirror[1]!.split("|").slice(1)) {
-    const kind = /kind:\s*"(\w+)"/.exec(arm);
-    if (!kind) continue;
-    const fields = [...arm.matchAll(/(\w+)\s*:/g)]
-      .map((f) => f[1]!)
-      .filter((f) => f !== "kind")
-      .sort();
-    mirrored.set(kind[1]!, fields);
-  }
+  // The window's side comes from TypeScript's own parser. Reading it with a
+  // regex matched to the first semicolon returned one arm of three, because a
+  // TypeScript object type separates its properties with semicolons too.
+  const mirrored = unionArms(frontendFiles(), "RunEvent");
+  assert.ok(mirrored, "no RunEvent union in the frontend; the scan is broken");
 
   assert.deepEqual(
     [...mirrored.keys()].sort(),

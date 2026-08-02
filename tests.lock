@@ -1,9 +1,11 @@
 node a bare Claude model never gains a redundant prefix
+node a bare voided call is not handled
+node a chain ending in .catch is handled, however many statements are inside it
 node a class built from a prefix counts as used, not as dead style
-node a handled call is not reported just because its chain contains a semicolon
 node a lane is spelled the same way in the window as in the engine
 node a model listed twice with different passes counts like the engine: max, not sum
 node a model with no id contributes nothing
+node a name that does not exist is undefined rather than empty
 node a progress event carries the fields the window renders from
 node a proof count is always an integer the backend can deserialize
 node a proof count is clamped to the cap the field advertises
@@ -13,7 +15,8 @@ node a round names what is about to run and where it sits in the sequence
 node a run needs both a repository and at least one sweep
 node a single finding is not reported as '1 findings'
 node a sweep that found nothing is not confusable with one that never ran
-node an awaited call in an event listener is not treated as handled
+node an awaited call in a discarded callback is not handled
+node an awaited call inside its own try is handled
 node an empty configuration needs no rounds
 node an identical duplicate row adds nothing, exactly like the engine
 node an uncovered lane is reported
@@ -21,11 +24,13 @@ node an unknown prefix is treated as a Claude model, colon and all
 node both sides are actually being read
 node both themes define the same set of colours
 node dark theme meets WCAG AA everywhere the UI uses it
+node every arm of a union is read, not just the first
 node every command the page calls exists in Rust and is exposed
 node every element the code looks up exists in the markup
 node every event has both an emitter and a listener
 node every shipped preset covers all four lanes
 node every silent-failure opt-out gives a reason
+node interface fields come back without comments or nesting confusing them
 node lane titles match the engine's own names, including UX
 node light theme meets WCAG AA everywhere the UI uses it
 node names are joined the way English does
@@ -41,8 +46,10 @@ node splitting a model spec and rejoining it settles on one spelling
 node the advertised cap and the enforced cap are the same number
 node the frontend actually calls into Rust, so this test is not vacuous
 node the precise scan sees each of the three ways a class is set
+node the real frontend parses, so the checks built on this are not vacuous
 node the scans find things at all, so a passing run means something
 node the settings the window writes are the settings Rust reads
+node the two calls this rule was wrong about are classified correctly
 node the two themes are actually different
 node toggling a lane leaves other models untouched
 node toggling a lane off removes exactly it, and twice on is idempotent
