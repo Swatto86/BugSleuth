@@ -26,6 +26,34 @@ use crate::process::{self, Invocation};
 
 use super::{discover, events};
 
+/// Removes the repair's scratch directory however the function leaves.
+struct Cleanup(std::path::PathBuf);
+
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// An empty directory nobody else is using, for a process that must reach
+/// nothing. `create_dir` rather than `create_dir_all`: failing when the path
+/// exists is what proves it is ours.
+fn empty_dir() -> Option<std::path::PathBuf> {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+
+    let base = std::env::temp_dir();
+    let pid = std::process::id();
+    for attempt in 0..64 {
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = base.join(format!("bugsleuth-kilo-repair-{pid}-{n}-{attempt}"));
+        if std::fs::create_dir(&dir).is_ok() {
+            return Some(dir);
+        }
+    }
+    None
+}
+
 /// One retry only. A model that cannot produce the shape twice will not produce
 /// it on a third attempt, and each try costs real time.
 const ATTEMPTS: usize = 1;
@@ -38,10 +66,13 @@ const ATTEMPTS: usize = 1;
 pub(super) async fn reshape(
     malformed: &str,
     binary: &std::path::Path,
-    worktree: &std::path::Path,
     model: &str,
     timeout: Duration,
 ) -> Option<RawFindings> {
+    // Empty, exclusively created, and removed when the repair is done.
+    let sandbox = empty_dir()?;
+    let _guard = Cleanup(sandbox.clone());
+
     for _ in 0..ATTEMPTS {
         let brief = prompt(malformed);
         let mut args: Vec<String> = [
@@ -50,8 +81,15 @@ pub(super) async fn reshape(
         .iter()
         .map(|s| (*s).to_string())
         .collect();
+        // **Not the worktree.** This module's own description says the repair
+        // gets no repository access, and for a while it handed Kilo the tree
+        // under review anyway — with `--auto`, so any tool call it made was
+        // approved without asking. The repair reshapes text it was given; it
+        // has no use for the repository, and Kilo cannot be told to keep its
+        // hands off one, so it is pointed at an empty private directory where
+        // there is nothing to reach.
         args.push("--dir".into());
-        args.push(worktree.to_string_lossy().into_owned());
+        args.push(sandbox.to_string_lossy().into_owned());
         if !model.trim().is_empty() {
             args.push("-m".into());
             args.push(model.trim().to_string());
@@ -60,7 +98,7 @@ pub(super) async fn reshape(
         let output = process::run(Invocation {
             binary: &binary.to_string_lossy(),
             args: &args,
-            cwd: worktree,
+            cwd: &sandbox,
             stdin: Some(brief.as_bytes()),
             env: &[],
             // Far shorter than a sweep: this reads nothing and writes one JSON
@@ -144,5 +182,34 @@ mod tests {
             "repair prompt was {} chars",
             text.len()
         );
+    }
+
+    #[test]
+    fn the_repair_is_pointed_at_an_empty_directory_of_its_own() {
+        // It reshapes text it was handed and has no use for the repository.
+        // Kilo runs with --auto and cannot be restricted per invocation, so the
+        // only lever is what is within reach: nothing.
+        let a = empty_dir().expect("a scratch directory");
+        let b = empty_dir().expect("a second scratch directory");
+        assert_ne!(a, b, "two repairs shared a directory");
+        assert!(a.is_dir() && b.is_dir());
+        assert_eq!(
+            std::fs::read_dir(&a).map(|d| d.count()).unwrap_or(1),
+            0,
+            "the repair directory was not empty"
+        );
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    #[test]
+    fn the_scratch_directory_is_removed_when_the_repair_ends() {
+        let path = {
+            let dir = empty_dir().expect("a scratch directory");
+            let _guard = Cleanup(dir.clone());
+            assert!(dir.is_dir());
+            dir
+        };
+        assert!(!path.exists(), "the repair left its directory behind");
     }
 }

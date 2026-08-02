@@ -173,9 +173,7 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
             // cheap attempt to say the same thing correctly.
             match repair::binary(spec.binary) {
                 Some(binary) => {
-                    match repair::reshape(&text, &binary, spec.worktree, spec.model, spec.timeout)
-                        .await
-                    {
+                    match repair::reshape(&text, &binary, spec.model, spec.timeout).await {
                         Some(findings) => Ok(KiloResult { findings }),
                         // Report the *first* error: it says what the model
                         // actually got wrong, which a second failure would bury.
