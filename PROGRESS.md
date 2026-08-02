@@ -390,6 +390,46 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## The acceptance harness was never able to pass, and why that took eight runs
+
+Worth recording as a method failure, not just a fix.
+
+The suite failed with an empty document. Its own timeout message said *"the page
+is blank, the binary is probably a development build — run `cargo clean
+--release` then `cargo tauri build`"*. That message was confident, specific, and
+wrong, and I followed it: a targeted clean, then a full clean, then a driver
+version check, then killing a stale instance, then checking the selector, then
+launching the binary by hand. Six runs, all guesses.
+
+The seventh printed `browser.getUrl()` before waiting. **`about:blank`.** One
+line, and every earlier hypothesis died at once: the app was fine, the driver
+matched the runtime, the selector existed — the webview WebDriver was attached
+to simply was not the app's, because **the app had no WebDriver support at
+all**. No plugin, no feature, no capability. The harness's client half was
+complete and well written; the app half had never existed, so the suite could
+not have passed on any day.
+
+The lesson is the one this project keeps relearning: *a diagnostic that asserts
+a cause is worse than no diagnostic when the cause is wrong*, because it buys
+confident motion in one direction. The spec now prints the URL and the page
+source before it waits.
+
+**Fixed on the way**, both real:
+- A startup race — wdio connected before `tauri-driver` had bound its port, so a
+  driver seconds from ready looked like a missing one.
+- `onPrepare` throwing did not stop the run. WebdriverIO logged it and started
+  the workers anyway, turning a clear *"the binary does not contain the current
+  frontend"* into an unrelated connection error — and, the first time, into 76
+  minutes of silence.
+
+**Where it stands.** `tauri-plugin-wdio` is now compiled in behind a non-default
+`wdio` feature, its capability is declared inline in a test-only config the
+published build never loads, and the release workflow asserts the shipped binary
+does not carry it. The driver still attaches to `about:blank`, so the remaining
+piece is the JavaScript half — the wdio Tauri service in `wdio.conf.ts`
+`services`. **The live acceptance journey has therefore still never run**, and
+no release should claim it has.
+
 ## Regression sweep before 0.2.0: 33 defects, seven of them real and critical
 
 All four lanes, two vendors, against a frozen worktree with every project
