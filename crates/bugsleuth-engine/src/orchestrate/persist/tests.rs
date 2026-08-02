@@ -78,6 +78,7 @@ fn every_sweep_writes_to_its_own_file() {
         lane: "Correctness".into(),
         model: "claude:sonnet".into(),
         commit: None,
+        scope: None,
         status: Status::Swept {
             turns: None,
             salvaged: false,
@@ -130,6 +131,7 @@ fn lane_report(status: Status) -> LaneReport {
         lane: "Correctness".into(),
         model: "claude:sonnet".into(),
         commit: None,
+        scope: None,
         status,
         findings: vec![],
         rejected: vec![],
@@ -286,5 +288,64 @@ fn a_report_is_replaced_whole_or_not_at_all() {
         .filter(|n| n.ends_with(".writing"))
         .collect();
     assert!(leftovers.is_empty(), "staging files left: {leftovers:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A report that reviewed one scope must never be reused for another.
+///
+/// The defect this covers: resume identified a reusable sweep by lane and model
+/// alone. Reviewing `src/moduleA`, then narrowing to `src/moduleB` and pressing
+/// Run again — with resume on by default in the app — handed back the moduleA
+/// report as a review of moduleB. A lane claiming to have read code it never
+/// opened is the one output this tool must never produce.
+#[test]
+fn a_sweep_of_a_different_scope_is_not_reused() {
+    let dir = scratch("scope");
+    let mut report = lane_report(Status::Swept {
+        turns: Some(3),
+        salvaged: false,
+    });
+    report.scope = Some("src/moduleA".into());
+    assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
+
+    let mut narrowed = options(&dir, true);
+    narrowed.scope = Some("src/moduleB");
+    assert!(
+        reusable(&unit(), &narrowed).is_none(),
+        "a sweep of moduleA was reused as a review of moduleB"
+    );
+
+    let widened = options(&dir, true);
+    assert!(
+        reusable(&unit(), &widened).is_none(),
+        "a scoped sweep was reused for a run over the whole repository"
+    );
+
+    let mut same = options(&dir, true);
+    same.scope = Some("src/moduleA");
+    assert!(
+        reusable(&unit(), &same).is_some(),
+        "the sweep that did review this scope was thrown away"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The same rule on the legacy filename path, which is a second way in.
+#[test]
+fn the_legacy_name_does_not_smuggle_a_differently_scoped_sweep_back_in() {
+    let dir = scratch("scope-legacy");
+    let mut report = lane_report(Status::Swept {
+        turns: Some(3),
+        salvaged: false,
+    });
+    report.scope = Some("src/moduleA".into());
+    assert!(write_report(&dir, &legacy_file_name_for(&unit()), &report).is_ok());
+
+    let mut narrowed = options(&dir, true);
+    narrowed.scope = Some("src/moduleB");
+    assert!(
+        reusable(&unit(), &narrowed).is_none(),
+        "the legacy path reused a sweep of a different scope"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

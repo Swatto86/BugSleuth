@@ -23,6 +23,17 @@ pub struct LaneReport {
     /// every report written before this existed loadable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
+    /// The path scope the sweep was pointed at, when one was given.
+    ///
+    /// Recorded because resume identified a reusable sweep by lane and model
+    /// alone. Narrowing or changing the scope and running again reused a report
+    /// that had reviewed *different code*, and presented it as a review of the
+    /// new scope — the tool's one unforgivable output, a lane that says it
+    /// looked at something it never read. `#[serde(default)]` keeps reports
+    /// written before this existed loadable; they are simply not reusable
+    /// under a scope, which is the safe direction to be wrong in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
     pub status: Status,
     pub findings: Vec<Finding>,
     /// Findings the model reported that failed anchor verification, with the
@@ -166,6 +177,7 @@ mod tests {
             lane: "Security".into(),
             model: "claude:sonnet".into(),
             commit: None,
+            scope: None,
             status: Status::NotSwept {
                 reason: "no model assigned".into(),
             },
@@ -183,6 +195,7 @@ mod tests {
             lane: "Security".into(),
             model: "claude:sonnet".into(),
             commit: None,
+            scope: None,
             status: Status::Swept {
                 turns: Some(4),
                 salvaged: false,

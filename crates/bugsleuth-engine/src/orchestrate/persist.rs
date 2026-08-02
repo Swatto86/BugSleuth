@@ -23,6 +23,7 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
     }
     let dir = options.out_dir?;
     read_swept(&dir.join(file_name_for(unit)))
+        .filter(|report| same_scope(report, options.scope))
         // Reports written before the encoding changed are still worth tens of
         // minutes each, so the old name is tried too — but only after the
         // current one, and only if the report says it is the right sweep. The
@@ -30,8 +31,13 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
         // identify anything on its own.
         .or_else(|| {
             let legacy = read_swept(&dir.join(legacy_file_name_for(unit)))?;
-            let same_sweep =
-                legacy.lane == unit.lane.title() && legacy.model.ends_with(model_of(&unit.model));
+            // The scope check belongs on this path too. Adding it only to the
+            // branch above would leave the whole defect reachable through the
+            // legacy name, which is exactly the "fixed the first sink, missed
+            // the second" shape the correctness mandate hunts for.
+            let same_sweep = legacy.lane == unit.lane.title()
+                && legacy.model.ends_with(model_of(&unit.model))
+                && same_scope(&legacy, options.scope);
             same_sweep.then_some(legacy)
         })
 }
@@ -47,6 +53,16 @@ fn read_swept(path: &Path) -> Option<LaneReport> {
     // A failed sweep is retried. The usual reason a run died is a rate limit,
     // which is exactly the case worth attempting again.
     matches!(report.status, Status::Swept { .. }).then_some(report)
+}
+
+/// Whether a stored report reviewed the same scope this run is asking about.
+///
+/// A report written before scopes were recorded has `None` and is only reusable
+/// for an unscoped run. That is the safe direction: refusing to reuse costs one
+/// sweep, while reusing the wrong one produces a report claiming to have
+/// reviewed code it never read.
+fn same_scope(report: &LaneReport, scope: Option<&str>) -> bool {
+    report.scope.as_deref() == scope
 }
 
 /// The model half of a `vendor:model` spec. A report records the resolved
@@ -84,7 +100,7 @@ pub(super) fn file_name_for(unit: &Unit) -> String {
 /// but the old encoding could not tell `codex:a/b` from `codex:a-b`, which is
 /// why anything found here is checked against the report's own recorded lane
 /// and model before it is believed.
-fn legacy_file_name_for(unit: &Unit) -> String {
+pub(super) fn legacy_file_name_for(unit: &Unit) -> String {
     let lossy = |text: &str| -> String {
         text.chars()
             .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
