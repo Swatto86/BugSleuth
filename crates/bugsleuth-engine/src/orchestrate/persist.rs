@@ -131,12 +131,30 @@ fn safe(text: &str) -> String {
     out
 }
 
+/// Write a sweep's report, all of it or none of it.
+///
+/// Written to a neighbouring temporary file and renamed into place, because
+/// `fs::write` truncates first: a process killed mid-write left a half-written
+/// report where a complete one had been. Resume already treats an unparseable
+/// report as absent, so the cost was not corruption but paying tens of minutes
+/// for a sweep twice — and the second time, the first result is gone.
+///
+/// A rename within one directory is atomic on both platforms this ships to. If
+/// the rename fails the temporary file is removed rather than left beside the
+/// reports, where its name would not match any unit and it would simply sit
+/// there confusing the next reader.
 pub(super) fn write_report(dir: &Path, name: &str, report: &LaneReport) -> Result<()> {
     std::fs::create_dir_all(dir)?;
     let path: PathBuf = dir.join(name);
     let json = serde_json::to_string_pretty(report)?;
-    std::fs::write(&path, json)
-        .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", path.display()))?;
+
+    let staged = dir.join(format!(".{name}.writing"));
+    std::fs::write(&staged, json)
+        .map_err(|e| anyhow::anyhow!("cannot write {}: {e}", staged.display()))?;
+    if let Err(error) = std::fs::rename(&staged, &path) {
+        let _ = std::fs::remove_file(&staged);
+        anyhow::bail!("cannot replace {}: {error}", path.display());
+    }
     Ok(())
 }
 
@@ -391,6 +409,41 @@ mod tests {
         assert!(write_report(&dir, &legacy_file_name_for(&unit()), &legacy).is_ok());
         let found = reusable(&unit(), &options(&dir, true));
         assert_eq!(found.and_then(|r| r.commit).as_deref(), Some("current"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_report_is_replaced_whole_or_not_at_all() {
+        // fs::write truncates first, so a process killed mid-write left half a
+        // report where a complete one had been. Resume treats an unparseable
+        // report as absent, so the cost is paying tens of minutes for the same
+        // sweep twice - and losing the first result in the process.
+        let dir = scratch("atomic");
+        let name = file_name_for(&unit());
+        let first = lane_report(Status::Swept {
+            turns: Some(1),
+            salvaged: false,
+        });
+        assert!(write_report(&dir, &name, &first).is_ok());
+
+        let second = lane_report(Status::Swept {
+            turns: Some(2),
+            salvaged: false,
+        });
+        assert!(write_report(&dir, &name, &second).is_ok());
+
+        // The replacement landed, and no staging file was left behind to be
+        // read as a report by anything walking the directory.
+        let reused = reusable(&unit(), &options(&dir, true));
+        assert!(reused.is_some());
+        let leftovers: Vec<String> = std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".writing"))
+            .collect();
+        assert!(leftovers.is_empty(), "staging files left: {leftovers:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

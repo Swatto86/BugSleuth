@@ -108,6 +108,19 @@ fn read(path: &Path) -> Result<SweepFile> {
 }
 
 impl Merged {
+    /// How many distinct models could have found a defect in this lane.
+    fn models_on(&self, lane: &str) -> usize {
+        let mut models: Vec<&str> = self
+            .sources
+            .iter()
+            .filter(|source| source.lane.eq_ignore_ascii_case(lane))
+            .map(|source| source.model.as_str())
+            .collect();
+        models.sort_unstable();
+        models.dedup();
+        models.len()
+    }
+
     pub fn to_text(&self) -> String {
         let mut out = String::new();
 
@@ -171,7 +184,11 @@ impl Merged {
                 finding.anchor.file,
                 finding.anchor.line,
                 cluster.agreement,
-                self.sources.len(),
+                // Distinct models that swept this defect's lane, not the number
+                // of sweeps: two models across three sweeps printed "1 of 3
+                // models", understating agreement against a total that never
+                // existed.
+                self.models_on(finding.lane.as_str()),
                 models.join(", "),
             ));
         }

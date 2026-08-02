@@ -136,22 +136,39 @@ pub fn write_all(
 ) -> std::io::Result<std::path::PathBuf> {
     std::fs::create_dir_all(dir)?;
 
-    // Per-defect files from a previous, longer run would otherwise sit beside
-    // the new ones and read as part of this report.
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_lowercase();
-            if name.starts_with("fix-prompt-") && name.ends_with(".md") {
-                let _ = std::fs::remove_file(entry.path());
-            }
+    // Written first, deleted after. This used to clear the previous run's
+    // per-defect files *before* writing anything, so a bundle write that failed
+    // — a full disk, a permission change — left the last run's work orders
+    // deleted and the new ones never created, losing tens of minutes of paid
+    // sweeping to a failure that had nothing to do with them.
+    //
+    // Found by BugSleuth reviewing itself, by both vendors, and it is exactly
+    // the destroy-before-commit class the correctness mandate was taught to
+    // hunt for the day before.
+    let bundle = dir.join("fix-prompt.md");
+    std::fs::write(&bundle, prompt(repo, ranked, not_reviewed, sweeps))?;
+
+    let mut written: Vec<String> = Vec::new();
+    for entry in ranked {
+        let name = format!("fix-prompt-{:02}.md", entry.position);
+        if std::fs::write(dir.join(&name), single(repo, entry, ranked.len(), sweeps)).is_ok() {
+            written.push(name.to_lowercase());
         }
     }
 
-    let bundle = dir.join("fix-prompt.md");
-    std::fs::write(&bundle, prompt(repo, ranked, not_reviewed, sweeps))?;
-    for entry in ranked {
-        let path = dir.join(format!("fix-prompt-{:02}.md", entry.position));
-        let _ = std::fs::write(path, single(repo, entry, ranked.len(), sweeps));
+    // Only now are the leftovers from a previous, longer run removed — a file
+    // this run did not just write is one that would otherwise be read as part
+    // of this report.
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            let stale = name.starts_with("fix-prompt-")
+                && name.ends_with(".md")
+                && !written.contains(&name);
+            if stale {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
     }
     Ok(bundle)
 }

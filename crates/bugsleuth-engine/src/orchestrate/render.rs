@@ -18,6 +18,25 @@ impl RunReport {
         lanes.len()
     }
 
+    /// How many distinct models could have found a defect in this lane.
+    ///
+    /// The denominator used to be the number of *sweeps*, which is a different
+    /// number the moment a model covers two lanes or repeats a pass: two models
+    /// across three sweeps printed "found by 1 of 3 models", understating
+    /// agreement against a total that never existed. Only models that swept the
+    /// defect's own lane could have found it, so only they belong in the count.
+    fn models_on(&self, lane: &str) -> usize {
+        let mut models: Vec<&str> = self
+            .swept
+            .iter()
+            .filter(|sweep| sweep.lane.slug() == lane)
+            .map(|sweep| sweep.model.as_str())
+            .collect();
+        models.sort_unstable();
+        models.dedup();
+        models.len()
+    }
+
     /// Whether one grader compared every defect in this report against every
     /// other. A partial pass does not count: half a list graded one way and
     /// half another is exactly the state the cross-lane warning is for.
@@ -125,7 +144,7 @@ impl RunReport {
                 finding.anchor.file,
                 finding.anchor.line,
                 cluster.agreement,
-                self.swept.len(),
+                self.models_on(finding.lane.as_str()),
             ));
             // A moved grade is shown with what it moved from and the stated
             // consequence that decided it. Silently replacing a model's own
