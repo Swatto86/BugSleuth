@@ -362,6 +362,9 @@ async function boot(): Promise<void> {
   // event subscriptions below: if one of those ever fails, the window must
   // still appear. An app that starts invisible with no way to recover is the
   // exact failure the UX lane exists to catch.
+  // invoke-may-fail-silently: this only asks Rust to reveal the window, and
+  // Rust reveals it on a timer anyway precisely so a failure here cannot leave
+  // an invisible app. Reporting it would need the window this call is for.
   void invoke("frontend_ready");
 
   await listenForRunEvents(runDeps());
@@ -385,6 +388,9 @@ async function boot(): Promise<void> {
 // A failure anywhere in boot must not leave an invisible window behind. Rust
 // also reveals the window on a timer as a second line of defence.
 void boot().catch((error: unknown) => {
+  // invoke-may-fail-silently: last-resort reveal on a failed boot. If this
+  // fails too, Rust's timer is the remaining line of defence and there is no
+  // surface left to report on.
   void invoke("frontend_ready");
   setStatus(`Startup problem: ${String(error)}`, "error");
 });

@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # The full gate, for Linux and macOS.
 #
-# Mirrors `verify.ps1` step for step and in the same order — cheapest first, so
-# a formatting slip fails in seconds rather than after a release build. The two
-# must not drift: a check that runs on one platform and not the other means
-# "green" depends on who ran it, and this project has already learned that
-# lesson once with two report renderers.
+# **The** gate — there is no second implementation. `verify.ps1` is a shim that
+# runs this file through Git for Windows' Bash, because keeping a parallel
+# PowerShell gate in step by hand failed three times in one day: the two
+# counted lines differently, checked different file types, and built different
+# things, and the third of those published a release on one platform only.
 #
-# The helper checks are inlined rather than given their own scripts. They are a
-# dozen lines each, and a third and fourth copy of the same rule is exactly what
-# the contract lane was taught to hunt for.
+# Cheapest checks first, so a formatting slip fails in seconds rather than after
+# a release build. The helper checks are inlined: they are a dozen lines each,
+# and a separate script per check is how the duplication started.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -67,11 +67,9 @@ while IFS= read -r file; do
     echo "  OVER HARD CAP ($hard): $file — $lines lines"
     over=$((over + 1))
   fi
-# The same extensions check-file-size.ps1 uses. The two lists must match or the
-# gates disagree about what "green" means, which is the whole failure this file
-# exists to avoid — and it happened immediately: this one included CSS and the
-# other did not, so the first cross-platform run failed on a file Windows had
-# never been checking.
+# Rust and TypeScript sources. This list lives in exactly one place now: when
+# there were two gates it appeared twice, they disagreed, and the first
+# cross-platform run failed on a file the other side had never checked.
 done < <(find . -type f \( -name '*.rs' -o -name '*.ts' -o -name '*.tsx' \))
 if [ "$over" -gt 0 ]; then
   echo ""

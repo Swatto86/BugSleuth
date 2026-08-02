@@ -4,9 +4,9 @@
 # been evidence about anywhere else — and this project ships a desktop app whose
 # webview, process handling and path rules all differ between them.
 #
-# Each platform runs the same gate a developer runs locally: verify.ps1 on
-# Windows, verify.sh elsewhere. Two definitions of green drift, and the one that
-# drifts is always the one nobody reads.
+# Every platform runs the same gate a developer runs locally, and it is now
+# literally the same file: two definitions of green drifted three times in a
+# day, so there is only one.
 name: verify
 
 on:
@@ -26,11 +26,8 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            gate: pwsh ./scripts/verify.ps1
           - os: ubuntu-latest
-            gate: bash ./scripts/verify.sh
           - os: macos-latest
-            gate: bash ./scripts/verify.sh
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +57,8 @@ jobs:
             patchelf \
             libxdo-dev
 
+      # One command everywhere. There is one gate now; the platforms differ in
+      # what they run it on, not in what it checks.
       - name: Gate
         shell: bash
-        run: ${{ matrix.gate }}
+        run: ./scripts/verify.sh

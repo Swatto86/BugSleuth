@@ -99,6 +99,9 @@ export function bindGuardedActions(deps: ActionDeps): void {
 
   ui.quit.addEventListener("click", () => {
     if (!isRunning()) {
+      // invoke-may-fail-silently: if quitting fails the window is still here,
+      // which is the whole feedback there is to give, and there is no fallback
+      // to offer beyond the tray item that does the same thing.
       void invoke("quit");
       return;
     }
@@ -111,6 +114,8 @@ export function bindGuardedActions(deps: ActionDeps): void {
       confirmLabel: "Quit anyway",
       destructive: true,
     }).then((yes) => {
+      // invoke-may-fail-silently: as above — a failed quit leaves a visible
+      // window, and the run it was abandoning carries on being reported.
       if (yes) void invoke("quit");
     });
   });

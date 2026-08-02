@@ -20,17 +20,14 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            gate: pwsh ./scripts/verify.ps1
             portable: bugsleuth-app.exe
             cli: bugsleuth.exe
             suffix: windows-x64.exe
           - os: ubuntu-latest
-            gate: bash ./scripts/verify.sh
             portable: bugsleuth-app
             cli: bugsleuth
             suffix: linux-x64
           - os: macos-latest
-            gate: bash ./scripts/verify.sh
             portable: bugsleuth-app
             cli: bugsleuth
             suffix: macos-arm64
@@ -61,7 +58,7 @@ jobs:
       # not evidence about the tag if anything landed between them.
       - name: Gate
         shell: bash
-        run: ${{ matrix.gate }}
+        run: ./scripts/verify.sh
 
       # Default features only. WebDriver support is test-only and must not be
       # in anything published; the check below proves it is not.
