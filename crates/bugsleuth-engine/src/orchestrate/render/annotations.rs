@@ -188,7 +188,7 @@ fn a_report_says_what_the_method_could_not_see_even_when_every_lane_ran() {
     // "dependency risk" was never a check against any published advisory.
     let text = report(Vec::new()).to_text();
     assert!(text.contains("could not see"), "{text}");
-    assert!(text.contains("Nothing was run"), "{text}");
+    assert!(text.contains("No finding here came from running"), "{text}");
     assert!(text.contains("vulnerability database"), "{text}");
 }
 

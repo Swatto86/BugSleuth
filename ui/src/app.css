@@ -527,3 +527,54 @@ label.checkline input[type="checkbox"] {
   font-size: 0.8rem;
   padding: 4px 10px;
 }
+
+/* ── In-app dialog ─────────────────────────────────────────────────────── */
+
+/*
+  Written once, lost once. A script that appended this aborted on an unrelated
+  error partway through; the button it was also adding got fixed by hand and
+  nobody noticed the styles had never landed. The dialog then had correct
+  keyboard behaviour and no overlay at all — it did not block the app it was
+  guarding, and the tool found that in its own UI.
+*/
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 55%);
+  z-index: 100;
+}
+
+.dialog {
+  max-width: 30rem;
+  margin: 16px;
+  padding: 18px 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow);
+}
+
+.dialog h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.dialog p {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog-buttons .danger {
+  border-color: var(--critical);
+  color: var(--critical);
+}

@@ -87,7 +87,13 @@ export function bindGuardedActions(deps: ActionDeps): void {
       if (!yes) return;
       ui.stop.disabled = true;
       deps.setStatus("Stopping — killing the sweeps in flight", "running");
-      void invoke("cancel_run");
+      // A failed cancel must not leave the button dead and the status stuck on
+      // "Stopping" forever, with a run still burning quota behind it. Offer the
+      // button back and say what happened.
+      void invoke("cancel_run").catch((error: unknown) => {
+        ui.stop.disabled = false;
+        deps.setStatus(`Could not stop the run: ${String(error)}`, "error");
+      });
     });
   });
 

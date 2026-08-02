@@ -156,7 +156,7 @@ fn the_merged_report_states_the_methods_blind_spots_too() {
     let merged = merge(&[a]).unwrap_or_else(|e| panic!("merge failed: {e}"));
     let text = merged.to_text();
     assert!(text.contains("could not see"), "{text}");
-    assert!(text.contains("Nothing was run"), "{text}");
+    assert!(text.contains("No finding here came from running"), "{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

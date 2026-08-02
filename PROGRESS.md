@@ -390,6 +390,37 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## The self-defect rate, re-measured: still not near zero
+
+Same four lanes, same two vendors, same stripped worktree as the sweep that
+found seven criticals this morning. **14 findings, 6 graded critical.** The rate
+has not fallen to nothing, and saying otherwise would have been wishful.
+
+What is in those six matters more than the count. Five are one theme: the proof
+path runs the reviewed repository's own test suite, so a review that asks for
+proof executes untrusted code on the machine. That is not a bug to be patched
+away — proving a defect *means* running its test — but it was undocumented, and
+worse, the report actively denied it. The first review limit said **"Nothing was
+run"**, which is false whenever proving is enabled. The tool built to catch
+confidently-wrong claims was making one about itself, in the section whose whole
+job is honesty. It now says proving is the exception and names what executes.
+
+Two more were defects in code written the same day:
+
+- **The confirmation dialog had no CSS at all.** A script that appended the
+  styles aborted partway on an unrelated error; the button it was also adding
+  got fixed by hand, and nobody noticed the rest had never landed. The dialog
+  had correct focus, Escape and Tab behaviour — all of which I verified — and no
+  overlay whatsoever, so it did not block the app it was guarding. Behaviour was
+  tested; appearance was assumed.
+- **A failed Stop left the UI stuck**, button dead and status reading
+  "Stopping…" forever, with the run still spending behind it.
+
+The honest summary: the rate is falling in severity but not in count, and two of
+today's six criticals were introduced today. A tool that finds defects in its
+own fresh work is working; a codebase that keeps producing them at this rate is
+not yet mature.
+
 ## v0.2.0 published on one platform, and why
 
 The first tag failed exactly where the gap it was closing had always been.

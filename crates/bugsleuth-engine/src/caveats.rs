@@ -71,8 +71,8 @@ mod tests {
 
     #[test]
     fn the_limits_carry_the_surrounding_documents_indent() {
-        assert!(limits("  ").contains("\n  - Nothing was run"));
-        assert!(limits("").contains("\n- Nothing was run"));
+        assert!(limits("  ").contains("\n  - No finding here came from running"));
+        assert!(limits("").contains("\n- No finding here came from running"));
     }
 
     /// The reason this module exists: a caveat added to one document and

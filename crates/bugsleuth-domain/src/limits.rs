@@ -21,10 +21,12 @@
 /// so every one applies to every lane. A per-lane version would be more precise
 /// and would mean nobody read it.
 pub const REVIEW_LIMITS: [&str; 5] = [
-    "Nothing was run. Every finding comes from reading code, so defects that \
-     only appear when the program executes — a race that needs real timing, a \
-     leak that needs hours, anything that depends on real data or a real \
-     network — were not looked for.",
+    "No finding here came from running the program. Every one comes from reading \
+     code, so defects that only appear when it executes — a race that needs real \
+     timing, a leak that needs hours, anything depending on real data or a real \
+     network — were not looked for. Proving is the exception: it runs the \
+     repository's own test suite in a throwaway checkout, so if you asked for \
+     proof, that code did execute on this machine.",
     "Only code inside this repository was read. Where the code has to agree \
      with something outside it — a remote API's requirements, another service's \
      actual behaviour, the operating system's — only one side of that agreement \
