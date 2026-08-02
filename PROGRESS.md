@@ -876,11 +876,60 @@ caught by testing the checks rather than trusting them, and every derived list
 in that code now has to prove it is non-empty before anything is concluded from
 it. The lesson generalises: the failure mode of a check is silence, not noise.
 
-**What this does not claim.** These close five classes; they do not lower the
-rate at which every other kind of defect arrives, and no re-measurement has been
-run since. The count that matters — findings in a fresh self-review — has not
-been taken again. Claiming a drop from this work alone would be exactly the
-thin-evidence reasoning this file has criticised elsewhere.
+**The rate was then measured, and it has not fallen.** A fresh self-review
+found 17 findings, 4 critical, against 14 findings and 6 critical last time. All
+14 that were verified survived an adversarial pass told to refute them. Dating
+each defect to the line that is actually wrong: **6 came from day one, 2 from
+day two, 5 from today**. Per thousand lines written that is roughly *double* day
+one's rate. The newest code is not safer.
+
+## What actually causes them, and the three controls now in place
+
+Eleven defects arrived here in one day. Classified by cause rather than by file,
+they are not eleven mistakes. They are two.
+
+**Six of eleven: a check matched less than existed and returned a smaller answer
+instead of an error.** A statement that ended at the first semicolon, above the
+handler it was looking for. A pattern anchored on a bare name that found an
+import instead of a declaration, produced an empty list — and an empty list
+satisfies every comparison, so the thing it was guarding was renamed and the
+test passed. One pattern per code layout, reading two cases of three. A file
+split that dropped a whole block of tests nobody noticed existed.
+
+**Three of eleven: something was computed and nothing consumed it.** The gate's
+exit code, swallowed by a pipe, so a commit the gate had rejected went to the
+remote anyway. A failure with no handler. Values produced and never read.
+
+Three controls, each verified by causing the failure on purpose:
+
+1. **A parser instead of regular expressions.** TypeScript was already a
+   dependency — it is what the build type-checks with — so its own parser was
+   already here. It cannot stop early, cannot match the wrong block, cannot read
+   a comment as code. Every syntax question the checks ask now goes through it,
+   and the helpers are tested against snippets whose right answer is written out
+   by hand. *Verified: restoring the folder-picker defect verbatim fails the
+   build; so does dropping a field from an event, or adding one to settings.*
+
+2. **A pre-push hook that runs the gate.** A person remembering to read an exit
+   code is not a control. *Verified: a deliberately over-cap file is refused at
+   push.*
+
+3. **`tests.lock`, the name of every test, checked by the gate.** Splitting files
+   under the line cap lost tests twice in one day, and the count did not move
+   either time because tests were added in the same change. Names are the only
+   thing a comparison can be trusted on. *Verified: deleting one test names it
+   and fails the build.*
+
+The script written to generate that inventory silently wrote only the Rust half
+on its first run — one pattern matched nothing — which is the same failure, in
+the file written to catch it. It now refuses to write an inventory where either
+half is implausibly small, and says to fix the scan rather than the threshold.
+
+**What this still does not claim.** These are controls on how defects are
+*caught*, and two of the three are about the checks rather than the product. No
+re-measurement has happened since they landed. The honest statement is that the
+two dominant causes now have mechanical answers, and whether that moves the rate
+is a question only the next self-review can settle.
 
 ## Known gaps
 
@@ -1003,13 +1052,30 @@ thin-evidence reasoning this file has criticised elsewhere.
 
 ## Next concrete step
 
-**Re-measure the self-defect rate.** The last count was 14 findings, 6 critical,
-two of them introduced the same day. Five classes have since been made
-impossible to commit, and nobody has counted since. Until that run happens the
-honest statement is "five classes closed, rate unknown".
+**Ten confirmed defects remain from the 2 August self-review**, verified and
+ordered by what a user actually loses. Worst first:
 
-Same conditions as before, or the numbers are not comparable: four lanes, the
-same two vendors, a stripped worktree.
+1. **Proving runs the reviewed repository's own build and test code with your
+   full permissions and no sandbox** — three times per defect. A malicious or
+   merely broken build script can read anything your account can. Not a sandbox
+   build-out; the fix is to say so, next to the warning this codebase already
+   carries for the same risk from Kilo, and to record the trade-off.
+2. **Cancelling a run can throw away a sweep that already finished** and was
+   already paid for.
+3. **The "this sweep was cut short" flag is dropped in two separate report
+   paths**, so a truncated lane reads as a complete one. The same mistake made
+   twice, worth one pass.
+4. **Toggling a lane checkbox drops keyboard focus to the top of the page**, on
+   the app's busiest control.
+5. **A screen reader re-reads the whole progress log** on every update.
+6. Two concurrent runs against one repository delete each other's scratch
+   worktrees; a confirmatory test rerun reports the wrong reason on a timeout;
+   a cancelled run can contradict itself in the report; the backend does not
+   enforce the proof cap the window does.
+
+**Then re-measure.** The count that matters is defects in code written *after*
+the three controls landed. Same conditions or the numbers are not comparable:
+four lanes, the same two vendors, a stripped worktree.
 
 ```bash
 cargo run -p bugsleuth-cli -- run --repo . --config bugsleuth.example.json --out-dir runs/ --resume
@@ -1018,16 +1084,7 @@ cargo run -p bugsleuth-cli -- run --repo . --config bugsleuth.example.json --out
 Two things to hold to when reading the result:
 
 1. **A lower count is not the same as a lower rate.** Much of the code reviewed
-   last time has not changed, so its defects will simply be found again. The
-   number worth watching is defects in code written *since* that run.
-2. **Check what the new checks did not catch.** Every finding outside the five
-   closed classes is the answer to "what should be closed next", and it is a
+   last time has not changed, so its defects will simply be found again.
+2. **Check what the new controls did not catch.** Every finding outside the
+   known classes is the answer to "what should be closed next", and it is a
    better answer than any guess made in advance.
-
-After that, the two remaining classes the tool has found in itself more than
-once and that nothing mechanical catches:
-
-- **A comment that describes behaviour the code does not implement.** Seen twice.
-  No mechanical check is obvious; a lane mandate may be the only route.
-- **Stopping at the first match when every match matters.** Seen in the product
-  and then, this session, twice in the checks written to prevent it.
