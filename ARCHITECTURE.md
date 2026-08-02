@@ -129,8 +129,30 @@ These are the ones to protect when changing anything:
 
 ## Enforced mechanically
 
-- `scripts/check-file-size.ps1` — 400-line hard cap, 300 soft, on every `.rs`,
-  `.ts`, `.tsx`. Part of `scripts/verify.ps1`.
+- **One gate.** `scripts/verify.sh` is the whole of it; `scripts/verify.ps1` is a
+  shim that runs it through Git for Windows' Bash. There were two, kept in step
+  by hand, and they disagreed three times in a single day — different line
+  counts, different file types, different build outputs, the last of which
+  published a release on one platform only. The only reliable parity is having
+  nothing to mirror.
+- **A pre-push hook runs that gate**, installed by `scripts/install-hooks.sh`. A
+  person remembering to read an exit code is not a control: the gate caught a
+  file over the cap and the commit reached the remote anyway, because the
+  command piped it into `tail` and a pipeline exits with its last stage's
+  status.
+- 400-line hard cap on every `.rs`, `.ts`, `.tsx`.
+- **`tests.lock`** — the name of every test. A test that stops running fails the
+  build. Splitting files under the line cap lost tests twice in one day and the
+  count did not move either time, because tests were added in the same change.
+- **The frontend's checks read TypeScript's own syntax tree**, not regular
+  expressions. Six defects in one day were a regex over source that matched less
+  than existed and returned a smaller answer instead of an error.
+- **Names that cross the JavaScript/Rust boundary are compared**: commands,
+  events, settings fields, lane titles, the proof cap. Each is a string on both
+  sides with no compiler spanning them.
+- **Shared prose lives in one function.** The review limits, the unsandboxed
+  caution and the cut-short note are each written once and asserted to appear in
+  every document that reports findings.
 - `unsafe_code = "forbid"` workspace-wide; a crate needing it must opt out and
   say why.
 - The frontend type-checks under `strict` with `noUncheckedIndexedAccess`, and

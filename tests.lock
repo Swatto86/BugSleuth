@@ -62,6 +62,7 @@ node splitting a model spec and rejoining it settles on one spelling
 node the README still promises a single file that runs with nothing installed
 node the README's download table names assets the workflow builds
 node the advertised cap and the enforced cap are the same number
+node the documentation does not point at files that no longer exist
 node the frontend actually calls into Rust, so this test is not vacuous
 node the precise scan sees each of the three ways a class is set
 node the proof cap is the same number in the window, the markup and Rust

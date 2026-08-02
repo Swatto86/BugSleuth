@@ -1088,6 +1088,51 @@ page without the fix, and the log appends without running lines together.
 - **v0.2.2 published** on Windows, Linux and macOS: portable binaries,
   installers, CLI binaries and checksums, all three CI jobs green.
 
+## The rate, measured a second time: 17 findings, then 9
+
+Same conditions both times — four lanes, the same two vendors, a stripped
+worktree. **17 findings and 4 critical, then 9 findings and 4 critical.** The
+count roughly halved. The critical count did not move.
+
+That second number needs reading carefully, and the honest reading is mixed.
+
+**Two of the four criticals were already handled.** The Kilo repair pass was
+flagged for executing tools from attacker-controlled output; it already points
+at an empty private directory for exactly that reason, and says so in a comment
+written the day before. The unsandboxed-vendor caution already covers the rest.
+So the tool re-reported a documented, accepted trade-off as a critical defect —
+which is the right conservative behaviour for a reviewer, and also means "4
+critical" overstates what was actually wrong.
+
+**Three of the nine were in code written that same day**, one of them hours
+earlier:
+
+- The atomic write staged into a fixed filename, so two writers of one report
+  shared a temporary file and the survivor could hold the other's bytes. The
+  worktree module had learned that exact lesson an hour before and this one was
+  written without it.
+- The cancellation bookkeeping struck off every pass of a model when one
+  finished, so a run cancelled after pass one of three claimed the other two
+  were accounted for. That was introduced by the fix to the defect beside it.
+- Confirming Stop after a run had already finished overwrote "Finished" with a
+  permanent, false "Stopping…".
+
+**The most interesting one was a lie in a doc comment.** Clustering claimed
+order-independence in its own documentation and did not have it: a finding
+joined the *first* cluster it matched, and the matching relation is symmetric
+but not transitive. A compound finding bridging two defects merged them in one
+order and left them apart in another, so which report a user saw depended on the
+order sweeps happened to finish in. The comment asserting the opposite is
+probably why it survived being read. It is the connected components now, and the
+old algorithm fails the new test concretely.
+
+**What this says about the arrival rate.** Halving the count is real and the
+guards deserve some of the credit — several of the classes closed simply did not
+reappear. But new code still produced defects at a similar rate to old code, and
+one of them was created by a fix to another. The mandates catch more than they
+used to; the writing has not got proportionally safer. That is the honest
+summary, and it is why the count is reported rather than a conclusion.
+
 ## Next concrete step
 
 **Ten confirmed defects remain from the 2 August self-review**, verified and

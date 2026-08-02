@@ -89,3 +89,33 @@ test("the README still promises a single file that runs with nothing installed",
     "the release workflow no longer publishes a portable binary",
   );
 });
+
+test("the documentation does not point at files that no longer exist", () => {
+  // ARCHITECTURE.md named `scripts/check-file-size.ps1` for hours after it was
+  // deleted, and `scripts/verify.ps1` as the gate after it became a shim. A
+  // document describing a system that is not there is the same defect as a
+  // comment describing behaviour the code does not implement — it is worse in
+  // documentation, because a reader has no compiler to disagree with it.
+  const docs = ["README.md", "ARCHITECTURE.md", "RUNBOOK.md", "PROGRESS.md"];
+  const missing: string[] = [];
+
+  for (const doc of docs) {
+    const text = read(doc);
+    for (const match of text.matchAll(/`(scripts\/[\w.-]+)`/g)) {
+      const named = match[1]!;
+      if (!fs.existsSync(path.join(root, named))) missing.push(`${doc}: ${named}`);
+    }
+  }
+  // Guard the guard: these documents do name scripts, so an empty result must
+  // mean they all exist rather than that the pattern stopped matching.
+  const mentioned = docs
+    .flatMap((doc) => [...read(doc).matchAll(/`(scripts\/[\w.-]+)`/g)])
+    .length;
+  assert.ok(mentioned >= 3, `found only ${mentioned} script references to check`);
+
+  assert.deepEqual(
+    missing,
+    [],
+    "the documentation tells a reader to run these and they are not in the repository",
+  );
+});
