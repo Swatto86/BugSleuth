@@ -39,6 +39,7 @@ node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
 node every command the page calls exists in Rust and is exposed
+node every control the matrix rebuilds can be found again afterwards
 node every element the code looks up exists in the markup
 node every event has both an emitter and a listener
 node every platform the release builds for is offered in the README

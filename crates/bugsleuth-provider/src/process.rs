@@ -104,25 +104,37 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
     // (~64 KB) and the child starts emitting output before it has consumed all of
     // stdin: the child blocks writing to a full stdout pipe while we block
     // writing to a full stdin pipe. Neither side can move.
+    // Whether the prompt actually reached the child. A failed write used to be
+    // discarded, so a truncated or empty prompt looked exactly like a normal
+    // run: the model answered whatever it had received — possibly nothing — and
+    // the report presented that as a sweep. Better to fail loudly than to
+    // report a review of a prompt that was never delivered.
     let feed = async move {
-        if let Some(mut stdin) = stdin
-            && let Some(bytes) = payload
-        {
-            let _ = stdin.write_all(&bytes).await;
-            // Dropping `stdin` closes it, which the child sees as EOF.
-        }
+        let (Some(mut stdin), Some(bytes)) = (stdin, payload) else {
+            return Ok(());
+        };
+        let written = stdin.write_all(&bytes).await;
+        // Dropping `stdin` closes it, which the child sees as EOF.
+        written
     };
 
     let combined = async {
-        let (out, err, status, ()) =
+        let (out, err, status, fed) =
             tokio::join!(read_capped(stdout), read_capped(stderr), child.wait(), feed,);
-        (out, err, status)
+        (out, err, status, fed)
     };
 
     match tokio::time::timeout(invocation.timeout, combined).await {
-        Ok((out, err, status)) => {
+        Ok((out, err, status, fed)) => {
             let status = status.map_err(|source| ProcessError::Wait {
                 what: invocation.what.to_string(),
+                source,
+            })?;
+            // A prompt that never arrived is not a sweep. Reported as a failed
+            // invocation, which the caller already renders as NOT SWEPT with a
+            // reason, rather than as an answer to a question never asked.
+            fed.map_err(|source| ProcessError::Wait {
+                what: format!("{} (writing the prompt)", invocation.what),
                 source,
             })?;
             Ok(CliOutput {

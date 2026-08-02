@@ -268,3 +268,23 @@ test("no CSS rule styles a class nothing uses", () => {
       "the check above stops being believed — delete the rule, or use it",
   );
 });
+
+test("every control the matrix rebuilds can be found again afterwards", () => {
+  // Toggling a lane rebuilds the whole table, so any control without a
+  // `data-focus-key` loses keyboard focus to the top of the page. The first fix
+  // covered three of six, and BugSleuth found the rest: typing a model id while
+  // the vendor catalogue finished loading in the background rebuilt the table
+  // mid-keystroke, on the first thing anyone does after opening the app.
+  const view = fs.readFileSync(path.join(here, "view.ts"), "utf8");
+
+  // Anything focusable that the row builder creates.
+  const created = [...view.matchAll(/createElement\("(input|select|button)"\)/g)].length;
+  assert.ok(created >= 6, `found only ${created} focusable controls in the row builder`);
+
+  const keyed = [...view.matchAll(/dataset\["focusKey"\]/g)].length;
+  assert.ok(
+    keyed >= created - 1,
+    `${created} focusable controls are rebuilt and only ${keyed} carry a focus key, ` +
+      `so the rest drop keyboard focus to the top of the page on every rebuild`,
+  );
+});

@@ -16,8 +16,22 @@ use bugsleuth_domain::{ProofClaim, proof_schema};
 use super::{ProviderError, Run, invoke};
 
 /// Tools a proof attempt needs. Wider than a sweep's, because writing a test and
-/// running it is the entire task — but still an explicit list, and still no
-/// network access.
+/// running it is the entire task.
+///
+/// **`Bash` is on this list, so this is not a network restriction and must not
+/// be read as one.** The comment here used to end "and still no network
+/// access", which was false: denying `WebFetch` and `WebSearch` beside a shell
+/// stops nothing — `curl` is one command away — and the reviewed repository is
+/// untrusted input that can address the model directly. Found by BugSleuth
+/// reviewing itself, and it is the "comment describes behaviour the code does
+/// not implement" class landing on a security claim, which is the worst place
+/// for it: a reader checking whether proving is safe would have stopped here.
+///
+/// The denials stay because they remove the two most convenient paths and cost
+/// nothing. What is actually true about proving — that it runs the reviewed
+/// repository's own build and test commands with the user's permissions and no
+/// sandbox — is stated in `PROVING_EXECUTION_WARNING` and printed in the report
+/// whenever proof is attempted.
 const PROVE_TOOLS: &str = "Read,Glob,Grep,Edit,Write,Bash";
 const PROVE_DENIED: &str = "WebFetch,WebSearch";
 

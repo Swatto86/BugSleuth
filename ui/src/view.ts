@@ -108,6 +108,12 @@ function modelPicker(
   input.className = "model-text";
   input.placeholder = "vendor default";
   input.setAttribute("aria-label", `Model for row ${index + 1}`);
+  // Every control that survives a rebuild needs one of these, not just the
+  // three the first fix covered. Typing a model id while the vendor
+  // catalogue finished loading in the background rebuilt the table
+  // mid-keystroke and threw focus to the top of the page — on the first
+  // thing anyone does after opening the app.
+  input.dataset["focusKey"] = `model-${index}`;
   // Say why there are no suggestions. A box that offers nothing otherwise reads
   // as a bug rather than as a vendor that could not be asked.
   if (menu?.error) input.title = menu.error;
@@ -200,6 +206,7 @@ function effortPicker(
 
   const select = document.createElement("select");
   select.setAttribute("aria-label", `Effort for row ${index + 1}`);
+  select.dataset["focusKey"] = `effort-${index}`;
   select.append(option("", "Default", model.effort === ""));
   for (const level of levels) {
     select.append(option(level, level, level === model.effort));
@@ -234,6 +241,7 @@ function passPicker(
 ): HTMLSelectElement {
   const select = document.createElement("select");
   select.setAttribute("aria-label", `Passes for row ${index + 1}`);
+  select.dataset["focusKey"] = `passes-${index}`;
   const chosen = Math.max(1, model.passes ?? 1);
   for (const n of [1, 2, 3]) {
     select.append(option(String(n), n === 1 ? "1" : `${n}x`, n === chosen));
