@@ -119,13 +119,13 @@ added=$(LC_ALL=C comm -13 tests.lock "$current" || true)
 rm -f "$current"
 if [ -n "$gone" ]; then
   echo "  these tests are in tests.lock and no longer run:"
-  printf '    %s\n' $gone | head -20
+  printf '%s\n' "$gone" | head -20 | sed 's/^/    /'
   echo "  If you deleted them on purpose, run scripts/test-inventory.sh and say why in the commit."
   exit 1
 fi
 if [ -n "$added" ]; then
   echo "  new tests are not in tests.lock yet. Run: scripts/test-inventory.sh"
-  printf '    %s\n' $added | head -10
+  printf '%s\n' "$added" | head -10 | sed 's/^/    /'
   exit 1
 fi
 echo "no test has gone missing OK ($(($(wc -l < tests.lock) - 1)) recorded)"

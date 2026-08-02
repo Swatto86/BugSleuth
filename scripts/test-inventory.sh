@@ -38,10 +38,16 @@ platform() {
 rust_raw=$(cargo test --workspace -- --list 2>/dev/null || true)
 rust=$(printf '%s\n' "$rust_raw" | sed -n 's/: test$//p' | sed 's/^/rust /' || true)
 
+# Node chooses its reporter by whether stdout is a terminal: `spec` for a
+# person, `tap` for a pipe. So this read one format on a developer's machine
+# and a different one on CI, where it matched nothing and recorded zero
+# frontend tests. `package.json` now names the reporter, which is the one place
+# the test command lives — passing a flag here instead would be the same
+# command written down twice, and they would drift.
 node_raw=$(npm test --silent 2>&1 || true)
-# One line per test that ran. Matched on the trailing duration rather than on
-# the leading tick, because the tick is a non-ASCII character whose survival
-# through a pipe depends on the console code page.
+# Matched on the trailing duration, not on the reporter's tick: the tick is
+# non-ASCII and its passage through a pipe is one more thing that can differ
+# between platforms for no good reason.
 node=$(printf '%s\n' "$node_raw" |
   sed -n -E 's/^[^ ]+ (.*) \([0-9.]+ms\)$/\1/p' | sed 's/^/node /' || true)
 
@@ -71,6 +77,10 @@ fi
   # number in it, so a routine OS update would have looked like a different
   # platform and quietly switched the check off.
   echo "platform $(platform)"
-  printf '%s\n%s\n' "$rust" "$node" | LC_ALL=C sort -u
+  # `sort`, not `sort -u`. Sixteen frontend tests share a name with a test in
+  # another file, and deduplicating collapsed each pair to one line — so
+  # deleting one of them would have left the lock satisfied. Duplicates are
+  # kept and compared as a multiset, which is what `comm` does anyway.
+  printf '%s\n%s\n' "$rust" "$node" | LC_ALL=C sort
 } > "$out"
 echo "$rust_count rust + $node_count node recorded in $out (on $(platform))"
