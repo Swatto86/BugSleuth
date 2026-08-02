@@ -105,6 +105,33 @@ impl Plan {
     }
 }
 
+/// Reject an effort the vendor's CLI does not accept.
+///
+/// Checked here because here is free. An unrecognised effort is passed straight
+/// to the CLI, which either rejects the invocation — costing a sweep of real
+/// quota and tens of minutes to discover a typo — or ignores it, which is worse:
+/// the run completes, the report looks normal, and nothing says the depth you
+/// asked for was never applied.
+///
+/// Only Claude and Codex are checked. Kilo passes `--variant` through to
+/// whichever provider is behind the model, so its accepted values are a
+/// property of that model and are discovered at runtime; refusing what we
+/// cannot enumerate would block valid configurations.
+fn check_effort(id: &str, effort: &str) -> Result<()> {
+    if effort.is_empty() {
+        return Ok(());
+    }
+    let accepted = bugsleuth_provider::models::efforts(&vendor_of(id));
+    if accepted.is_empty() || accepted.contains(&effort) {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "model `{id}` asks for effort `{effort}`, which {} does not accept (try: {})",
+        vendor_of(id),
+        accepted.join(", ")
+    )
+}
+
 /// The vendor prefix of a model spec. A bare name means Claude.
 fn vendor_of(model: &str) -> String {
     match model.split_once(':') {
@@ -132,6 +159,7 @@ pub fn plan(config: &Config) -> Result<Plan> {
         if model.id.trim().is_empty() {
             anyhow::bail!("a configured model has an empty id");
         }
+        check_effort(&model.id, model.effort.trim())?;
         for slug in &model.lanes {
             let lane: Lane = slug
                 .parse()
@@ -182,6 +210,54 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    fn with_effort(id: &str, effort: &str) -> Config {
+        Config {
+            models: vec![ModelPlan {
+                id: id.to_string(),
+                lanes: vec!["correctness".to_string()],
+                effort: effort.to_string(),
+                passes: 1,
+            }],
+        }
+    }
+
+    #[test]
+    fn an_effort_the_vendor_does_not_accept_is_refused_before_anything_is_paid_for() {
+        // A typo is otherwise discovered by a CLI rejecting the invocation
+        // after the sweep was queued - or worse, by it being ignored, so the
+        // run completes and nothing says the depth asked for was never used.
+        let refused = plan(&with_effort("sonnet", "hihg"));
+        let message = refused.map(|_| ()).unwrap_err().to_string();
+        assert!(message.contains("hihg"), "{message}");
+        assert!(message.contains("low, medium, high"), "{message}");
+    }
+
+    #[test]
+    fn every_effort_the_vendor_documents_is_accepted() {
+        for level in ["low", "medium", "high", "xhigh", "max"] {
+            assert!(
+                plan(&with_effort("sonnet", level)).is_ok(),
+                "{level} refused"
+            );
+            assert!(
+                plan(&with_effort("codex:", level)).is_ok(),
+                "{level} refused"
+            );
+        }
+        // And no effort at all is the ordinary case.
+        assert!(plan(&with_effort("sonnet", "")).is_ok());
+        assert!(plan(&with_effort("sonnet", "  ")).is_ok());
+    }
+
+    #[test]
+    fn a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed() {
+        // Kilo passes --variant through to whichever provider is behind the
+        // model, so its accepted values belong to that model. Refusing what
+        // cannot be enumerated would block valid configurations.
+        assert!(plan(&with_effort("kilo:some/model", "thinking")).is_ok());
+        assert!(plan(&with_effort("kilo:some/model", "anything-at-all")).is_ok());
     }
 
     #[test]
