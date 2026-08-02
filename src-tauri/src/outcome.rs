@@ -43,6 +43,32 @@ pub(crate) fn fix_prompt(repo: &std::path::Path, report: &orchestrate::RunReport
 /// Proving needs a test command and a git repository — a worktree cannot be made
 /// without one — so a request that cannot be honoured says so rather than
 /// failing silently.
+/// Which model attempts proofs.
+///
+/// Taken from the models the user configured rather than hardcoded, so proving
+/// does not silently depend on one vendor being installed. Claude and Codex can
+/// both do it; Kilo cannot be constrained to a schema, so it is skipped rather
+/// than attempted and reported as unattempted if it is all there is.
+///
+/// Falls back to Claude's cheapest model when nothing configured can prove, so
+/// the feature degrades to "tries anyway and says if it could not" rather than
+/// to silence.
+fn prover(settings: &Settings) -> String {
+    settings
+        .models
+        .iter()
+        .map(|m| m.id.trim())
+        .find(|id| {
+            !id.is_empty()
+                && !matches!(
+                    bugsleuth_engine::sweep::Vendor::parse(id).0,
+                    bugsleuth_engine::sweep::Vendor::Kilo
+                )
+        })
+        .unwrap_or("haiku")
+        .to_string()
+}
+
 pub(crate) async fn prove_top(
     app: &tauri::AppHandle,
     settings: &Settings,
@@ -81,7 +107,7 @@ pub(crate) async fn prove_top(
         &report.ranked,
         &orchestrate::proving::ProveOptions {
             repo,
-            model: "sonnet",
+            model: &prover(settings),
             test_command: command,
             top: settings.prove_top,
             max_turns: 40,
@@ -93,4 +119,54 @@ pub(crate) async fn prove_top(
     .await;
 
     orchestrate::proving::to_text(&proved, report.ranked.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::ModelSetting;
+
+    fn settings_with(ids: &[&str]) -> Settings {
+        Settings {
+            models: ids
+                .iter()
+                .map(|id| ModelSetting {
+                    id: (*id).to_string(),
+                    lanes: vec!["correctness".into()],
+                    effort: String::new(),
+                    passes: 1,
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn proving_uses_a_vendor_the_user_actually_configured() {
+        // It was hardcoded to Claude, so the strongest verification the tool
+        // has silently depended on one vendor being installed.
+        assert_eq!(
+            prover(&settings_with(&["codex:gpt-5.6-codex"])),
+            "codex:gpt-5.6-codex"
+        );
+        assert_eq!(prover(&settings_with(&["opus", "codex:"])), "opus");
+    }
+
+    #[test]
+    fn a_vendor_that_cannot_prove_is_skipped_rather_than_attempted() {
+        // Kilo cannot be constrained to a schema, so a proof attempt from it
+        // could not be trusted to report accurately.
+        assert_eq!(
+            prover(&settings_with(&["kilo:some/model", "codex:"])),
+            "codex:"
+        );
+    }
+
+    #[test]
+    fn nothing_provable_still_leaves_something_to_try() {
+        // Degrading to "tries anyway and says if it could not" beats silence,
+        // which is what a missing prover would otherwise produce.
+        assert_eq!(prover(&settings_with(&["kilo:only"])), "haiku");
+        assert_eq!(prover(&settings_with(&[])), "haiku");
+    }
 }

@@ -137,7 +137,9 @@ pub async fn attempt(spec: Attempt<'_>) -> anyhow::Result<AttemptReport> {
         // cannot be trusted to report accurately is worse than no proof step.
         crate::sweep::Vendor::Kilo => {
             return Ok(AttemptReport {
-                verdict: ProofVerdict::NoTestWritten,
+                // A refusal is the absence of an attempt, not a result about
+                // the defect - the same distinction the report draws elsewhere.
+                verdict: ProofVerdict::NotAttempted,
                 claim: None,
                 baseline_passed,
                 after_passed: 0,
