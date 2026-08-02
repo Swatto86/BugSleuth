@@ -390,6 +390,37 @@ every vendor found real defects the others missed — and is not yet buying
 narrowly, or should be dropped as a ranking signal, is undecided and needs a
 deliberate experiment rather than another threshold.
 
+## v0.2.0, and what it is and is not verified by
+
+Cut from `c94822e`, with the gate green on **Windows, Linux and macOS** — the
+first release of this project, and the first time any of it ran on a platform
+other than the one it was written on.
+
+**Verified before tagging:**
+
+- The gate passes on all three platforms, running the same checks: `verify.ps1`
+  on Windows, `verify.sh` elsewhere, counting the same way and checking the
+  same file types after the two disagreed and one turned out to be wrong.
+- ~200 Rust tests and 33 frontend tests.
+- A four-lane sweep of this repository, with every real critical it found fixed.
+- The portable Windows binary is genuinely self-contained: its PE import table
+  is nothing but Windows system DLLs and UCRT forwarders, with no
+  `WebView2Loader.dll` and no vcruntime.
+- Recall on known defects is a rate rather than an anecdote: 3 of 3 and 3 of 3
+  across repeated runs.
+
+**Not verified, and not claimed:**
+
+- **The live WebDriver acceptance journey has never run.** The app had no
+  WebDriver support until today and still does not attach; the remaining work
+  is the JavaScript half. The Tauri standard asks for that journey on a
+  lifecycle change, and cancellation is one, so this release goes out with that
+  evidence missing and said out loud rather than quietly skipped.
+- **No binary has been launched on a clean machine.** Import analysis is strong
+  evidence that the portable exe needs nothing preinstalled; it is not proof.
+- **The Linux and macOS artifacts have never been run at all** — they compile
+  and the gate passes there, which is not the same as the app working.
+
 ## Repeat runs: the recall result is a rate now, not an anecdote
 
 The fair criticism of every number above was that each condition ran once. A
