@@ -62,36 +62,6 @@ pub fn save_settings(settings: Settings) -> CommandResult<()> {
     settings::save(&settings).map_err(|e| e.to_string())
 }
 
-#[derive(Serialize)]
-pub struct PlanPreview {
-    /// One entry per (model x lane) that would run.
-    pub units: Vec<String>,
-    /// Lanes with no model assigned. Shown before the run, not after, because
-    /// this is the one gap a person can still fix for free.
-    pub uncovered: Vec<String>,
-    /// How many rounds the run takes, given one invocation per vendor at a time.
-    pub batches: usize,
-}
-
-/// Show what a run would do, without doing it.
-#[tauri::command]
-pub fn plan_run(settings: Settings) -> CommandResult<PlanPreview> {
-    let plan = plan::plan(&to_config(&settings)).map_err(|e| e.to_string())?;
-    Ok(PlanPreview {
-        units: plan
-            .units
-            .iter()
-            .map(|unit| format!("{} × {}", unit.model, unit.lane.title()))
-            .collect(),
-        uncovered: plan
-            .uncovered
-            .iter()
-            .map(|l| l.title().to_string())
-            .collect(),
-        batches: plan.batches().len(),
-    })
-}
-
 /// The signal that stops whichever run is in flight, held for the app's life.
 ///
 /// One at a time: the Run button is disabled while a run is going, so a second
