@@ -14,6 +14,7 @@
  */
 
 import { strict as assert } from "node:assert";
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -129,6 +130,76 @@ describe("BugSleuth desktop app", () => {
     assert.ok(
       report.findings.length > 0,
       "the seeded fixture returned no findings, so the review did not really work",
+    );
+  });
+
+  it("stops a run when asked, and says what it never reached", async function () {
+    // The lifecycle change this release introduces, and the one thing no unit
+    // test can show: that pressing Stop in the real window reaches Rust, kills
+    // the CLI processes, and leaves a report that does not pretend to be
+    // complete. Cancelling is only worth having if it actually stops spending.
+    this.timeout(6 * 60_000);
+
+    await $("#repo").setValue(REPO);
+    // Every lane, so there is certain to be work still queued when we stop.
+    const boxes = await $$("#matrix-body tr:first-child td.lane-cell input");
+    for (const box of boxes) {
+      if (!(await box.isSelected())) await box.click();
+    }
+
+    await expect($("#run")).toBeEnabled();
+    await $("#run").click();
+
+    // Stop is offered only while there is something to stop.
+    await browser.waitUntil(async () => await $("#stop").isDisplayed(), {
+      timeout: 60_000,
+      timeoutMsg: "the Stop button never appeared during a run",
+    });
+
+    await $("#stop").click();
+    // An in-app dialog, not a browser one: a native confirm would block the
+    // webview and WebDriver would see nothing here at all.
+    await expect($(".dialog")).toBeDisplayed();
+    const buttons = await $$(".dialog-buttons button");
+    let confirmed = false;
+    for (const button of buttons) {
+      if ((await button.getText()) === "Stop the review") {
+        await button.click();
+        confirmed = true;
+        break;
+      }
+    }
+    assert.ok(confirmed, "the stop dialog offered no way to confirm");
+
+    await browser.waitUntil(
+      async () => {
+        const status = await $("#status").getText();
+        return status.startsWith("Finished") || status.startsWith("Run failed");
+      },
+      {
+        timeout: 4 * 60_000,
+        interval: 2_000,
+        timeoutMsg: `the run never came back after Stop; status: ${await $("#status").getText()}`,
+      },
+    );
+
+    // The effect that matters: the report names what it never got to rather
+    // than reading like a review that covered everything and found little.
+    const output = await $("#output").getText();
+    assert.ok(
+      output.includes("cancelled"),
+      `a cancelled run did not say so:
+${output}`,
+    );
+
+    // And nothing is still burning quota in the background.
+    const still = execSync('tasklist /FI "IMAGENAME eq claude.exe" /FI "IMAGENAME eq codex.exe"', {
+      encoding: "utf8",
+    });
+    assert.ok(
+      !/claude\.exe|codex\.exe/.test(still),
+      `a provider CLI survived the cancel:
+${still}`,
     );
   });
 
