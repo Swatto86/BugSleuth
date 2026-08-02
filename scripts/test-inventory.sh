@@ -30,13 +30,20 @@ platform() {
 }
 
 
-# Rust: every test the workspace would run, whatever crate it lives in.
-rust=$(cargo test --workspace -- --list 2>/dev/null | sed -n 's/: test$//p' | sed 's/^/rust /')
-# Frontend: node's own reporter, one line per test that ran. Matched on the
-# leading tick rather than on the trailing duration, because the duration's
-# format is the reporter's business and not something to depend on.
-node=$(npm test --silent 2>&1 | grep -E '^[^ ]+ .+ \([0-9.]+ms\)$' |
-  sed -E 's/^[^ ]+ (.*) \([0-9.]+ms\)$/\1/' | sed 's/^/node /')
+# `|| true` on both, deliberately. Under `set -euo pipefail` a `grep` that
+# matches nothing exits 1 and kills this script *without printing anything* —
+# which is what happened on one CI runner, and cost a round-trip to learn
+# nothing. An empty result is the guard's business below, and the guard says
+# which half came back empty.
+rust_raw=$(cargo test --workspace -- --list 2>/dev/null || true)
+rust=$(printf '%s\n' "$rust_raw" | sed -n 's/: test$//p' | sed 's/^/rust /' || true)
+
+node_raw=$(npm test --silent 2>&1 || true)
+# One line per test that ran. Matched on the trailing duration rather than on
+# the leading tick, because the tick is a non-ASCII character whose survival
+# through a pipe depends on the console code page.
+node=$(printf '%s\n' "$node_raw" |
+  sed -n -E 's/^[^ ]+ (.*) \([0-9.]+ms\)$/\1/p' | sed 's/^/node /' || true)
 
 # Neither half may be empty. The first version of this script wrote an
 # inventory containing only the Rust tests, because one sed pattern quietly
@@ -47,6 +54,10 @@ node_count=$(printf '%s\n' "$node" | grep -c . || true)
 if [ "$rust_count" -lt 100 ] || [ "$node_count" -lt 20 ]; then
   echo "refusing to write $out: found $rust_count rust and $node_count node tests." >&2
   echo "One of the two scans matched nothing. Fix the scan, not the threshold." >&2
+  echo "--- last 15 lines the rust scan was given ---" >&2
+  printf '%s\n' "$rust_raw" | tail -15 >&2
+  echo "--- last 15 lines the node scan was given ---" >&2
+  printf '%s\n' "$node_raw" | tail -15 >&2
   exit 1
 fi
 
