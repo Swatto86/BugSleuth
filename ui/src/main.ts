@@ -14,7 +14,6 @@ import {
   type Preset,
   type Settings,
   batchCount,
-  boundedProveTop,
   canRun,
   preset,
   toggleLane,
@@ -22,6 +21,7 @@ import {
   unitCount,
 } from "./model";
 import { bindGuardedActions } from "./actions";
+import { bindControls } from "./controls";
 import { savingSettings } from "./persist";
 import { listOf } from "./format";
 import { type RunDeps, currentFixPrompt, isRunning, listenForRunEvents } from "./run";
@@ -239,62 +239,15 @@ const runDeps = (): RunDeps => ({
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 function bind(): void {
-  ui.theme.addEventListener("change", () => {
-    settings.theme = ui.theme.value as Settings["theme"];
-    applyTheme(settings.theme);
-    refresh();
-  });
-
-  ui.repo.addEventListener("input", () => {
-    settings.repo = ui.repo.value;
-    refresh();
-  });
-  ui.scope.addEventListener("input", () => {
-    settings.scope = ui.scope.value;
-    refresh();
-  });
-  ui.proveTop.addEventListener("input", () => {
-    settings.prove_top = boundedProveTop(ui.proveTop.value);
-    refresh();
-  });
-  ui.testCommand.addEventListener("input", () => {
-    settings.test_command = ui.testCommand.value;
-    refresh();
-  });
-  ui.reuseCompleted.addEventListener("change", () => {
-    settings.reuse_completed = ui.reuseCompleted.checked;
-    refresh();
-  });
-  ui.triageSeverities.addEventListener("change", () => {
-    // Off is an empty model rather than a separate flag, so there is one thing
-    // to read on the Rust side and no way for the two to disagree.
-    settings.triage_model = ui.triageSeverities.checked ? TRIAGE_MODEL : "";
-    refresh();
-  });
-
-  ui.browse.addEventListener("click", () => {
-    // Not an `async` listener. addEventListener throws away the promise it gets
-    // back, so an `await` that rejects inside one has no caller to propagate to
-    // and reaches nobody: the folder picker did nothing, said nothing, and left
-    // someone clicking a button that appeared to be broken.
-    invoke<string | null>("pick_directory")
-      .then((picked) => {
-        if (!picked) return;
-        settings.repo = picked;
-        ui.repo.value = picked;
-        refresh();
-      })
-      .catch((error: unknown) => {
-        setStatus(`Could not open the folder picker: ${String(error)}`, "error");
-      });
-  });
-
-  ui.addModel.addEventListener("click", () => {
-    settings.models = [
-      ...settings.models,
-      { id: "", lanes: [], effort: "", passes: 1 },
-    ];
-    render();
+  bindControls({
+    ui,
+    settings: () => settings,
+    triageModel: TRIAGE_MODEL,
+    applyTheme,
+    refresh,
+    render,
+    setStatus,
+    fixPrompt: currentFixPrompt,
   });
 
   bindGuardedActions({
@@ -307,26 +260,6 @@ function bind(): void {
     setStatus,
     runDeps,
     isShipped,
-  });
-
-  ui.copyPrompt.addEventListener("click", () => {
-    void navigator.clipboard.writeText(currentFixPrompt()).then(
-      () => {
-        // Confirm by changing the button, not with a dialog: you are about to
-        // paste somewhere else, and a dialog would be one more thing to dismiss.
-        ui.copyPrompt.textContent = "Copied";
-        window.setTimeout(() => {
-          ui.copyPrompt.textContent = "Copy fix prompt";
-        }, 1500);
-      },
-      () => {
-        // Clipboard access can be refused. Say so and point at the file, which
-        // is always written — silently doing nothing would be the worst outcome
-        // for the one button that hands over the result.
-        ui.copyPrompt.textContent = "Copy failed — use the saved file";
-        ui.copyPrompt.classList.add("error");
-      },
-    );
   });
 }
 
