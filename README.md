@@ -27,6 +27,15 @@ want the app in your start menu.
 
 Checksums for each platform are published beside them as `SHA256SUMS-*.txt`.
 
+**It updates itself.** BugSleuth checks GitHub for a newer release when you
+press *Check for updates*, and installs it if you agree. Updates are signed; a
+release that does not verify against the key built into the app is refused
+before anything runs, so a tampered or unsigned download cannot install itself.
+The check is a button rather than a background task because installing restarts
+the app, and doing that during a review would throw away sweeps you have paid
+for. Only the installed build updates itself — the portable `.exe` cannot
+replace itself while running, so that one stays manual.
+
 **Releases publish the Windows assets.** Linux and macOS are still supported and
 still built from the same job — they are built on request rather than every
 time, because building and verifying three sets of artifacts for a tool with one

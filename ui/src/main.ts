@@ -22,6 +22,7 @@ import {
 } from "./model";
 import { bindGuardedActions } from "./actions";
 import { bindControls } from "./controls";
+import { wireUpdate } from "./update";
 import { savingSettings } from "./persist";
 import { listOf } from "./format";
 import { type RunDeps, currentFixPrompt, isRunning, listenForRunEvents } from "./run";
@@ -43,6 +44,7 @@ const ui = {
   theme: el<HTMLSelectElement>("theme"),
   vendors: el<HTMLDivElement>("vendors"),
   checkSignin: el<HTMLButtonElement>("check-signin"),
+  checkUpdate: el<HTMLButtonElement>("check-update"),
   repo: el<HTMLInputElement>("repo"),
   scope: el<HTMLInputElement>("scope"),
   browse: el<HTMLButtonElement>("browse"),
@@ -278,6 +280,13 @@ function bind(): void {
     render,
     setStatus,
     fixPrompt: currentFixPrompt,
+  });
+
+  wireUpdate({
+    button: ui.checkUpdate,
+    setStatus,
+    // A run in flight has already been paid for; installing restarts the app.
+    busy: isRunning,
   });
 
   bindGuardedActions({

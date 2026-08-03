@@ -25,3 +25,8 @@
 # and was committed as a gitlink to a public repository. It is a sibling repo,
 # never a part of this one.
 windows-rdp-keepalive/
+
+# The updater public key. It lives in src-tauri/tauri.conf.json, which is what
+# the app actually compiles in; a second copy here would be a value with two
+# homes and no check that they agree.
+bugsleuth-updater.key*

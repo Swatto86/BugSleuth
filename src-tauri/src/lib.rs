@@ -15,9 +15,12 @@ mod outcome;
 mod payload;
 mod settings;
 mod tray;
+mod update;
 
 pub fn run() {
-    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     // One instance, because the settings are one file. Every instance loads the
     // whole settings object at startup and writes the whole of it back on any
@@ -71,6 +74,8 @@ pub fn run() {
             commands::frontend_ready,
             commands::quit,
             catalogue::available_models,
+            update::check_for_update,
+            update::install_update,
         ])
         .run(tauri::generate_context!())
         // The only failure here is the webview runtime refusing to start, at
