@@ -188,6 +188,30 @@ fn finish<T: serde::de::DeserializeOwned>(
     crate::json::structured(&value)
 }
 
+/// The flags every Codex invocation carries, whatever it is for.
+///
+/// One list, because a sign-in check that invokes the CLI differently from a
+/// sweep is not checking the sweep — it can pass while every real run fails, or
+/// fail while runs are fine. The first sign-in probe dropped
+/// `--skip-git-repo-check` and reported a working Codex as unusable.
+///
+/// `--ignore-user-config` and `--ignore-rules` are the security-relevant pair:
+/// neither the machine's own configuration nor the reviewed repository's rules
+/// may change what the model is told to do. `--ephemeral` keeps no session
+/// behind. The set is taken from Eir, which drives the same CLI under the same
+/// subscription and arrived at it first.
+pub(crate) const SHARED_FLAGS: [&str; 9] = [
+    "--ask-for-approval",
+    "never",
+    "exec",
+    "--skip-git-repo-check",
+    "--ephemeral",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "--color",
+    "never",
+];
+
 /// Build the non-interactive argv.
 ///
 /// `--ignore-user-config` and `--ignore-rules` are Codex's equivalent of
@@ -196,22 +220,11 @@ fn finish<T: serde::de::DeserializeOwned>(
 /// reproducibility one. `--sandbox read-only` is stronger than a tool
 /// allowlist — the operating system refuses the write, not the agent.
 fn build_args(spec: &Invoke<'_>, schema: &Path, answer: &Path) -> Vec<String> {
-    let mut args: Vec<String> = ["--ask-for-approval", "never", "exec", "--json"]
+    let mut args: Vec<String> = SHARED_FLAGS
         .iter()
+        .chain(["--json"].iter())
         .map(|s| (*s).to_string())
         .collect();
-    args.extend(
-        [
-            "--skip-git-repo-check",
-            "--ephemeral",
-            "--ignore-user-config",
-            "--ignore-rules",
-            "--color",
-            "never",
-        ]
-        .iter()
-        .map(|s| (*s).to_string()),
-    );
     args.push("--sandbox".into());
     args.push(spec.sandbox.flag().into());
     args.push("--output-schema".into());
@@ -267,82 +280,25 @@ pub async fn signin() -> crate::signin::SignIn {
     let Some(binary) = discover::resolve_binary() else {
         return crate::signin::SignIn::Failed("the codex CLI could not be found".to_string());
     };
-    let args: Vec<String> = [
-        "--ask-for-approval",
-        "never",
-        "exec",
-        "--sandbox",
-        "read-only",
-    ]
-    .iter()
-    .map(|a| (*a).to_string())
-    .collect();
+    // The same flags a real sweep uses, and that is the point: a check that
+    // invokes the CLI differently from the work is not checking the work. It
+    // can pass while every sweep fails, or fail while sweeps are fine.
+    //
+    // This one did the latter. The first version dropped `--skip-git-repo-check`,
+    // so Codex refused with "Not inside a trusted directory" — the app runs
+    // from wherever it was started, not a repository — and a perfectly good
+    // session was reported as unusable, with a message pointing at the wrong
+    // problem entirely. `--ignore-user-config` and `--ignore-rules` matter for
+    // the same reason they matter in a sweep: neither the machine's own
+    // configuration nor a repository's rules should change the answer.
+    let args: Vec<String> = SHARED_FLAGS
+        .iter()
+        .chain(["--sandbox", "read-only", "-"].iter())
+        .map(|a| (*a).to_string())
+        .collect();
     crate::signin::one_shot(&binary.to_string_lossy(), &args, "codex").await
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn spec<'a>(model: &'a str, sandbox: Sandbox) -> Invoke<'a> {
-        Invoke {
-            effort: "",
-            dir: Path::new("."),
-            model,
-            brief: "",
-            timeout: Duration::from_secs(60),
-            binary: None,
-            schema: finding_schema(),
-            sandbox,
-        }
-    }
-
-    fn args_for(model: &str, sandbox: Sandbox) -> Vec<String> {
-        build_args(
-            &spec(model, sandbox),
-            Path::new("s.json"),
-            Path::new("a.json"),
-        )
-    }
-
-    #[test]
-    fn a_sweep_runs_read_only_and_ignores_the_reviewed_repos_own_config() {
-        let joined = args_for("gpt-5.6-codex", Sandbox::ReadOnly).join(" ");
-        assert!(joined.contains("--sandbox read-only"));
-        assert!(joined.contains("--ignore-user-config"));
-        assert!(joined.contains("--ignore-rules"));
-        assert!(!joined.contains("dangerously"));
-    }
-
-    #[test]
-    fn a_proof_attempt_may_write_because_it_has_to_add_a_test() {
-        let joined = args_for("", Sandbox::WorkspaceWrite).join(" ");
-        assert!(joined.contains("--sandbox workspace-write"));
-        // Still never the escape hatch, even when writing is allowed.
-        assert!(!joined.contains("dangerously"));
-    }
-
-    #[test]
-    fn the_prompt_comes_from_stdin_so_a_long_brief_cannot_overflow_the_command_line() {
-        let args = args_for("", Sandbox::ReadOnly);
-        assert_eq!(args.last().map(String::as_str), Some("-"));
-    }
-
-    #[test]
-    fn an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument() {
-        assert!(!args_for("  ", Sandbox::ReadOnly).iter().any(|a| a == "-m"));
-    }
-
-    #[test]
-    fn the_schema_and_answer_paths_are_passed_as_files_not_inline_json() {
-        let args = args_for("", Sandbox::ReadOnly);
-        let after = |flag: &str| {
-            args.iter()
-                .position(|a| a == flag)
-                .and_then(|i| args.get(i + 1))
-                .map(String::as_str)
-        };
-        assert_eq!(after("--output-schema"), Some("s.json"));
-        assert_eq!(after("--output-last-message"), Some("a.json"));
-    }
-}
+#[path = "codex/tests.rs"]
+mod tests;
