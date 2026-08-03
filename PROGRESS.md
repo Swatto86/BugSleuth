@@ -1219,3 +1219,62 @@ supported material is not recorded, so the two are not certainly like for like.
 
 The claim this supports is "comfortably above 80% on a codebase it was not tuned
 for". 100% is what this sample produced, not a rate to expect.
+
+## Recall on ground truth it had never seen: 1 of 21
+
+Precision had been measured twice and recall only against defects this project
+chose. The honest test is a list someone else wrote, for their own reasons,
+before this tool existed.
+
+**Setup.** A separate Rust application, at the commit immediately before a
+release that fixed twenty-one enumerated defects. The author's own plan named
+each one; that plan, and every other document, was deleted from the checkout,
+and the history was replaced with a single commit so the fix could not be read
+from the log. Two vendors, four lanes, 20,045 lines. The tree was checked for
+leaks with controls proving the check could see code that was present.
+
+**One of twenty-one.** The one is a bundle of minor cleanups where a single
+bullet matched exactly. Of the twenty defects written up individually, it found
+none. Twenty-one independent judges scored it, each told that the same file or
+the same theme is not a match and to default to "not found".
+
+**The excuse did not survive.** Before seeing results this record predicted that
+several defects would need runtime knowledge and so be unfair to count. Every
+one of the twenty misses was judged readable from source alone.
+
+### What it misses, and the one property they share
+
+Five were cross-implementation asymmetry: a sibling function performs the check
+correctly and this one does not. Seven were temporal — correct on one execution,
+wrong on iteration N, at a date rollover, or at shutdown. Four needed a fact the
+code never states or a library default. Four were local, single-function, and
+missed anyway.
+
+They share something sharper than any category: **every one is an omission, not
+an error.** No line is wrong. A clamp, a cap, a propagated value is simply
+absent. A reviewer that hunts for wrong logic has no anchor for absent logic.
+
+The clearest evidence is internal. Its one genuine catch was a Result tuple
+dropped into an underscore binding. One of the misses is the identical bug shape
+in another file. It found one instance and never generalised to look for others.
+
+### What this means, stated plainly
+
+Fourteen of fourteen precision and one of twenty-one recall are not in tension.
+They answer different questions. The tool is honest when it fires and blind to
+whole classes of defect. As a merge gate on that release it would have shipped
+every defect its author cared about.
+
+So: a supplementary pass, never a substitute for review, and **an empty report
+is not evidence of a clean codebase**. Any claim otherwise is now contradicted
+by this project's own measurement.
+
+### The recoverable part
+
+Two mandate instructions would have caught twelve of the twenty. Trace every
+task, latched flag, counter and unbounded collection across repeated cycles and
+lifecycle boundaries rather than one execution, which recovers the seven
+temporal misses. And for every guard, find its nearest sibling doing the
+analogous job and diff their invariants, which recovers the five asymmetries.
+Neither has been implemented or measured; recording the estimate is not the
+same as earning it.
