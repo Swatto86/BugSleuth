@@ -1171,3 +1171,51 @@ Two things to hold to when reading the result:
 2. **Check what the new controls did not catch.** Every finding outside the
    known classes is the answer to "what should be closed next", and it is a
    better answer than any guess made in advance.
+
+## Precision on a second codebase: 14 of 14
+
+Every precision and recall number this project had came from one repository. A
+reviewer measured only where its mandates were written is measuring how well it
+was tuned, not how well it works, so the number that mattered next was one from
+code the mandates had never seen.
+
+**Setup.** OnTop, 7 Rust files and roughly 3,500 lines, reviewed by three
+vendors across all four lanes: Claude on correctness, security, contract and UX;
+Codex on correctness and security; Kilo on correctness. Kilo's sweep was lost to
+a context-overflow error in its own CLI and is recorded as NOT SWEPT rather than
+quietly dropped. Sixteen findings from the six sweeps that ran merged into
+fourteen distinct defects: three critical, six high, five medium.
+
+**Grading.** Every one of the fourteen went to three independent sceptics, told
+to assume the finding was wrong, to answer "not real" when unsure, and that a
+style preference or a hypothetical with no concrete trigger does not count. The
+same standard that produced 78% on the first corpus, so the numbers compare.
+
+**14 of 14 are real, and all three judges agreed on every one.** No finding
+split its panel.
+
+The graders did the work rather than deferring to the report: the median
+verdict cites 456 characters of what was actually read or searched, and none
+cited less than sixty. One went into the pinned egui 0.31.1 source to confirm
+`widget_info` is never called before accepting an accessibility finding.
+
+### What the number does not say
+
+**Zero rejections means zero information about how the reviewer fails.** A clean
+sweep cannot show that a failure mode is gone, only that it did not occur in
+fourteen findings. The failure-shape analysis returned nothing to learn from,
+which is the correct answer to an empty set and not a result.
+
+**Precision says nothing about recall.** 14 of 14 is equally consistent with a
+sweep that found everything and one that found the easy third. Nothing here
+measures what OnTop contains that the review walked past, and that is now the
+axis with no data on it at all.
+
+**One caveat that cannot be resolved from here.** The sceptics graded from the
+fix prompts, which carry code quotes already verified to exist at the cited
+line. That anchor check is a real precision mechanism and plausibly explains
+genuine improvement — but whether the 78% corpus was graded from equally
+supported material is not recorded, so the two are not certainly like for like.
+
+The claim this supports is "comfortably above 80% on a codebase it was not tuned
+for". 100% is what this sample produced, not a rate to expect.
