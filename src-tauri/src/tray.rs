@@ -59,6 +59,12 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 /// exactly like the app failing to start.
 pub(crate) fn reveal<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
+        // Maximised on first reveal. The window is configured hidden so the
+        // user never sees an unstyled flash, and `maximized` in the config is
+        // not honoured for a window that starts invisible — so it is asked for
+        // here, where the window is actually being shown. The report is a wide
+        // document and the default size made it a column.
+        let _ = window.maximize();
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();

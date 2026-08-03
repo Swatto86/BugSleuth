@@ -17,7 +17,20 @@ mod settings;
 mod tray;
 
 pub fn run() {
-    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    // One instance, because settings are one file.
+    //
+    // Every instance loads the whole settings object at startup and writes the
+    // whole of it back on any change, so two running at once silently overwrite
+    // each other — and whichever quits last wins. That is not hypothetical: a
+    // portable copy and an installed copy were open together, and the reviewed
+    // repository the user had chosen was replaced by the other instance's stale
+    // idea of it, with nothing said. A second launch now reveals the window
+    // that already exists instead of starting a rival.
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            reveal(app);
+        }))
+        .plugin(tauri_plugin_dialog::init());
 
     // Test-only, compiled in solely for the acceptance suite. Without it the
     // app exposes no automation endpoint at all — WebDriver attaches to a blank
