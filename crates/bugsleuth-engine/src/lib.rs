@@ -12,6 +12,7 @@
 
 pub mod atomic;
 pub mod brief;
+pub mod bulk;
 pub mod cancel;
 mod caveats;
 pub mod handoff;

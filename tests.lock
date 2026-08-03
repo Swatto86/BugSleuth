@@ -109,6 +109,12 @@ rust brief::tests::only_the_vendor_that_needs_the_schema_is_given_it
 rust brief::tests::the_brief_always_explains_that_a_bad_quote_discards_the_finding
 rust brief::tests::the_example_reply_is_actually_valid
 rust brief::tests::the_proof_brief_forbids_fixing_the_defect
+rust bulk::tests::a_documentation_file_larger_than_the_code_is_named
+rust bulk::tests::a_lockfile_is_not_named
+rust bulk::tests::an_empty_repository_does_not_trigger_on_the_ratio
+rust bulk::tests::an_ordinary_repository_says_nothing
+rust bulk::tests::build_output_is_not_counted
+rust bulk::tests::bulk_with_no_single_offender_still_reports
 rust cancel::tests::a_waiter_started_after_the_stop_does_not_wait_at_all
 rust cancel::tests::a_waiter_started_before_the_stop_is_woken_by_it
 rust cancel::tests::nothing_is_cancelled_until_it_is_asked_for

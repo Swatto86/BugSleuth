@@ -45,6 +45,15 @@ pub(super) fn caution(plan: &Plan, repo: &std::path::Path) {
     {
         eprintln!("warning: {}", bugsleuth_domain::UNSANDBOXED_VENDOR_WARNING);
     }
+
+    // Said here for the same reason as the rest: the choice it informs - scope
+    // the review, or route this model somewhere with more room - is free now
+    // and costs a whole sweep once the run has started. A Kilo sweep died on
+    // context against a 3,500-line project whose documentation outweighed its
+    // source, and nothing in the failure named the file responsible.
+    if let Some(warning) = crate::bulk::caution(&crate::bulk::measure(repo)) {
+        eprintln!("warning: {warning}");
+    }
 }
 
 /// Run one batch, genuinely concurrently.
