@@ -35,9 +35,20 @@ const read = (...parts: string[]) =>
 const readme = () => read("README.md");
 const workflow = () => read(".github", "workflows", "release.yml");
 
-/** The platform suffixes the release matrix builds for. */
+/**
+ * The platform suffixes the release can build for.
+ *
+ * All of them, not just the ones a tag push publishes: tagging builds Windows
+ * only, and Linux and macOS are built by running the workflow manually. They
+ * are still offered, so the README still has to describe them — a platform that
+ * is buildable but undocumented is one nobody knows to ask for.
+ *
+ * Read out of the `plan` job's JSON rather than YAML keys. When the matrix
+ * moved there this pattern matched nothing, and `>= 3` is what said so instead
+ * of the empty list quietly satisfying every comparison downstream.
+ */
 function suffixes(): string[] {
-  const found = [...workflow().matchAll(/^\s*suffix:\s*(\S+)\s*$/gm)].map((m) => m[1]!);
+  const found = [...workflow().matchAll(/"suffix":"([^"]+)"/g)].map((m) => m[1]!);
   assert.ok(found.length >= 3, `the release matrix names ${found.length} platforms`);
   return found;
 }

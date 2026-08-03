@@ -1,36 +1,75 @@
-# Tag-driven release, one job per platform.
+# Tag-driven release.
 #
-# Publishes, for every OS the tool supports: the installer, the **portable
+# Publishes, for every OS it builds: the installer, the **portable
 # executable**, and checksums. The portable binary is not a convenience — a
 # published desktop tool has to be runnable without an installer, admin rights
 # or prerequisites, and an installer may ship in addition, never instead.
+#
+# **Tagging publishes Windows only.** This tool has one user, on Windows, and
+# building three platforms every time meant maintaining and verifying two sets
+# of artifacts nobody downloaded. Linux and macOS are not gone: they are still
+# built by the same job from the same matrix, on demand.
+#
+# To publish them for a tag that already exists, run this workflow manually
+# (Actions → release → Run workflow), pick the **tag** as the ref, and set
+# platforms to `all`. The new assets are added to that tag's existing release
+# alongside the Windows ones. Because it must attach to a release, a manual run
+# has to target a tag — `plan` refuses a branch rather than building for an hour
+# and publishing nothing.
 name: release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Which platforms to build
+        type: choice
+        options: [windows, all]
+        default: windows
 
 permissions:
   contents: write
 
 jobs:
+  # Which platforms this run builds. A job rather than an inline expression
+  # because the matrix has to be chosen from an input, and a shell script that
+  # can be read top to bottom beats a nested ternary inside `fromJSON`.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - name: Refuse a manual run that could not publish
+        if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "Run this against a tag, not ${{ github.ref }}."
+          echo "The assets attach to that tag's release; from a branch there is nothing to attach to."
+          exit 1
+
+      - id: pick
+        shell: bash
+        run: |
+          set -euo pipefail
+          windows='{"os":"windows-latest","portable":"bugsleuth-app.exe","cli":"bugsleuth.exe","suffix":"windows-x64.exe"}'
+          linux='{"os":"ubuntu-latest","portable":"bugsleuth-app","cli":"bugsleuth","suffix":"linux-x64"}'
+          macos='{"os":"macos-latest","portable":"bugsleuth-app","cli":"bugsleuth","suffix":"macos-arm64"}'
+
+          # Empty on a tag push, which is the default path: Windows only.
+          if [ "${{ inputs.platforms }}" = "all" ]; then
+            echo "matrix=[$windows,$linux,$macos]" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=[$windows]" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
+
   build:
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            portable: bugsleuth-app.exe
-            cli: bugsleuth.exe
-            suffix: windows-x64.exe
-          - os: ubuntu-latest
-            portable: bugsleuth-app
-            cli: bugsleuth
-            suffix: linux-x64
-          - os: macos-latest
-            portable: bugsleuth-app
-            cli: bugsleuth
-            suffix: macos-arm64
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

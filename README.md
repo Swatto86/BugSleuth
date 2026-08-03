@@ -27,6 +27,14 @@ want the app in your start menu.
 
 Checksums for each platform are published beside them as `SHA256SUMS-*.txt`.
 
+**Releases publish the Windows assets.** Linux and macOS are still supported and
+still built from the same job — they are built on request rather than every
+time, because building and verifying three sets of artifacts for a tool with one
+user on Windows was work with nobody at the other end. To get them for a
+release: Actions → **release** → Run workflow, choose that release's **tag**, and
+set platforms to `all`. The assets appear on the existing release beside the
+Windows ones.
+
 **You also need at least one vendor CLI**, signed in, on your `PATH`: `claude`,
 `codex` or `kilo`. BugSleuth drives them under your existing subscription — it
 holds no API key and bills nothing itself. The Providers panel says which ones
