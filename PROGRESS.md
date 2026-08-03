@@ -1278,3 +1278,58 @@ temporal misses. And for every guard, find its nearest sibling doing the
 analogous job and diff their invariants, which recovers the five asymmetries.
 Neither has been implemented or measured; recording the estimate is not the
 same as earning it.
+
+## Graded by applying the report: 25 of 25 changed the code
+
+Every precision number so far came from judges reading findings. This one comes
+from a separate agent given the report and told to fix it, then made to prove
+the result built, passed its tests, and ran. A finding a fixer acts on is a
+weaker signal per finding than a sceptic told to default to "not real" — but it
+answers a question no panel can: does acting on the whole report leave a program
+that still works.
+
+**Setup.** OnTop again, at the commit after the 14-of-14 sweep — the same seven
+files and 3,534 lines, plus a documentation-only commit. Thirty-five findings
+this time against sixteen last time on the same code. What differs between the
+two runs is not recorded here and cannot be reconstructed from this session, so
+no rate should be read across them.
+
+**Disposition.** Ten of the thirty-five were duplicates of other findings and
+were absorbed by those fixes, leaving twenty-five distinct defects. Twenty-four
+were fixed as proposed. The twenty-fifth was fixed against its own advice. Every
+distinct finding produced a change; none was dismissed as not real.
+
+Twenty-six fix commits and a release commit sit in OnTop's history ending at
+`2aaa71a`, which corroborates the scale independently of the fixer's own report.
+The mapping of finding to commit does not survive anywhere and was not checked.
+
+### The one that was refused
+
+Finding 28 reported that startup mishandles unreadable settings and recommended
+continuing with defaults. The defect was real; the recommendation would have
+silently overwritten a user's settings with defaults on a transient read error.
+Startup now aborts and touches nothing.
+
+This is a failure mode the project had no data on. Both prior measurements asked
+only whether the defect is real. A finding can be correct and its remedy
+destructive, and 14 of 14 said nothing about that axis. One in twenty-five here
+is a sample of one, not a rate.
+
+### 29% of the report was redundant
+
+Ten duplicates in thirty-five, against two in sixteen last time. Whatever merges
+findings let a much larger share through at this volume. Duplicates cost the
+reader directly and are the cheapest thing on this page to fix.
+
+### What was verified, and what was not
+
+Formatting, clippy, 38 tests and an optimized build passed. The portable zip
+carries a non-empty executable and NSIS produced a setup exe. Version 0.1.1
+launched, shut down cleanly from the tray, and refused to start on malformed
+settings while leaving settings and autostart untouched.
+
+CI never ran: GitHub refused to allocate a runner for billing reasons. No tag
+was created and no release published. So the pipeline claim is untested on this
+commit, and everything above was observed on one machine.
+
+Recall is still 1 of 21. Nothing here touches it.
