@@ -313,7 +313,7 @@ pub async fn signin() -> crate::signin::SignIn {
         .iter()
         .map(|a| (*a).to_string())
         .collect();
-    crate::signin::one_shot(&binary.to_string_lossy(), &args, "claude").await
+    crate::signin::one_shot(&binary.to_string_lossy(), &args, "claude", str::to_string).await
 }
 
 #[cfg(test)]

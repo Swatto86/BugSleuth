@@ -151,3 +151,40 @@ mod tests {
         assert_eq!(assistant_text(stdout), "kept");
     }
 }
+
+#[cfg(test)]
+mod signin_extraction_tests {
+    use super::*;
+
+    /// Event noise alone is not an answer.
+    ///
+    /// Kilo prints NDJSON, so a sign-in check asking only "was stdout empty"
+    /// would call a session working on the strength of its own logging. The
+    /// probe pulls the assistant text out first, so a run that logged plenty
+    /// and said nothing is reported as "cannot tell" rather than as a pass.
+    #[test]
+    fn a_run_that_logged_but_never_answered_yields_no_text() {
+        let noise = concat!(
+            r#"{"type":"step_start","part":{"messageID":"m1"}}"#,
+            "\n",
+            r#"{"type":"step_finish","part":{"messageID":"m1","reason":"stop"}}"#,
+            "\n"
+        );
+        assert!(
+            assistant_text(noise).trim().is_empty(),
+            "event noise was read as an answer"
+        );
+    }
+
+    /// And a real answer survives, so the check is not vacuous either way.
+    #[test]
+    fn the_models_own_words_come_back() {
+        let answered = concat!(
+            r#"{"type":"step_start","part":{"messageID":"m1"}}"#,
+            "\n",
+            r#"{"type":"text","part":{"messageID":"m1","text":"OK"}}"#,
+            "\n"
+        );
+        assert_eq!(assistant_text(answered).trim(), "OK");
+    }
+}

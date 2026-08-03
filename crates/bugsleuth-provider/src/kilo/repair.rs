@@ -27,7 +27,7 @@ use crate::process::{self, Invocation};
 use super::{discover, events};
 
 /// Removes the repair's scratch directory however the function leaves.
-struct Cleanup(std::path::PathBuf);
+pub(super) struct Cleanup(pub(super) std::path::PathBuf);
 
 impl Drop for Cleanup {
     fn drop(&mut self) {
@@ -38,7 +38,7 @@ impl Drop for Cleanup {
 /// An empty directory nobody else is using, for a process that must reach
 /// nothing. `create_dir` rather than `create_dir_all`: failing when the path
 /// exists is what proves it is ours.
-fn empty_dir() -> Option<std::path::PathBuf> {
+pub(super) fn empty_dir() -> Option<std::path::PathBuf> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
 

@@ -266,11 +266,42 @@ pub async fn signin() -> crate::signin::SignIn {
     let Some(binary) = discover::resolve_binary() else {
         return crate::signin::SignIn::Failed("the kilo CLI could not be found".to_string());
     };
-    let args: Vec<String> = ["run", "--auto", "--pure", "--agent", "ask"]
-        .iter()
-        .map(|a| (*a).to_string())
-        .collect();
-    crate::signin::one_shot(&binary.to_string_lossy(), &args, "kilo").await
+    // Pointed at an empty private directory, exactly as the repair pass is and
+    // for the same reason: Kilo runs with `--auto`, so any tool call it makes is
+    // approved without asking, and it cannot be restricted for a single
+    // invocation. Without `--dir` this would run against whatever directory the
+    // app happened to start in — and Kilo resolves some paths from `--dir`
+    // rather than the process cwd, so pinning it is the only way to be sure.
+    let Some(sandbox) = repair::empty_dir() else {
+        return crate::signin::SignIn::Failed(
+            "could not create a private directory to ask Kilo from".to_string(),
+        );
+    };
+    let _guard = repair::Cleanup(sandbox.clone());
+
+    // The same flags a sweep uses, so this checks what a sweep would do.
+    let args: Vec<String> = [
+        "run",
+        "--auto",
+        "--pure",
+        "--format",
+        "json",
+        "--agent",
+        "ask",
+        "--dir",
+        &sandbox.to_string_lossy(),
+    ]
+    .iter()
+    .map(|a| (*a).to_string())
+    .collect();
+
+    crate::signin::one_shot(
+        &binary.to_string_lossy(),
+        &args,
+        "kilo",
+        events::assistant_text,
+    )
+    .await
 }
 
 #[cfg(test)]

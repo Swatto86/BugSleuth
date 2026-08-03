@@ -93,7 +93,17 @@ pub async fn check_all() -> Vec<(&'static str, SignIn)> {
 /// Shared by the three adapters so they cannot drift in how an answer is
 /// interpreted. The only difference between them is which flags mean "one shot,
 /// print it, and stop".
-pub(crate) async fn one_shot(binary: &str, args: &[String], vendor: &'static str) -> SignIn {
+pub(crate) async fn one_shot(
+    binary: &str,
+    args: &[String],
+    vendor: &'static str,
+    // How to get the model's actual words out of whatever the CLI printed.
+    // Kilo answers in NDJSON, so "stdout was not empty" is satisfied by its own
+    // event logging even when no answer was produced — which would report a
+    // session as working on the strength of its own noise, exactly the rounding
+    // `Empty` exists to prevent. The others print the answer directly.
+    answer: fn(&str) -> String,
+) -> SignIn {
     let outcome = crate::process::run(Invocation {
         binary,
         args,
@@ -121,7 +131,7 @@ pub(crate) async fn one_shot(binary: &str, args: &[String], vendor: &'static str
                 message,
             });
         }
-        Ok(out.stdout)
+        Ok(answer(&out.stdout))
     });
 
     classify(text, TIMEOUT.as_secs())
