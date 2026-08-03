@@ -68,6 +68,25 @@ describe("BugSleuth desktop app", () => {
     console.log(`[diagnostic] source head: ${source.slice(0, 300).replace(/\s+/g, " ")}
 `);
 
+    // Which browsing context are we actually in, and is this a race?
+    //
+    // `about:blank` with an empty document has three possible causes and they
+    // need different fixes: the driver attached to a second, blank window
+    // handle; the webview had not navigated yet when we looked; or the page
+    // genuinely never loads. These three lines separate them.
+    const handles = await browser.getWindowHandles().catch(() => [] as string[]);
+    console.log(`[diagnostic] window handles: ${handles.length} ${JSON.stringify(handles)}`);
+    for (const handle of handles) {
+      await browser.switchToWindow(handle).catch(() => undefined);
+      const u = await browser.getUrl().catch(() => "?");
+      const len = (await browser.getPageSource().catch(() => "")).length;
+      console.log(`[diagnostic]   handle ${handle}: url=${u} source=${len} chars`);
+    }
+    await new Promise((r) => setTimeout(r, 8000));
+    const later = await browser.getUrl().catch(() => "?");
+    const laterLen = (await browser.getPageSource().catch(() => "")).length;
+    console.log(`[diagnostic] after 8s: url=${later} source=${laterLen} chars`);
+
     await browser.waitUntil(
       async () => (await (await $$("#app")).length) > 0,
       {

@@ -17,29 +17,22 @@ mod settings;
 mod tray;
 
 pub fn run() {
-    // One instance, because settings are one file.
-    //
-    // Every instance loads the whole settings object at startup and writes the
-    // whole of it back on any change, so two running at once silently overwrite
-    // each other — and whichever quits last wins. That is not hypothetical: a
-    // portable copy and an installed copy were open together, and the reviewed
-    // repository the user had chosen was replaced by the other instance's stale
-    // idea of it, with nothing said. A second launch now reveals the window
-    // that already exists instead of starting a rival.
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            reveal(app);
-        }))
-        .plugin(tauri_plugin_dialog::init());
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
 
-    // Test-only, compiled in solely for the acceptance suite. Without it the
-    // app exposes no automation endpoint at all — WebDriver attaches to a blank
-    // webview and every spec fails with an empty document. With it in a
-    // published build the app would offer that surface to anything on the
-    // machine, so it is a non-default feature and the release workflow asserts
-    // the shipped binary does not carry it.
-    #[cfg(feature = "wdio")]
-    let builder = builder.plugin(tauri_plugin_wdio::init());
+    // One instance, because the settings are one file. Every instance loads the
+    // whole settings object at startup and writes the whole of it back on any
+    // change, so two running at once silently overwrite each other and
+    // whichever quits last wins — a portable copy and an installed copy were
+    // open together, and the repository the user had chosen to review was
+    // replaced by the other's stale idea of it, with nothing said.
+    //
+    // The acceptance suite runs against this, guard and all, rather than
+    // against a specially-built binary: it kills any stray instance first. A
+    // test build that differs from the shipped one is a test of something
+    // nobody ships.
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        reveal(app);
+    }));
 
     builder
         .setup(|app| {

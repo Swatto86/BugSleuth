@@ -114,8 +114,11 @@ export const config: WebdriverIO.Config = {
   reporters: ["spec"],
   mochaOpts: {
     ui: "bdd",
-    // A Tauri window plus a WebView2 cold start is not fast.
-    timeout: 120_000,
+    // A Tauri window plus a WebView2 cold start is not fast, and one spec runs
+    // a *real* review — a genuine model call against a real repository, which
+    // this project documents as taking minutes. 120s passed it sometimes and
+    // failed it others, which is the worst kind of test.
+    timeout: 420_000,
   },
 
   // tauri-driver listens here and proxies to msedgedriver.
@@ -128,6 +131,11 @@ export const config: WebdriverIO.Config = {
       // standard WebDriver one, so it is absent from WebdriverIO's types.
       "tauri:options": { application },
       browserName: "wry",
+      // WebdriverIO 9 adds `webSocketUrl: true` to every capability set unless
+      // told otherwise, asking for a WebDriver BiDi session. tauri-driver
+      // rewrites only `tauri:options` and proxies everything else verbatim, so
+      // that flag reaches msedgedriver on a path nobody tests.
+      "wdio:enforceWebDriverClassic": true,
     },
   ],
 
@@ -149,6 +157,16 @@ ${String(error instanceof Error ? error.message : error)}
 `);
       process.exit(1);
     }
+    // Any copy the user left open would win the single-instance guard, and the
+    // driver-launched app would exit on the spot — a session attached to
+    // nothing, which is indistinguishable from the app being broken. The suite
+    // drives the shipped binary, guard included, so it clears the field first.
+    spawn("taskkill", ["/IM", path.basename(application), "/T", "/F"], {
+      shell: true,
+      stdio: "ignore",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
     tauriDriver = spawn(
       "tauri-driver",
       ["--native-driver", path.resolve(root, ".webdriver/msedgedriver.exe")],

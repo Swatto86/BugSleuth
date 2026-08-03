@@ -22,7 +22,6 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"
 tokio = { workspace = true }
-tauri-plugin-wdio = { version = "1.2.0", optional = true }
 
 [lints]
 workspace = true
@@ -38,4 +37,3 @@ workspace = true
 # the release workflow asserts the published binary does not carry it.
 [features]
 default = []
-wdio = ["dep:tauri-plugin-wdio"]

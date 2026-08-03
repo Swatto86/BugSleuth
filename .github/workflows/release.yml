@@ -92,13 +92,12 @@ jobs:
             cp "$src" "$out/${pair##*:}"
           done
 
-          # The published binary must carry no automation surface. `wdio` is a
-          # non-default feature precisely so this holds, and it is asserted
-          # rather than assumed: shipping it would let anything on the machine
-          # drive the app.
-          if strings -a "target/release/${{ matrix.portable }}" 2>/dev/null | grep -qi "tauri-plugin-wdio"; then
-            echo "the published binary carries WebDriver support"; exit 1
-          fi
+          # There is no automation plugin to check for any more. The acceptance
+          # suite turned out not to need one — tauri-driver drives the shipped
+          # binary directly — so the feature, the plugin and the test-only
+          # capability were deleted rather than left in place with a guard
+          # around them. A check that can no longer fail is worse than no
+          # check: it reads as protection and is not.
 
           bundles=$(find target/release/bundle -type f \
             \( -name '*.exe' -o -name '*.msi' -o -name '*.deb' -o -name '*.AppImage' -o -name '*.dmg' \) 2>/dev/null || true)
