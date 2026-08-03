@@ -22,6 +22,8 @@ export interface ControlDeps {
     theme: HTMLSelectElement;
     repo: HTMLInputElement;
     scope: HTMLInputElement;
+    proveEnabled: HTMLInputElement;
+    proveSettings: HTMLDivElement;
     proveTop: HTMLInputElement;
     testCommand: HTMLInputElement;
     reuseCompleted: HTMLInputElement;
@@ -62,8 +64,28 @@ export function bindControls(deps: ControlDeps): void {
     settings().scope = ui.scope.value;
     refresh();
   });
+  // Proof is a decision, so it gets a switch. It used to be expressed only as
+  // a number that meant "off" at zero — and a number field showing 0 does not
+  // read as off, it reads as a number you have not filled in yet. The first
+  // person to open the app could not tell whether proving was on, or how to
+  // turn it off, which matters more here than for most settings: proving runs
+  // the reviewed repository's own build and test commands on this machine.
+  const showProof = () => {
+    const on = ui.proveEnabled.checked;
+    ui.proveSettings.classList.toggle("hidden", !on);
+    // The count is the switch's state as far as Rust is concerned: zero is off.
+    settings().prove_top = on ? boundedProveTop(ui.proveTop.value) || 1 : 0;
+  };
+
+  ui.proveEnabled.addEventListener("change", () => {
+    showProof();
+    refresh();
+  });
+
   ui.proveTop.addEventListener("input", () => {
-    settings().prove_top = boundedProveTop(ui.proveTop.value);
+    settings().prove_top = ui.proveEnabled.checked
+      ? boundedProveTop(ui.proveTop.value) || 1
+      : 0;
     refresh();
   });
   ui.testCommand.addEventListener("input", () => {

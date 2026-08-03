@@ -49,6 +49,8 @@ const ui = {
   matrixBody: el<HTMLTableSectionElement>("matrix-body"),
   addModel: el<HTMLButtonElement>("add-model"),
   uncovered: el<HTMLDivElement>("uncovered-warning"),
+  proveEnabled: el<HTMLInputElement>("prove-enabled"),
+  proveSettings: el<HTMLDivElement>("prove-settings"),
   proveTop: el<HTMLInputElement>("prove-top"),
   testCommand: el<HTMLInputElement>("test-command"),
   reuseCompleted: el<HTMLInputElement>("reuse-completed"),
@@ -321,7 +323,12 @@ async function boot(): Promise<void> {
   ui.theme.value = settings.theme;
   ui.repo.value = settings.repo;
   ui.scope.value = settings.scope;
-  ui.proveTop.value = String(settings.prove_top);
+  // A stored zero means proving is off; the switch says so and the fields that
+  // only matter when it is on are hidden. Showing "0" in a number box was how
+  // the first person to open this could not tell whether it was on.
+  ui.proveEnabled.checked = settings.prove_top > 0;
+  ui.proveSettings.classList.toggle("hidden", settings.prove_top === 0);
+  ui.proveTop.value = String(Math.max(1, settings.prove_top));
   ui.testCommand.value = settings.test_command;
   ui.reuseCompleted.checked = settings.reuse_completed;
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
