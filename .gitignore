@@ -20,3 +20,8 @@
 # Downloaded WebDriver binary, version-matched to the installed WebView2
 # runtime. A ~40 MB tool, not source. scripts/setup-e2e.ps1 fetches it.
 /.webdriver
+
+# A stray clone landed here once, from a `git clone` with no target directory,
+# and was committed as a gitlink to a public repository. It is a sibling repo,
+# never a part of this one.
+windows-rdp-keepalive/
