@@ -368,7 +368,7 @@ dependencies = [
 
 [[package]]
 name = "bugsleuth-app"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "bugsleuth-domain",
@@ -384,7 +384,7 @@ dependencies = [
 
 [[package]]
 name = "bugsleuth-cli"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "bugsleuth-domain",
@@ -400,7 +400,7 @@ dependencies = [
 
 [[package]]
 name = "bugsleuth-domain"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "serde",
  "serde_json",
@@ -409,7 +409,7 @@ dependencies = [
 
 [[package]]
 name = "bugsleuth-engine"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "bugsleuth-domain",
@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "bugsleuth-judge"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "bugsleuth-domain",
  "serde",
@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "bugsleuth-provider"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "bugsleuth-domain",
  "serde",
@@ -443,7 +443,7 @@ dependencies = [
 
 [[package]]
 name = "bugsleuth-verify"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "bugsleuth-domain",
  "serde_json",
