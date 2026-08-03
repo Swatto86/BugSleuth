@@ -50,7 +50,8 @@
     ],
     "resources": [],
     "shortDescription": "Adversarial cross-vendor code review",
-    "longDescription": "Runs several AI coding CLIs over a repository with different review mandates, merges what they find, and proves the top defects with failing tests."
+    "longDescription": "Runs several AI coding CLIs over a repository with different review mandates, merges what they find, and proves the top defects with failing tests.",
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "updater": {

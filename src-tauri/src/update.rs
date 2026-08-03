@@ -43,7 +43,10 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<Available>
             notes: update.body.clone().unwrap_or_default(),
         })),
         Ok(None) => Ok(None),
-        Err(error) => Err(format!("could not check for updates: {error}")),
+        // The reason only. The window supplies the sentence around it — both
+        // ends adding one produced "Could not check for updates: could not
+        // check for updates: ...", which reads like the thing failed twice.
+        Err(error) => Err(error.to_string()),
     }
 }
 
@@ -60,13 +63,13 @@ pub async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     let update = updater
         .check()
         .await
-        .map_err(|e| format!("could not check for updates: {e}"))?
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| "there is no update to install".to_string())?;
 
     update
         .download_and_install(|_chunk, _total| {}, || {})
         .await
-        .map_err(|e| format!("the update could not be installed: {e}"))?;
+        .map_err(|e| e.to_string())?;
 
     // Nothing after this runs: the process is replaced by the new build.
     app.restart();
@@ -97,6 +100,16 @@ mod tests {
         assert!(
             endpoint.starts_with("https://"),
             "the update manifest must not be fetched over plain HTTP"
+        );
+
+        // Tauri v2 produces no signature at all without this, whatever signing
+        // keys are present. The release then publishes an installer with no
+        // manifest beside it and no error - which is exactly how v0.2.9 failed,
+        // and it cost a release to find.
+        assert_eq!(
+            config["bundle"]["createUpdaterArtifacts"].as_bool(),
+            Some(true),
+            "the bundle does not create updater artifacts, so no update can ever be signed"
         );
     }
 }
