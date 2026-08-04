@@ -275,13 +275,19 @@ test("every control the matrix rebuilds can be found again afterwards", () => {
   // covered three of six, and BugSleuth found the rest: typing a model id while
   // the vendor catalogue finished loading in the background rebuilt the table
   // mid-keystroke, on the first thing anyone does after opening the app.
-  const view = fs.readFileSync(path.join(here, "view.ts"), "utf8");
+  // Both files, because the row is built across both: `view.ts` assembles it
+  // and `pickers.ts` builds the cells. Reading only `view.ts` found three of
+  // six the moment the pickers moved out, and said so — a scan scoped to one
+  // file silently shrinks when the code it watches is split.
+  const source = ["view.ts", "pickers.ts"]
+    .map((name) => fs.readFileSync(path.join(here, name), "utf8"))
+    .join("\n");
 
   // Anything focusable that the row builder creates.
-  const created = [...view.matchAll(/createElement\("(input|select|button)"\)/g)].length;
+  const created = [...source.matchAll(/createElement\("(input|select|button)"\)/g)].length;
   assert.ok(created >= 6, `found only ${created} focusable controls in the row builder`);
 
-  const keyed = [...view.matchAll(/dataset\["focusKey"\]/g)].length;
+  const keyed = [...source.matchAll(/dataset\["focusKey"\]/g)].length;
   assert.ok(
     keyed >= created - 1,
     `${created} focusable controls are rebuilt and only ${keyed} carry a focus key, ` +

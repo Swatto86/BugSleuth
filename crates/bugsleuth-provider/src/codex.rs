@@ -251,6 +251,15 @@ fn build_args(spec: &Invoke<'_>, schema: &Path, answer: &Path) -> Vec<String> {
     args
 }
 
+/// Where the Codex CLI is, if it is installed.
+///
+/// Exposed for the model catalogue, which needs the binary without wanting
+/// anything else this module does. Mirrors `kilo::binary_path`.
+#[must_use]
+pub fn binary_path() -> Option<PathBuf> {
+    discover::resolve_binary()
+}
+
 /// Check the CLI exists and can run. Free — starts no model.
 pub async fn probe() -> Result<String, ProviderError> {
     let binary = discover::resolve_binary().ok_or_else(not_found)?;

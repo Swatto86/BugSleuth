@@ -245,6 +245,10 @@ rust merge::tests::sweeps_of_two_different_commits_are_called_out_in_the_merged_
 rust merge::tests::the_merged_report_states_the_methods_blind_spots_too
 rust merge::tests::the_same_defect_from_two_vendors_merges_and_records_agreement
 rust merging_reduces_the_list_without_collapsing_it
+rust models::codex_catalogue::tests::a_hidden_model_is_not_offered
+rust models::codex_catalogue::tests::effort_levels_are_per_model_and_not_all_the_same
+rust models::codex_catalogue::tests::leading_output_before_the_json_does_not_defeat_it
+rust models::codex_catalogue::tests::output_that_is_not_a_catalogue_is_refused_rather_than_read_as_empty
 rust models::kilo_catalogue::tests::a_record_whose_json_is_unreadable_keeps_its_model_selectable
 rust models::kilo_catalogue::tests::each_model_gets_its_own_efforts_rather_than_the_vendors
 rust models::kilo_catalogue::tests::the_banner_is_not_mistaken_for_a_model
@@ -252,7 +256,7 @@ rust models::kilo_catalogue::tests::the_byok_flag_is_read_per_record_and_does_no
 rust models::kilo_catalogue::tests::unknown_effort_names_sort_after_known_ones_rather_than_at_random
 rust models::tests::a_kilo_model_billed_to_your_own_plan_is_not_filed_under_the_subscription
 rust models::tests::efforts_are_recorded_per_model_and_only_where_the_model_has_any
-rust models::tests::kilo_has_no_vendor_wide_effort_list_because_it_has_no_such_thing
+rust models::tests::only_claude_has_a_vendor_wide_effort_list
 rust one_defect_anchored_five_lines_apart_by_two_vendors_still_merges
 rust orchestrate::persist::tests::a_failed_sweep_is_retried_not_reused
 rust orchestrate::persist::tests::a_legacy_file_belonging_to_a_different_model_is_not_adopted

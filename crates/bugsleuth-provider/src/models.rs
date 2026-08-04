@@ -20,13 +20,14 @@
 //! usable, because a curated list goes stale and a tool that refuses a valid
 //! model is worse than one that offers an incomplete menu.
 
+mod codex_catalogue;
 mod kilo_catalogue;
 
 use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::error::ProviderError;
-use crate::{kilo, process};
+use crate::{codex, kilo, process};
 
 /// A named set of models shown together.
 ///
@@ -62,8 +63,13 @@ pub fn efforts(vendor: &str) -> &'static [&'static str] {
     match vendor {
         // `claude --effort <level>` — the CLI's own flag, same for every model.
         "claude" => &["low", "medium", "high", "xhigh", "max"],
-        // `codex -c model_reasoning_effort=<level>`, likewise.
-        "codex" => &["low", "medium", "high", "xhigh", "max"],
+        // Codex takes `-c model_reasoning_effort=<level>`, but which levels are
+        // accepted belongs to the model, not the CLI: `gpt-5.6-sol` takes
+        // `ultra` and `gpt-5.5` stops at `xhigh`. The vendor-wide list that
+        // used to be here offered `max` on models that reject it and hid
+        // `ultra` entirely — and it took precedence over the per-model answer,
+        // so returning it would make the catalogue's detail dead data.
+        "codex" => &[],
         // Kilo passes `--variant` straight through to whichever provider is
         // behind the model, so there is no vendor-wide set — most of its models
         // accept none at all, and some accept `instant`/`thinking` rather than a
@@ -86,7 +92,7 @@ const CODEX_MODELS: &[&str] = &["gpt-5.6-codex", "gpt-5.6-sol"];
 pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
     match vendor {
         "claude" => Ok(fixed("Claude", CLAUDE_MODELS)),
-        "codex" => Ok(fixed("Codex", CODEX_MODELS)),
+        "codex" => Ok(codex_models().await),
         "kilo" => kilo_models().await,
         _ => Err(ProviderError::NotFound {
             vendor: "unknown",
@@ -102,6 +108,47 @@ fn fixed(label: &str, models: &[&str]) -> VendorCatalogue {
             models: models.iter().map(|m| (*m).to_string()).collect(),
         }],
         efforts_by_model: BTreeMap::new(),
+    }
+}
+
+/// Ask Codex for its catalogue, falling back to the known ids.
+///
+/// Never fails: a missing CLI, a timeout or an unparseable response all leave
+/// the fallback list, because a menu that empties itself when a command fails
+/// looks identical to a vendor with no models. What is lost in that case is the
+/// per-model effort detail, which is why the fallback is the smaller claim.
+async fn codex_models() -> VendorCatalogue {
+    let Some(binary) = codex::binary_path() else {
+        return fixed("Codex", CODEX_MODELS);
+    };
+    let output = process::run(process::Invocation {
+        binary: &binary.to_string_lossy(),
+        // Under `debug`, which is why this looked absent: neither `codex --help`
+        // nor `codex models` mentions it.
+        args: &["debug".to_string(), "models".to_string()],
+        cwd: &std::env::temp_dir(),
+        stdin: None,
+        env: &[],
+        // Reading a catalogue, not starting a model. Longer than this and
+        // something is wrong; a dropdown must not hang open waiting.
+        timeout: Duration::from_secs(60),
+        what: "codex debug models",
+    })
+    .await;
+
+    let Ok(output) = output else {
+        return fixed("Codex", CODEX_MODELS);
+    };
+    let Some(entries) = codex_catalogue::parse(&output.stdout) else {
+        return fixed("Codex", CODEX_MODELS);
+    };
+
+    VendorCatalogue {
+        groups: vec![ModelGroup {
+            label: "Codex".to_string(),
+            models: entries.iter().map(|e| e.id.clone()).collect(),
+        }],
+        efforts_by_model: codex_catalogue::efforts(&entries),
     }
 }
 
@@ -241,14 +288,19 @@ ollama/qwen3-coder
     }
 
     #[test]
-    fn kilo_has_no_vendor_wide_effort_list_because_it_has_no_such_thing() {
-        // Claude and Codex take an effort flag that means the same for every
-        // model. Kilo forwards `--variant` to the provider, so the answer is
-        // the model's, and claiming otherwise would offer levels that get
-        // rejected.
-        assert!(efforts("kilo").is_empty());
+    fn only_claude_has_a_vendor_wide_effort_list() {
+        // This test used to assert that Codex had one too, which was wrong.
+        // `codex debug models` reports the accepted levels per model and they
+        // differ: `gpt-5.6-sol` takes `ultra`, `gpt-5.5` stops at `xhigh`. A
+        // vendor-wide list offered levels some models reject, hid `ultra`
+        // entirely, and — because the window prefers the vendor-wide answer —
+        // would have made the per-model catalogue dead data.
         assert!(!efforts("claude").is_empty());
-        assert!(!efforts("codex").is_empty());
+
+        // Both of these answer per model instead, in `efforts_by_model`.
+        assert!(efforts("codex").is_empty());
+        assert!(efforts("kilo").is_empty());
+
         assert!(efforts("nonesuch").is_empty());
     }
 }

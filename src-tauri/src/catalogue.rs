@@ -66,16 +66,22 @@ mod tests {
 
     #[test]
     fn a_vendor_answers_about_effort_either_for_the_cli_or_for_each_model() {
-        // Every vendor must have *an* answer, but not the same kind. Claude and
-        // Codex take a CLI flag that means the same for every model. Kilo
-        // forwards `--variant` to whichever provider is behind the model, so its
-        // answer is per model and a vendor-wide list would be a fiction.
+        // Every vendor must have *an* answer, but not the same kind. Only
+        // Claude's is CLI-wide: its flag means the same for every model. Kilo
+        // forwards `--variant` to whichever provider is behind the model, and
+        // Codex reports the accepted levels per model too — `gpt-5.6-sol` takes
+        // `ultra`, `gpt-5.5` stops at `xhigh`.
         //
+        // This test asserted Codex was CLI-wide until the catalogue was read
+        // and said otherwise. It is listed here rather than inferred, so adding
+        // a vendor forces a deliberate answer instead of defaulting to one.
+        const PER_MODEL: [&str; 2] = ["kilo", "codex"];
+
         // What must never happen is a vendor with neither, which would render a
         // control that does nothing.
         for vendor in VENDORS {
             let cli_wide = !models::efforts(vendor).is_empty();
-            let per_model = vendor == "kilo";
+            let per_model = PER_MODEL.contains(&vendor);
             assert!(
                 cli_wide != per_model,
                 "{vendor} must answer about effort exactly one way, not both or neither"
