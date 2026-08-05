@@ -97,6 +97,75 @@ fn dropping_a_worktree_deletes_it_even_with_deeply_nested_build_output() {
     let _ = std::fs::remove_dir_all(long_path(&repo));
 }
 
+/// A directory link inside a repository, or `None` when the OS refuses.
+///
+/// Mirrors `link_dir` in `anchor/tests.rs`: a Windows junction, which needs no
+/// elevation, or a Unix symlink.
+#[cfg(windows)]
+fn link_dir(target: &Path, at: &Path) -> Option<()> {
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(at)
+        .arg(target)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .ok()?;
+    status.success().then_some(())
+}
+#[cfg(unix)]
+fn link_dir(target: &Path, at: &Path) -> Option<()> {
+    std::os::unix::fs::symlink(target, at).ok()
+}
+
+/// A committed `.bugsleuth-worktrees` link must not let orphan cleanup reach
+/// outside the repository and recursively delete an attacker-chosen directory.
+#[test]
+fn worktree_creation_refuses_a_linked_container_without_deleting_its_target() {
+    let Some(repo) = temp_repo("linked-container") else {
+        // No usable git here; the pure-logic tests still cover the rest.
+        return;
+    };
+
+    // A directory outside the repository, holding something worth losing.
+    let target = std::env::temp_dir()
+        .join("bugsleuth-worktree-link-target")
+        .join(format!("{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(long_path(&target));
+    let victim = target.join("victim");
+    if std::fs::create_dir_all(&victim).is_err() {
+        let _ = std::fs::remove_dir_all(long_path(&repo));
+        return;
+    }
+    let keep = victim.join("keep.txt");
+    let _ = std::fs::write(&keep, "do not delete\n");
+
+    // Point the worktree container at that external directory. Git never lists
+    // its children as worktrees, so before the fix each is treated as wreckage
+    // and recursively removed.
+    let container = repo.join(".bugsleuth-worktrees");
+    let Some(()) = link_dir(&target, &container) else {
+        eprintln!("skipped: this OS would not create a directory link");
+        let _ = std::fs::remove_dir_all(long_path(&repo));
+        let _ = std::fs::remove_dir_all(long_path(&target));
+        return;
+    };
+
+    let result = Worktree::create(&repo, "HEAD", "security");
+    assert!(
+        matches!(result, Err(WorktreeError::UnsafeWorktreeRoot { .. })),
+        "a linked worktree container was accepted instead of refused: {result:?}"
+    );
+    assert!(
+        keep.exists(),
+        "orphan cleanup followed the link and deleted the external target at {}",
+        keep.display()
+    );
+
+    let _ = std::fs::remove_dir_all(long_path(&repo));
+    let _ = std::fs::remove_dir_all(long_path(&target));
+}
+
 #[test]
 fn creating_a_worktree_outside_a_git_repository_is_refused() {
     let not_a_repo = std::env::temp_dir().join("bugsleuth-not-a-repo");

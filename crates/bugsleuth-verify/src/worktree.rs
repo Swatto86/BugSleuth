@@ -18,6 +18,11 @@ pub enum WorktreeError {
     Git { operation: String, message: String },
     #[error("could not run git — is it installed and on PATH? ({0})")]
     GitMissing(String),
+    #[error(
+        "refusing to use worktree directory `{path}` because it resolves outside the repository \
+         or is a link/reparse point"
+    )]
+    UnsafeWorktreeRoot { path: String },
 }
 
 /// A checkout that deletes itself.
@@ -44,9 +49,24 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 impl Worktree {
     /// Create a worktree of `repo` at `commit`, on a new throwaway branch.
     pub fn create(repo: &Path, commit: &str, label: &str) -> Result<Self, WorktreeError> {
+        // Resolve the repository to its real location once, up front. Every
+        // path below is then built from a canonical root, so nothing that
+        // follows can be redirected by a component the reviewed repository
+        // controls. A path that does not exist at all is simply not a repo.
+        let repo = repo
+            .canonicalize()
+            .map_err(|_| WorktreeError::NotAGitRepo(repo.display().to_string()))?;
         if !repo.join(".git").exists() {
             return Err(WorktreeError::NotAGitRepo(repo.display().to_string()));
         }
+
+        // The reviewed repository controls `.bugsleuth-worktrees`, so a
+        // committed symlink or Windows junction there could point our cleanup
+        // and `git worktree add` at an attacker-chosen directory. Validate the
+        // container before it is read, deleted from, or written to — the
+        // deletion sink (`remove`, reached from here, `remove_orphans`, and
+        // `Drop`) recursively removes whatever it is handed.
+        let root = checked_worktree_root(&repo)?;
 
         // Unique per process. The path used to be `<slug>` alone, so two
         // BugSleuth runs against one repository chose the same directory and
@@ -60,20 +80,20 @@ impl Worktree {
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
         let branch = format!("bugsleuth/{slug}");
-        let path = repo.join(".bugsleuth-worktrees").join(&slug);
+        let path = root.join(&slug);
 
         // Only this run's own path, which no other process can now be using.
-        remove(repo, &path);
-        let _ = git(repo, &["branch", "-D", &branch]);
+        remove(&repo, &path);
+        let _ = git(&repo, &["branch", "-D", &branch]);
 
         // A run killed rather than dropped leaves a directory behind, and the
         // unique path above means nothing will ever reuse and clean it. Git is
         // the authority on which of them are still worktrees: anything under
         // our directory that it no longer lists is wreckage.
-        remove_orphans(repo);
+        remove_orphans(&repo);
 
         git(
-            repo,
+            &repo,
             &[
                 "worktree",
                 "add",
@@ -85,11 +105,7 @@ impl Worktree {
             ],
         )?;
 
-        Ok(Self {
-            repo: repo.to_path_buf(),
-            path,
-            branch,
-        })
+        Ok(Self { repo, path, branch })
     }
 
     pub fn path(&self) -> &Path {
@@ -173,6 +189,56 @@ fn remove(repo: &Path, path: &Path) {
 ///
 /// Best effort throughout: failing to tidy up is not a reason to refuse to
 /// start a review.
+/// Validate the worktree container before anything reads from, deletes under,
+/// or writes into it, and fail closed on anything that is not the real
+/// `.bugsleuth-worktrees` directory beneath the canonical repository.
+///
+/// `repo` is expected to already be canonical. The container is repository
+/// controlled, so a committed symlink or Windows junction there could redirect
+/// `read_dir`, `remove_dir_all`, and `git worktree add` at a directory outside
+/// the repository, which would then be deleted with the user's permissions.
+/// A missing container is fine — git creates it. An existing one must be a
+/// genuine directory (not a symlink or reparse point) whose resolved location
+/// is exactly the expected child of the repository.
+fn checked_worktree_root(repo: &Path) -> Result<PathBuf, WorktreeError> {
+    let root = repo.join(".bugsleuth-worktrees");
+    let unsafe_root = || WorktreeError::UnsafeWorktreeRoot {
+        path: root.display().to_string(),
+    };
+    match std::fs::symlink_metadata(&root) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(root.clone()),
+        Err(_) => Err(unsafe_root()),
+        Ok(metadata) => {
+            let resolved = root.canonicalize().map_err(|_| unsafe_root())?;
+            let expected = repo.join(".bugsleuth-worktrees");
+            if !metadata.is_dir()
+                || metadata.file_type().is_symlink()
+                || is_reparse_point(&metadata)
+                || resolved != expected
+            {
+                return Err(unsafe_root());
+            }
+            Ok(root.clone())
+        }
+    }
+}
+
+/// Whether a directory entry is a Windows reparse point (a junction, mount
+/// point, or symlink). `is_symlink()` alone does not catch junctions, which
+/// need no elevation to create and would otherwise pass the directory check.
+/// Always false off Windows.
+#[cfg(windows)]
+fn is_reparse_point(metadata: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(not(windows))]
+fn is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
+    false
+}
+
 fn remove_orphans(repo: &Path) {
     let Ok(listing) = git(repo, &["worktree", "list", "--porcelain"]) else {
         return;
