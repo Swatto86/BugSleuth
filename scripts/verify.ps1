@@ -34,9 +34,31 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
-$bash = Get-Command bash -ErrorAction SilentlyContinue
+# Git's own bash, not whatever `bash` PATH happens to offer.
+#
+# On a machine with WSL enabled, `bash` on PATH is the WSL launcher in
+# WindowsApps. Handed this gate it answers "Windows Subsystem for Linux has no
+# installed distributions" and exits 1, so the gate looks broken when nothing
+# is wrong with it — and the failure says nothing about the shell being the
+# problem. Git Bash is also the shell the pre-push hook and the CI matrix
+# already use on this platform, which is the point: one definition of green,
+# reached the same way everywhere.
+function Find-GitBash {
+    $git = (Get-Command git -ErrorAction SilentlyContinue).Source
+    if ($git) {
+        # <git>\cmd\git.exe and <git>\bin\git.exe both put bash at <git>\bin.
+        $candidate = Join-Path (Split-Path -Parent (Split-Path -Parent $git)) 'bin\bash.exe'
+        if (Test-Path $candidate) { return $candidate }
+    }
+    foreach ($found in @(Get-Command bash -All -ErrorAction SilentlyContinue)) {
+        if ($found.Source -notmatch '\\WindowsApps\\') { return $found.Source }
+    }
+    return $null
+}
+
+$bash = Find-GitBash
 if (-not $bash) {
-    throw 'bash was not found. It ships with Git for Windows; install Git or put its usr\bin on PATH.'
+    throw 'Git Bash was not found. It ships with Git for Windows; install Git or put its bin\bash.exe on PATH.'
 }
 
 $gate = (Join-Path $PSScriptRoot 'verify.sh') -replace '\\', '/'
@@ -45,7 +67,7 @@ if ($Package) { $gateArgs += '--package' }
 
 Push-Location $root
 try {
-    & $bash.Source @gateArgs
+    & $bash @gateArgs
     if ($LASTEXITCODE -ne 0) { throw "the gate failed (exit $LASTEXITCODE)" }
 }
 finally {
