@@ -17,6 +17,7 @@ use crate::settings::{self, Settings};
 
 pub mod apply;
 pub mod run;
+pub mod saved;
 pub use run::RunControl;
 
 /// Errors cross to the frontend as plain strings. The webview cannot act on a

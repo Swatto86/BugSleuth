@@ -33,6 +33,7 @@ const ui = {
   proveTop: el<HTMLInputElement>("prove-top"),
   testCommand: el<HTMLInputElement>("test-command"),
   reuseCompleted: el<HTMLInputElement>("reuse-completed"),
+  clearSaved: el<HTMLButtonElement>("clear-saved"),
   triageSeverities: el<HTMLInputElement>("triage-severities"),
   output: el<HTMLPreElement>("output"),
   findings: el<HTMLDivElement>("findings"),

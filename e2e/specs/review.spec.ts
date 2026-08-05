@@ -109,6 +109,11 @@ describe("BugSleuth desktop app", () => {
     });
     await expect($("h1")).toHaveText("BugSleuth");
     await expect($("#run")).toBeExisting();
+    // The two controls that reach a command which writes or deletes. Neither is
+    // exercised further here — one edits the repository and the other throws
+    // away paid-for sweeps — but their absence from the packaged window would
+    // mean a command reachable from nowhere.
+    await expect($("#clear-saved")).toBeExisting();
   });
 
   it("reports which provider CLIs can be started", async () => {

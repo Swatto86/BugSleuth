@@ -140,6 +140,10 @@ function renderPlanSummary(): void {
   // apply is rewriting, and the report would describe code that no longer
   // exists. Rust refuses it too — this only saves the click.
   ui.run.disabled = isRunning() || isApplying() || !canRun(settings);
+  // Same reason, and the same defect if it is left out: Rust refuses to delete
+  // while it is writing there, so an offered button would put up a dialog about
+  // losing paid-for sweeps and then answer it with an error.
+  ui.clearSaved.disabled = isRunning() || isApplying();
   // Offered only while there is something to stop, so it is never a button
   // that does nothing.
   ui.stop.classList.toggle("hidden", !isRunning());

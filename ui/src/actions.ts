@@ -21,6 +21,10 @@ export interface ActionDeps {
     run: HTMLButtonElement;
     stop: HTMLButtonElement;
     quit: HTMLButtonElement;
+    clearSaved: HTMLButtonElement;
+    /** Hidden when the prompt it would apply is deleted. */
+    applyPanel: HTMLDivElement;
+    promptPath: HTMLParagraphElement;
   };
   settings: () => Settings;
   setSettings: (models: Settings["models"]) => void;
@@ -69,6 +73,49 @@ export function bindGuardedActions(deps: ActionDeps): void {
   }
 
   ui.run.addEventListener("click", () => void startRun(deps.runDeps()));
+
+  // Sweeps cost real quota, so throwing them away is asked about — but the
+  // question is worth asking for the opposite reason too. Reuse is on by
+  // default and silent, and a sweep taken yesterday reads exactly like one
+  // taken now: a run reused sweeps from the night before, hours after the
+  // defects they described had been fixed, and produced a fix prompt for a
+  // repository that no longer existed.
+  ui.clearSaved.addEventListener("click", () => {
+    void confirmDialog({
+      title: "Delete the saved sweeps?",
+      message:
+        "This removes every stored sweep and fix prompt for this repository. " +
+        "They cost subscription quota and cannot be recovered — the next run " +
+        "pays for them again, and reviews the code as it is now.",
+      confirmLabel: "Delete them",
+      destructive: true,
+    }).then((yes) => {
+      if (!yes) return;
+      invoke<{ removed: number }>("clear_saved", {
+        settings: deps.settings(),
+      })
+        .then((cleared) => {
+          // The prompt this panel would apply has just been deleted, so the
+          // button would fail with "run a review first". Offering a control
+          // that cannot work is the defect this app exists to find.
+          ui.applyPanel.classList.add("hidden");
+          ui.promptPath.classList.add("hidden");
+          deps.setStatus(
+            cleared.removed === 0
+              ? "Nothing was stored for this repository — the next run starts fresh either way"
+              : `Deleted ${cleared.removed} saved file${cleared.removed === 1 ? "" : "s"}. The next run sweeps from scratch.`,
+          );
+        })
+        .catch((error: unknown) => {
+          // Silence here would read as "cleared", and the next run would then
+          // quietly reuse everything this was meant to remove.
+          deps.setStatus(
+            `Could not clear the saved sweeps: ${String(error)}`,
+            "error",
+          );
+        });
+    });
+  });
 
   // Closing the window only hides it. This is the reachable, keyboard-navigable
   // way to actually exit, so the tray is not the single point of failure.

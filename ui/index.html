@@ -175,9 +175,18 @@
               <input id="reuse-completed" type="checkbox" checked />
               <span>
                 Reuse sweeps already completed for this repository. Untick to
-                pay for every sweep again.
+                pay for every sweep again. Reused sweeps are as old as the day
+                they were taken — if the code has moved on since, the report
+                describes a repository that no longer exists.
               </span>
             </label>
+          </div>
+          <div class="row" style="margin-top: 8px">
+            <button id="clear-saved" type="button">Clear saved sweeps</button>
+            <span class="hint" style="align-self: center">
+              Deletes every stored sweep and fix prompt for this repository, so
+              the next run reviews the code as it is now.
+            </span>
           </div>
         </section>
 
