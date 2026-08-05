@@ -16,7 +16,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import { confirmDialog } from "./dialog";
-import { VENDORS, joinId, splitId, type Settings, type Vendor } from "./model";
+import {
+  VENDORS,
+  applyStatus,
+  joinId,
+  splitId,
+  type Settings,
+  type Vendor,
+} from "./model";
 import { effortPicker, modelPicker, option } from "./pickers";
 import type { Catalogue } from "./view";
 
@@ -169,9 +176,7 @@ export function bindApply(deps: ApplyDeps): () => void {
       append(ui.output, event.payload.text);
       const changed = event.payload.changed?.length ?? 0;
       deps.setStatus(
-        event.payload.ok
-          ? `Fixes applied — ${changed} file${changed === 1 ? "" : "s"} changed. Review the diff.`
-          : "Applying the fixes failed",
+        applyStatus(event.payload.ok, changed),
         event.payload.ok ? "" : "error",
       );
       deps.refresh();

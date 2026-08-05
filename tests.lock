@@ -22,6 +22,7 @@ node a round names what is about to run and where it sits in the sequence
 node a run needs both a repository and at least one sweep
 node a single finding is not reported as '1 findings'
 node a sweep that found nothing is not confusable with one that never ran
+node an apply that changed nothing does not claim to have applied anything
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try

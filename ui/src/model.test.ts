@@ -19,6 +19,7 @@ import {
   LANES,
   LANE_TITLES,
   MAX_PROVE_TOP,
+  applyStatus,
   batchCount,
   boundedProveTop,
   canRun,
@@ -36,7 +37,11 @@ test("every shipped preset covers all four lanes", () => {
   // lane coverage, so one that silently left a lane unswept would be the worst
   // possible default.
   for (const name of ["cheap", "balanced", "deep"] as const) {
-    assert.deepEqual(uncoveredLanes(preset(name)), [], `${name} leaves a lane uncovered`);
+    assert.deepEqual(
+      uncoveredLanes(preset(name)),
+      [],
+      `${name} leaves a lane uncovered`,
+    );
   }
 });
 
@@ -51,7 +56,10 @@ test("a model with no id contributes nothing", () => {
 });
 
 test("unknown lane names are ignored rather than counted", () => {
-  assert.equal(unitCount([{ id: "sonnet", lanes: ["correctness", "nonsense"] }]), 1);
+  assert.equal(
+    unitCount([{ id: "sonnet", lanes: ["correctness", "nonsense"] }]),
+    1,
+  );
 });
 
 test("two models on one lane is two sweeps, because that is the point", () => {
@@ -93,10 +101,21 @@ test("an empty configuration needs no rounds", () => {
 });
 
 test("a run needs both a repository and at least one sweep", () => {
-  const base = { scope: "", theme: "system" as const, prove_top: 0, test_command: "" };
-  assert.equal(canRun({ ...base, repo: "", models: preset("balanced") }), false);
+  const base = {
+    scope: "",
+    theme: "system" as const,
+    prove_top: 0,
+    test_command: "",
+  };
+  assert.equal(
+    canRun({ ...base, repo: "", models: preset("balanced") }),
+    false,
+  );
   assert.equal(canRun({ ...base, repo: "C:/x", models: [] }), false);
-  assert.equal(canRun({ ...base, repo: "C:/x", models: preset("balanced") }), true);
+  assert.equal(
+    canRun({ ...base, repo: "C:/x", models: preset("balanced") }),
+    true,
+  );
 });
 
 test("toggling a lane leaves other models untouched", () => {
@@ -113,7 +132,9 @@ test("toggling a lane leaves other models untouched", () => {
 
 test("toggling a lane off removes exactly it, and twice on is idempotent", () => {
   const models = [{ id: "a", lanes: ["correctness", "security"] }];
-  assert.deepEqual(toggleLane(models, 0, "security", false)[0]?.lanes, ["correctness"]);
+  assert.deepEqual(toggleLane(models, 0, "security", false)[0]?.lanes, [
+    "correctness",
+  ]);
   const twice = toggleLane(toggleLane(models, 0, "ux", true), 0, "ux", true);
   assert.equal(twice[0]?.lanes.filter((l) => l === "ux").length, 1);
 });
@@ -144,13 +165,23 @@ test("splitting a model spec and rejoining it settles on one spelling", () => {
     const once = joinId(splitId(id).vendor, splitId(id).model);
     const twice = joinId(splitId(once).vendor, splitId(once).model);
     assert.equal(twice, once, `${id} keeps changing: ${once} then ${twice}`);
-    assert.equal(splitId(once).vendor, splitId(id).vendor, `${id} changed vendor`);
+    assert.equal(
+      splitId(once).vendor,
+      splitId(id).vendor,
+      `${id} changed vendor`,
+    );
   }
   // The one normalisation this performs, stated outright.
-  assert.equal(joinId(splitId("claude:opus").vendor, splitId("claude:opus").model), "opus");
+  assert.equal(
+    joinId(splitId("claude:opus").vendor, splitId("claude:opus").model),
+    "opus",
+  );
   // Everything else is left exactly as written.
   assert.equal(
-    joinId(splitId("kilo:openrouter/z-ai/glm-4.6").vendor, splitId("kilo:openrouter/z-ai/glm-4.6").model),
+    joinId(
+      splitId("kilo:openrouter/z-ai/glm-4.6").vendor,
+      splitId("kilo:openrouter/z-ai/glm-4.6").model,
+    ),
     "kilo:openrouter/z-ai/glm-4.6",
   );
 });
@@ -166,7 +197,14 @@ test("a bare Claude model never gains a redundant prefix", () => {
 test("splitId agrees with vendorOf on every shape", () => {
   // Two functions deciding vendor differently is how a row shows one provider
   // and bills another.
-  for (const id of ["sonnet", "claude:opus", "codex:x", "kilo:a/b", "gpt:weird", ""]) {
+  for (const id of [
+    "sonnet",
+    "claude:opus",
+    "codex:x",
+    "kilo:a/b",
+    "gpt:weird",
+    "",
+  ]) {
     assert.equal(splitId(id).vendor, vendorOf(id), `disagreement on ${id}`);
   }
 });
@@ -175,10 +213,11 @@ test("an unknown prefix is treated as a Claude model, colon and all", () => {
   // `gpt:weird` is not a vendor prefix, so the whole string is the model — the
   // same reading the engine uses. Dropping the prefix would review a different
   // model than the one written down.
-  assert.deepEqual(splitId("gpt:weird"), { vendor: "claude", model: "gpt:weird" });
+  assert.deepEqual(splitId("gpt:weird"), {
+    vendor: "claude",
+    model: "gpt:weird",
+  });
 });
-
-
 
 test("a repeated pass is a whole extra sweep, and an extra round", () => {
   // Two passes of one model is two invocations of one vendor, which the engine
@@ -233,7 +272,10 @@ test("a proof count is always an integer the backend can deserialize", () => {
   assert.equal(boundedProveTop(""), 0);
   assert.equal(boundedProveTop("abc"), 0);
   for (const raw of ["500", "-3", "1.5", "", "abc", "2e3"]) {
-    assert.ok(Number.isInteger(boundedProveTop(raw)), `${raw} produced a non-integer`);
+    assert.ok(
+      Number.isInteger(boundedProveTop(raw)),
+      `${raw} produced a non-integer`,
+    );
   }
 });
 
@@ -244,4 +286,21 @@ test("the advertised cap and the enforced cap are the same number", () => {
   const declared = /id="prove-top"[^>]*max="(\d+)"/.exec(html);
   assert.ok(declared, "the prove-top input no longer declares a max");
   assert.equal(Number(declared![1]), MAX_PROVE_TOP);
+});
+
+test("an apply that changed nothing does not claim to have applied anything", () => {
+  // Observed in the real window: "Fixes applied — 0 files changed. Review the
+  // diff." over a repository nobody had touched. The model had verified every
+  // finding and correctly refused to edit code into agreement with a stale
+  // report — but the status claimed an outcome it did not produce, and pointed
+  // at a diff that does not exist.
+  const nothing = applyStatus(true, 0);
+  assert.ok(!nothing.includes("applied"), nothing);
+  assert.ok(!nothing.includes("diff"), nothing);
+  assert.match(nothing, /Nothing was changed/);
+
+  // A real apply still says what happened, and singular is not "1 files".
+  assert.match(applyStatus(true, 1), /1 file changed/);
+  assert.match(applyStatus(true, 3), /3 files changed/);
+  assert.match(applyStatus(false, 0), /failed/);
 });
