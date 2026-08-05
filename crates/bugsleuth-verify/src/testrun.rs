@@ -37,6 +37,11 @@ pub struct TestRun {
     pub outcome: Outcome,
     pub stdout: String,
     pub stderr: String,
+    /// The identities of the tests that passed, e.g. `module::name`. This is
+    /// how loss of a previously passing test is detected: a count cannot, because
+    /// a proof attempt that breaks one existing test but adds a new passing one
+    /// leaves the total unchanged. Only the set of names shows the loss.
+    pub passed_tests: std::collections::BTreeSet<String>,
 }
 
 impl TestRun {
@@ -133,6 +138,7 @@ pub fn run(
 
     Ok(TestRun {
         outcome,
+        passed_tests: passed_tests(&stdout),
         stdout,
         stderr,
     })
@@ -185,6 +191,24 @@ pub fn counts(stdout: &str) -> (u32, u32) {
         }
     }
     (passed, failed)
+}
+
+/// The identities of the tests that passed, parsed from libtest output lines
+/// of the form `test module::name ... ok`.
+///
+/// The counterpart to [`counts`], and the one that can detect a lost test. A
+/// proof attempt that breaks one existing test but adds a new passing one keeps
+/// the passing *count* the same, so only comparing the set of names before and
+/// after shows that a previously passing test no longer passes.
+pub fn passed_tests(stdout: &str) -> std::collections::BTreeSet<String> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            let rest = line.strip_prefix("test ")?;
+            rest.strip_suffix(" ... ok").map(str::to_string)
+        })
+        .collect()
 }
 
 /// Distinguish "the tests ran and something failed" from "nothing ran".
@@ -283,6 +307,30 @@ mod tests {
     #[test]
     fn a_non_zero_exit_with_no_test_output_counts_as_not_built() {
         assert_eq!(classify(false, "", ""), Outcome::DidNotBuild);
+    }
+
+    #[test]
+    fn passed_tests_reads_the_names_of_the_tests_that_passed() {
+        let stdout = "running 2 tests\n\
+             test module::old_a ... ok\n\
+             test module::old_b ... FAILED\n\n\
+             test result: FAILED. 1 passed; 1 failed; 0 ignored";
+        let passed = passed_tests(stdout);
+        assert!(passed.contains("module::old_a"), "{passed:?}");
+        assert!(!passed.contains("module::old_b"), "{passed:?}");
+        // The `test result:` summary line must not be mistaken for a test name.
+        assert_eq!(passed.len(), 1, "{passed:?}");
+    }
+
+    #[test]
+    fn ignored_and_summary_lines_are_not_counted_as_passing_tests() {
+        let stdout = "test a::b ... ok\ntest a::c ... ignored\ntest result: ok. 1 passed; 0 failed; 1 ignored";
+        let passed = passed_tests(stdout);
+        assert_eq!(
+            passed,
+            ["a::b".to_string()].into_iter().collect(),
+            "{passed:?}"
+        );
     }
 
     #[test]

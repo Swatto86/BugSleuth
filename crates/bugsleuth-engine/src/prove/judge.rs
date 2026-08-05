@@ -5,6 +5,7 @@
 //! most trust-critical logic in the tool: they are what stands between "a model
 //! asserted something" and "a machine confirmed it".
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use bugsleuth_domain::{ProofClaim, ProofVerdict};
@@ -17,6 +18,7 @@ pub(super) fn judge(
     spec: &Attempt<'_>,
     claim: &ProofClaim,
     baseline_passed: u32,
+    baseline_tests: &BTreeSet<String>,
 ) -> anyhow::Result<(ProofVerdict, u32, u32, String)> {
     if !claim.wrote_failing_test || claim.test_name.trim().is_empty() {
         let obstacle = if claim.obstacle.trim().is_empty() {
@@ -30,9 +32,10 @@ pub(super) fn judge(
     let full = run_tests(dir, spec.test_command, None, spec.test_timeout)?;
     let (after_passed, after_failed) = counts(&full.stdout);
 
-    // Decide as far as the whole-suite run allows. Only a suite that failed
-    // *without* losing any previously passing test needs a second look.
-    if let Some(verdict) = from_suite(&full.outcome, baseline_passed, after_passed) {
+    // Decide the outcomes the whole-suite run settles on its own — those need no
+    // per-test identities. A red suite (`Failed`) falls through to the checks
+    // below.
+    if let Some(verdict) = from_suite(&full.outcome) {
         let detail = match verdict {
             ProofVerdict::DidNotBuild => first_error(&full.stderr),
             ProofVerdict::TimedOut => "the suite was killed for running too long".to_string(),
@@ -40,12 +43,19 @@ pub(super) fn judge(
                 "every test passes, including `{}` — it demonstrates nothing",
                 claim.test_name
             ),
-            ProofVerdict::SuiteSabotaged => format!(
-                "{baseline_passed} tests passed before the attempt and only {after_passed} after, \
-                 so production code was changed rather than a test being added"
-            ),
             _ => String::new(),
         };
+        return Ok((verdict, after_passed, after_failed, detail));
+    }
+
+    // The suite is red. Before that redness can be trusted as evidence about the
+    // defect, prove that every test which passed at the baseline still passes.
+    // A count cannot: an attempt that breaks one existing test and adds one
+    // passing test leaves the total unchanged, so only the set of names shows
+    // the loss. This is the single most important check in the tool.
+    if let Some((verdict, detail)) =
+        sabotage_check(baseline_passed, baseline_tests, &full.passed_tests)
+    {
         return Ok((verdict, after_passed, after_failed, detail));
     }
 
@@ -88,23 +98,54 @@ pub(super) fn judge(
     Ok((verdict, after_passed, after_failed, detail))
 }
 
-/// What the whole-suite run alone settles. `None` means "a red suite that did
-/// not lose any previously passing test" — promising, but it still has to be
-/// confirmed that the redness is the model's named test.
-///
-/// The sabotage rule lives here: if fewer tests pass after the attempt than
-/// before it, the model changed production code rather than only adding a test.
-/// Its new failing test is then not evidence about the original defect, because
-/// a coding agent asked to make a test fail can always succeed by breaking the
-/// code. This is the single most important check in the tool.
-fn from_suite(outcome: &Outcome, baseline_passed: u32, after_passed: u32) -> Option<ProofVerdict> {
+/// What the whole-suite run's outcome alone settles, before any test identities
+/// are consulted. `None` means the suite failed, which is promising but still
+/// has to survive the sabotage check and then be confirmed to be the named test.
+fn from_suite(outcome: &Outcome) -> Option<ProofVerdict> {
     match outcome {
         Outcome::DidNotBuild => Some(ProofVerdict::DidNotBuild),
         Outcome::TimedOut => Some(ProofVerdict::TimedOut),
         Outcome::Passed => Some(ProofVerdict::TestDoesNotFail),
-        Outcome::Failed if after_passed < baseline_passed => Some(ProofVerdict::SuiteSabotaged),
         Outcome::Failed => None,
     }
+}
+
+/// Whether a red suite lost any test that passed at the baseline — or whether
+/// that cannot even be established. `None` means every baseline test still
+/// passes, so the redness is a candidate proof.
+///
+/// The sabotage rule, and the single most important check in the tool: a coding
+/// agent asked to make a test fail can always succeed by breaking the code, so a
+/// red suite is only evidence about the original defect if nothing that used to
+/// pass has stopped. Identities decide it, not counts — a broken existing test
+/// hidden behind a newly added passing one keeps the count identical.
+fn sabotage_check(
+    baseline_passed: u32,
+    baseline_tests: &BTreeSet<String>,
+    after_tests: &BTreeSet<String>,
+) -> Option<(ProofVerdict, String)> {
+    // A runner that reported passing tests at the baseline but whose output we
+    // cannot read individual test names from cannot support the "every previous
+    // test still passes" claim. Fail closed rather than fall back to counting.
+    if baseline_passed > 0 && baseline_tests.is_empty() {
+        return Some((
+            ProofVerdict::SuiteSabotaged,
+            "the baseline passed tests but their names could not be read from the runner \
+             output, so it cannot be shown that every previously passing test still passes"
+                .to_string(),
+        ));
+    }
+    if !baseline_tests.is_subset(after_tests) {
+        let missing: Vec<String> = baseline_tests.difference(after_tests).cloned().collect();
+        return Some((
+            ProofVerdict::SuiteSabotaged,
+            format!(
+                "previously passing tests no longer pass: {}",
+                missing.join(", ")
+            ),
+        ));
+    }
+    None
 }
 
 /// What the confirmation run settles before its counts are even looked at.
@@ -145,27 +186,58 @@ fn first_error(stderr: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Build a set of test names from string literals, for the identity checks.
+    fn names(items: &[&str]) -> BTreeSet<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
     #[test]
     fn breaking_existing_tests_is_never_accepted_as_proof() {
-        // The model made its test fail by sabotaging production code: the suite
-        // is red, but two tests that used to pass no longer do.
-        assert_eq!(
-            from_suite(&Outcome::Failed, 50, 48),
-            Some(ProofVerdict::SuiteSabotaged)
-        );
+        // The model made its test fail by sabotaging production code: two tests
+        // that used to pass no longer appear in the after set.
+        let (verdict, _) =
+            sabotage_check(3, &names(&["old_a", "old_b", "old_c"]), &names(&["old_a"]))
+                .expect("a lost test must be caught");
+        assert_eq!(verdict, ProofVerdict::SuiteSabotaged);
+    }
+
+    #[test]
+    fn previously_passing_test_identity_cannot_be_replaced_by_a_new_pass() {
+        // The count is identical — two before, two after — but one of the
+        // originals was replaced by a brand-new passing test. A count-only check
+        // sees no loss; the identity check must.
+        let baseline = names(&["old_a", "old_b"]);
+        let after = names(&["old_a", "newly_added"]);
+        assert_eq!(baseline.len(), after.len());
+        let (verdict, _) =
+            sabotage_check(2, &baseline, &after).expect("a replaced test must be caught");
+        assert_eq!(verdict, ProofVerdict::SuiteSabotaged);
+    }
+
+    #[test]
+    fn a_runner_that_hides_its_test_names_cannot_prove_preservation() {
+        // Passing tests at the baseline, but no names to compare against: fail
+        // closed rather than fall back to a count.
+        let (verdict, _) = sabotage_check(50, &BTreeSet::new(), &names(&["something"]))
+            .expect("unreadable names must not be treated as no loss");
+        assert_eq!(verdict, ProofVerdict::SuiteSabotaged);
     }
 
     #[test]
     fn a_red_suite_that_kept_every_passing_test_needs_the_named_test_checked() {
-        // 50 still pass and something new fails — the good case, but not yet
-        // confirmed to be the model's test rather than an unrelated failure.
-        assert_eq!(from_suite(&Outcome::Failed, 50, 50), None);
+        // Every baseline test still passes and something new fails — the good
+        // case, but not yet confirmed to be the model's test.
+        assert_eq!(from_suite(&Outcome::Failed), None);
+        assert_eq!(
+            sabotage_check(2, &names(&["old_a", "old_b"]), &names(&["old_a", "old_b"])),
+            None
+        );
     }
 
     #[test]
     fn a_green_suite_proves_nothing() {
         assert_eq!(
-            from_suite(&Outcome::Passed, 50, 51),
+            from_suite(&Outcome::Passed),
             Some(ProofVerdict::TestDoesNotFail)
         );
     }
@@ -173,13 +245,10 @@ mod tests {
     #[test]
     fn a_broken_build_is_not_a_demonstrated_defect() {
         assert_eq!(
-            from_suite(&Outcome::DidNotBuild, 50, 0),
+            from_suite(&Outcome::DidNotBuild),
             Some(ProofVerdict::DidNotBuild)
         );
-        assert_eq!(
-            from_suite(&Outcome::TimedOut, 50, 0),
-            Some(ProofVerdict::TimedOut)
-        );
+        assert_eq!(from_suite(&Outcome::TimedOut), Some(ProofVerdict::TimedOut));
     }
 
     #[test]

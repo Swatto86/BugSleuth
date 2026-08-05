@@ -105,6 +105,9 @@ pub async fn attempt(spec: Attempt<'_>) -> anyhow::Result<AttemptReport> {
     // 1. Establish that the tree is green before the model touches it.
     let baseline = run_tests(&dir, spec.test_command, None, spec.test_timeout)?;
     let (baseline_passed, baseline_failed) = counts(&baseline.stdout);
+    // The identities, not just the count: the judge needs the exact set of tests
+    // that passed here to prove that every one of them still passes afterwards.
+    let baseline_tests = baseline.passed_tests.clone();
     if baseline.outcome != Outcome::Passed || baseline_failed > 0 {
         anyhow::bail!(
             "the baseline test suite is not green ({} passed, {} failed): a proof attempt against \
@@ -177,7 +180,7 @@ pub async fn attempt(spec: Attempt<'_>) -> anyhow::Result<AttemptReport> {
 
     // 3. Judge by observation, not by the model's account.
     let (verdict, after_passed, after_failed, detail) =
-        judge(&dir, &spec, &result.claim, baseline_passed)?;
+        judge(&dir, &spec, &result.claim, baseline_passed, &baseline_tests)?;
 
     Ok(AttemptReport {
         verdict,

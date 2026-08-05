@@ -16,5 +16,5 @@ mod worktree;
 
 pub use anchor::{Rejection, verify_anchor};
 pub use console::hide as hide_console_window;
-pub use testrun::{Outcome, TestError, TestRun, counts, run as run_tests};
+pub use testrun::{Outcome, TestError, TestRun, counts, passed_tests, run as run_tests};
 pub use worktree::{Worktree, WorktreeError};
