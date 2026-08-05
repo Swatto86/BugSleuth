@@ -21,8 +21,11 @@ use bugsleuth_domain::{ProofClaim, RawFindings, finding_schema, proof_schema};
 use crate::error::ProviderError;
 use crate::process::{self, Invocation, preview};
 
+mod apply;
 mod discover;
 mod scratch;
+
+pub use apply::apply;
 
 use scratch::{event_error, not_found, scratch_dir, write_file};
 
@@ -112,11 +115,21 @@ pub(crate) struct Invoke<'a> {
     pub(crate) brief: &'a str,
     pub(crate) timeout: Duration,
     pub(crate) binary: Option<&'a str>,
+    /// The shape the reply must take. `Value::Null` means none is imposed —
+    /// applying fixes answers in prose for a person, and a schema would cost a
+    /// turn to say less.
     pub(crate) schema: serde_json::Value,
     pub(crate) sandbox: Sandbox,
 }
 
 async fn invoke<T: serde::de::DeserializeOwned>(spec: Invoke<'_>) -> Result<T, ProviderError> {
+    let answer = invoke_text(spec).await?;
+    let value = serde_json::from_str(&answer).unwrap_or(serde_json::Value::String(answer));
+    crate::json::structured(&value)
+}
+
+/// One invocation, answering with whatever the CLI's final message was.
+pub(crate) async fn invoke_text(spec: Invoke<'_>) -> Result<String, ProviderError> {
     let binary = match spec.binary {
         Some(path) => PathBuf::from(path),
         None => discover::resolve_binary().ok_or_else(not_found)?,
@@ -129,7 +142,9 @@ async fn invoke<T: serde::de::DeserializeOwned>(spec: Invoke<'_>) -> Result<T, P
     let scratch = scratch_dir()?;
     let schema_path = scratch.join("schema.json");
     let answer_path = scratch.join("answer.json");
-    write_file(&schema_path, &spec.schema.to_string())?;
+    if !spec.schema.is_null() {
+        write_file(&schema_path, &spec.schema.to_string())?;
+    }
 
     let args = build_args(&spec, &schema_path, &answer_path);
     let output = process::run(Invocation {
@@ -148,10 +163,10 @@ async fn invoke<T: serde::de::DeserializeOwned>(spec: Invoke<'_>) -> Result<T, P
     result
 }
 
-fn finish<T: serde::de::DeserializeOwned>(
+fn finish(
     output: Result<crate::process::CliOutput, crate::process::ProcessError>,
     answer_path: &Path,
-) -> Result<T, ProviderError> {
+) -> Result<String, ProviderError> {
     let output = output?;
 
     if !output.succeeded() {
@@ -183,9 +198,12 @@ fn finish<T: serde::de::DeserializeOwned>(
     if answer.trim().is_empty() {
         return Err(ProviderError::Empty(VENDOR));
     }
-
-    let value = serde_json::from_str(&answer).unwrap_or(serde_json::Value::String(answer));
-    crate::json::structured(&value)
+    // Returned raw. Making sense of it belongs to the caller, because not every
+    // caller wants the same thing: a sweep needs a schema-shaped object, and an
+    // apply needs the prose. This used to parse here regardless, so applying
+    // fixes — whose answer is a paragraph — failed with "the reply contained no
+    // JSON object" after the model had already done the work.
+    Ok(answer)
 }
 
 /// The flags every Codex invocation carries, whatever it is for.
@@ -220,15 +238,32 @@ pub(crate) const SHARED_FLAGS: [&str; 9] = [
 /// reproducibility one. `--sandbox read-only` is stronger than a tool
 /// allowlist — the operating system refuses the write, not the agent.
 fn build_args(spec: &Invoke<'_>, schema: &Path, answer: &Path) -> Vec<String> {
-    let mut args: Vec<String> = SHARED_FLAGS
-        .iter()
-        .chain(["--json"].iter())
-        .map(|s| (*s).to_string())
-        .collect();
+    let mut args: Vec<String> = SHARED_FLAGS.iter().map(|s| (*s).to_string()).collect();
+    // Measured, not assumed: with `--ignore-user-config` this CLI refuses every
+    // patch as "writing is blocked by read-only sandbox", whatever `--sandbox`
+    // says — and `-c sandbox_mode=…` and `-c approval_policy=…` do not restore
+    // it either. So an invocation that has to write cannot also ignore the
+    // machine's configuration, and the honest choice is to keep the writing.
+    //
+    // This was not introduced by applying fixes: it silently disabled every
+    // Codex *proof attempt* too, which is far worse, because a proof that
+    // cannot write reports the defect as unproven rather than as unattempted.
+    //
+    // `--ignore-rules` stays either way. That is the flag which keeps the
+    // reviewed repository — untrusted input — from supplying its own execution
+    // policy, and it does not interfere.
+    if spec.sandbox == Sandbox::WorkspaceWrite {
+        args.retain(|flag| flag != "--ignore-user-config");
+    }
+    args.push("--json".into());
     args.push("--sandbox".into());
     args.push(spec.sandbox.flag().into());
-    args.push("--output-schema".into());
-    args.push(schema.to_string_lossy().into_owned());
+    // No schema file is written when none was asked for, so naming one here
+    // would point the CLI at a path that does not exist.
+    if !spec.schema.is_null() {
+        args.push("--output-schema".into());
+        args.push(schema.to_string_lossy().into_owned());
+    }
     args.push("--output-last-message".into());
     args.push(answer.to_string_lossy().into_owned());
 

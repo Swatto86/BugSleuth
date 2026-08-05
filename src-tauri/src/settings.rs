@@ -44,6 +44,14 @@ pub struct Settings {
     /// keeps whatever each model called its own finding.
     #[serde(default = "cheapest")]
     pub triage_model: String,
+    /// The model that applies the fixes when asked, as a `vendor:model` spec.
+    ///
+    /// Separate from the sweep matrix on purpose: finding a defect and fixing it
+    /// are different jobs, and the one you would spend a cheap model on to read
+    /// four lanes is not necessarily the one you want editing your code. Empty
+    /// until chosen, and the button refuses rather than guessing.
+    #[serde(default)]
+    pub apply_model: String,
 }
 
 /// Serde needs a function; a bare string default is not expressible.
@@ -111,6 +119,9 @@ impl Default for Settings {
             test_command: String::new(),
             reuse_completed: true,
             triage_model: cheapest(),
+            // Nothing by default: applying fixes writes to the user's own
+            // checkout, and a model nobody chose is not something to default to.
+            apply_model: String::new(),
         }
     }
 }

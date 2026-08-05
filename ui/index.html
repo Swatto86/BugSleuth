@@ -190,6 +190,35 @@
             </button>
           </div>
           <p class="hint hidden" id="prompt-path" style="margin: 0 0 10px"></p>
+
+          <div class="hidden" id="apply-panel">
+            <p class="hint" style="margin: 0 0 8px">
+              Or have a model apply them here. It is given the same prompt the
+              Copy button hands you, with write access to this repository: it
+              edits files in place, runs your tests, and commits as it goes.
+            </p>
+            <p class="hint warning-banner" style="margin: 0 0 10px">
+              Nothing it writes has been checked by anyone — a finding can be
+              confidently wrong, and a fix for one is a change you did not want.
+              BugSleuth refuses to start unless the working tree is clean, so
+              every edit shows up in <code>git diff</code> and
+              <code>git log</code>. Read them before you keep them.
+            </p>
+            <div class="row">
+              <label class="field" style="flex: 0 0 140px">
+                <span>Provider</span>
+                <select id="apply-vendor"></select>
+              </label>
+              <label class="field">
+                <span>Model</span>
+                <div id="apply-model"></div>
+              </label>
+              <button id="apply-fixes" type="button" class="primary" style="align-self: end">
+                Apply fixes
+              </button>
+            </div>
+          </div>
+
           <div id="findings"></div>
           <pre class="output" id="output" tabindex="0" aria-live="polite">No run yet.</pre>
         </section>

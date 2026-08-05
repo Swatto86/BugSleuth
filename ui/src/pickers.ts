@@ -40,14 +40,22 @@ export function option(
  * escape hatch and the typed-model fallback both stop being special cases: a
  * model the catalogue has never heard of is simply typed in.
  */
-export function modelPicker(
-  index: number,
-  model: ModelSetting,
-  catalogue: Catalogue,
-  handlers: MatrixHandlers,
-  onModelChanged: (id: string) => void,
-): HTMLElement {
-  const { vendor, model: current } = splitId(model.id);
+export function modelPicker(opts: {
+  /** Distinguishes this box from every other one on the page. */
+  key: string;
+  /** What a screen reader is told this box is for. */
+  label: string;
+  /** The stored `vendor:model` spec. */
+  id: string;
+  catalogue: Catalogue;
+  /** The new spec, in the same joined form. */
+  onChange: (id: string) => void;
+}): HTMLElement {
+  // Keyed by a string rather than a row index, because the matrix is no longer
+  // the only place a model is chosen: the fix applied after a run picks one too,
+  // and it has no row.
+  const { key, label, catalogue, onChange } = opts;
+  const { vendor, model: current } = splitId(opts.id);
   const menu = catalogue[vendor];
 
   const input = document.createElement("input");
@@ -57,23 +65,21 @@ export function modelPicker(
   input.autocomplete = "off";
   input.className = "model-text";
   input.placeholder = "vendor default";
-  input.setAttribute("aria-label", `Model for row ${index + 1}`);
+  input.setAttribute("aria-label", label);
   // Every control that survives a rebuild needs one of these, not just the
   // three the first fix covered. Typing a model id while the vendor
   // catalogue finished loading in the background rebuilt the table
   // mid-keystroke and threw focus to the top of the page — on the first
   // thing anyone does after opening the app.
-  input.dataset["focusKey"] = `model-${index}`;
+  input.dataset["focusKey"] = key;
   // Say why there are no suggestions. A box that offers nothing otherwise reads
   // as a bug rather than as a vendor that could not be asked.
   if (menu?.error) input.title = menu.error;
   input.addEventListener("input", () => {
-    const id = joinId(vendor, input.value);
-    handlers.onRename(index, id);
-    // Which efforts apply depends on which model this is, so the effort control
-    // has to follow it. Only that one cell is rebuilt: re-rendering the row on
-    // every keystroke would take the focus out of this box mid-word.
-    onModelChanged(id);
+    // One callback, not two. The caller decides what a new model means — which
+    // for a matrix row includes rebuilding its effort cell, and for the apply
+    // panel means nothing more than storing it.
+    onChange(joinId(vendor, input.value));
   });
 
   const everything: { value: string; label: string }[] = [];
@@ -84,9 +90,9 @@ export function modelPicker(
   }
   if (everything.length === 0) return input;
 
-  // The id must be unique per row or every box would share one row's list.
+  // The id must be unique per box or every one of them would share a list.
   const list = document.createElement("datalist");
-  list.id = `models-${vendor}-${index}`;
+  list.id = `models-${vendor}-${key}`;
 
   /**
    * Show the suggestions that contain what has been typed, anywhere in them.

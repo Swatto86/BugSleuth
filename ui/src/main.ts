@@ -10,7 +10,6 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   LANE_TITLES,
   type Lane,
-
   type Preset,
   type Settings,
   batchCount,
@@ -25,7 +24,14 @@ import { bindControls } from "./controls";
 import { wireUpdate } from "./update";
 import { savingSettings } from "./persist";
 import { listOf } from "./format";
-import { type RunDeps, currentFixPrompt, isRunning, listenForRunEvents } from "./run";
+import {
+  type RunDeps,
+  currentFixPrompt,
+  isRunning,
+  listenForRunEvents,
+} from "./run";
+import { bindApply, isApplying } from "./apply";
+import { ui } from "./elements";
 import {
   type Catalogue,
   type VendorModels,
@@ -34,48 +40,11 @@ import {
   matrixRows,
 } from "./view";
 
-const el = <T extends HTMLElement>(id: string): T => {
-  const found = document.getElementById(id);
-  if (!found) throw new Error(`missing element #${id}`);
-  return found as T;
-};
-
-const ui = {
-  theme: el<HTMLSelectElement>("theme"),
-  vendors: el<HTMLDivElement>("vendors"),
-  checkSignin: el<HTMLButtonElement>("check-signin"),
-  checkUpdate: el<HTMLButtonElement>("check-update"),
-  repo: el<HTMLInputElement>("repo"),
-  scope: el<HTMLInputElement>("scope"),
-  browse: el<HTMLButtonElement>("browse"),
-  matrixBody: el<HTMLTableSectionElement>("matrix-body"),
-  addModel: el<HTMLButtonElement>("add-model"),
-  uncovered: el<HTMLDivElement>("uncovered-warning"),
-  proveEnabled: el<HTMLInputElement>("prove-enabled"),
-  proveSettings: el<HTMLDivElement>("prove-settings"),
-  proveTop: el<HTMLInputElement>("prove-top"),
-  testCommand: el<HTMLInputElement>("test-command"),
-  reuseCompleted: el<HTMLInputElement>("reuse-completed"),
-  triageSeverities: el<HTMLInputElement>("triage-severities"),
-  output: el<HTMLPreElement>("output"),
-  findings: el<HTMLDivElement>("findings"),
-  status: el<HTMLSpanElement>("status"),
-  spinner: el<HTMLSpanElement>("spinner"),
-  planSummary: el<HTMLSpanElement>("plan-summary"),
-  run: el<HTMLButtonElement>("run"),
-  stop: el<HTMLButtonElement>("stop"),
-  quit: el<HTMLButtonElement>("quit"),
-  copyPrompt: el<HTMLButtonElement>("copy-prompt"),
-  promptPath: el<HTMLParagraphElement>("prompt-path"),
-};
-
 /**
  * Which model re-grades severities. Cheapest available: the pass compares
  * summaries against each other, it does not review code again.
  */
 const TRIAGE_MODEL = "haiku";
-
-
 
 /**
  * Whether a row is still exactly as some preset shipped it.
@@ -106,6 +75,7 @@ let settings: Settings = {
   test_command: "",
   reuse_completed: true,
   triage_model: TRIAGE_MODEL,
+  apply_model: "",
 };
 /**
  * What the model and effort dropdowns offer, keyed by vendor.
@@ -130,8 +100,6 @@ function applyTheme(theme: Settings["theme"]): void {
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
-
-
 
 /**
  * Surface uncovered lanes prominently, and mark the column heads.
@@ -160,13 +128,17 @@ function renderCoverage(): void {
     `the same as nothing being wrong.`;
 }
 
-
 function renderPlanSummary(): void {
   const units = unitCount(settings.models);
   const rounds = batchCount(settings.models);
   ui.planSummary.textContent =
-    units === 0 ? "" : `${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`;
-  ui.run.disabled = isRunning() || !canRun(settings);
+    units === 0
+      ? ""
+      : `${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`;
+  // Not while fixes are being applied: a sweep would be reading the tree the
+  // apply is rewriting, and the report would describe code that no longer
+  // exists. Rust refuses it too — this only saves the click.
+  ui.run.disabled = isRunning() || isApplying() || !canRun(settings);
   // Offered only while there is something to stop, so it is never a button
   // that does nothing.
   ui.stop.classList.toggle("hidden", !isRunning());
@@ -263,6 +235,7 @@ const runDeps = (): RunDeps => ({
   findings: ui.findings,
   copyPrompt: ui.copyPrompt,
   promptPath: ui.promptPath,
+  applyPanel: ui.applyPanel,
   setStatus,
   renderPlanSummary,
   settings: () => settings,
@@ -270,7 +243,25 @@ const runDeps = (): RunDeps => ({
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
+/** Redraw the apply panel. Assigned when it is bound; the vendor menus arrive
+ * later, and its model suggestions come from them. */
+let redrawApply: () => void = () => {};
+
 function bind(): void {
+  redrawApply = bindApply({
+    ui: {
+      vendor: ui.applyVendor,
+      model: ui.applyModel,
+      button: ui.applyFixes,
+      output: ui.output,
+    },
+    settings: () => settings,
+    catalogue: () => catalogue,
+    busy: isRunning,
+    refresh,
+    setStatus,
+  });
+
   bindControls({
     ui,
     settings: () => settings,
@@ -308,6 +299,9 @@ async function loadCatalogue(): Promise<void> {
     const vendors = await invoke<VendorModels[]>("available_models");
     catalogue = Object.fromEntries(vendors.map((v) => [v.vendor, v]));
     render();
+    // The apply panel has its own model box, outside the table, so a redraw of
+    // the table alone would leave it offering no suggestions for the session.
+    redrawApply();
   } catch {
     // The table already works with typed model ids, so a catalogue that cannot
     // be fetched costs convenience rather than capability.
@@ -342,6 +336,9 @@ async function boot(): Promise<void> {
   ui.reuseCompleted.checked = settings.reuse_completed;
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
   render();
+  // The panel was bound before the stored settings arrived, so it is showing
+  // the defaults until told otherwise.
+  redrawApply();
 
   // Reveal as soon as the shell is painted and themed. Deliberately before the
   // event subscriptions below: if one of those ever fails, the window must
@@ -360,7 +357,9 @@ async function boot(): Promise<void> {
 
   setStatus("Checking providers…", "running");
   try {
-    ui.vendors.replaceChildren(...vendorPills(await invoke<VendorStatus[]>("preflight")));
+    ui.vendors.replaceChildren(
+      ...vendorPills(await invoke<VendorStatus[]>("preflight")),
+    );
     setStatus(
       loadFailed ? `Saved settings could not be read: ${loadFailed}` : "Ready",
       loadFailed ? "error" : "",

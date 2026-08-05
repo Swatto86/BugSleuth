@@ -21,7 +21,16 @@ use crate::settings::{self, Settings};
 /// next one — hence a fresh `Cancel` at the start of every run rather than one
 /// reused forever.
 #[derive(Default)]
-pub struct RunControl(std::sync::Mutex<Option<bugsleuth_engine::cancel::Cancel>>);
+pub struct RunControl {
+    cancel: std::sync::Mutex<Option<bugsleuth_engine::cancel::Cancel>>,
+    /// Whether a fix is being applied to the repository right now.
+    ///
+    /// Held beside the run signal because the two must never overlap: a sweep
+    /// reads the tree while an apply rewrites it, and the review would then be
+    /// of code that no longer exists. The window disables the buttons, but the
+    /// window is not the only way in and a disabled button is not a lock.
+    applying: std::sync::atomic::AtomicBool,
+}
 
 /// Stop the run in progress.
 ///
@@ -48,7 +57,18 @@ impl RunControl {
     /// Now the signal is present exactly while the task is alive, and
     /// [`RunControl::finished`] clears it in both exit paths.
     pub fn running(&self) -> bool {
-        self.0.lock().is_ok_and(|guard| guard.is_some())
+        self.cancel.lock().is_ok_and(|guard| guard.is_some())
+    }
+
+    /// Whether a fix is being applied. See the field's own note: this is the
+    /// half of the mutual exclusion the cancel signal cannot express.
+    pub fn applying(&self) -> bool {
+        self.applying.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn set_applying(&self, value: bool) {
+        self.applying
+            .store(value, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Mark the run over, however it ended.
@@ -57,7 +77,7 @@ impl RunControl {
     /// write — not when cancellation is requested, which is the middle of the
     /// work rather than the end of it.
     pub fn finished(&self) {
-        if let Ok(mut guard) = self.0.lock() {
+        if let Ok(mut guard) = self.cancel.lock() {
             *guard = None;
         }
     }
@@ -65,7 +85,7 @@ impl RunControl {
 
 #[tauri::command]
 pub fn cancel_run(control: tauri::State<'_, RunControl>) {
-    if let Ok(guard) = control.0.lock()
+    if let Ok(guard) = control.cancel.lock()
         && let Some(cancel) = guard.as_ref()
     {
         cancel.stop();
@@ -82,6 +102,11 @@ pub async fn start_run(
     control: tauri::State<'_, RunControl>,
     settings: Settings,
 ) -> CommandResult<()> {
+    // A review reads the tree while an apply rewrites it, so the two must not
+    // overlap: the report would describe code that no longer exists.
+    if control.applying() {
+        return Err("fixes are being applied to this repository — wait for that to finish".into());
+    }
     let repo = checked_repo(&settings.repo)?;
     let plan = plan::plan(&to_config(&settings)).map_err(|e| e.to_string())?;
     let out_dir = run_output_dir(&repo);
@@ -100,7 +125,7 @@ pub async fn start_run(
     // A fresh signal per run: reusing one would let a cancel from a finished
     // run stop the next one before it started.
     let cancel = bugsleuth_engine::cancel::Cancel::new();
-    if let Ok(mut guard) = control.0.lock() {
+    if let Ok(mut guard) = control.cancel.lock() {
         *guard = Some(cancel.clone());
     }
 

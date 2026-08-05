@@ -15,6 +15,7 @@ use tauri::Manager;
 
 use crate::settings::{self, Settings};
 
+pub mod apply;
 pub mod run;
 pub use run::RunControl;
 

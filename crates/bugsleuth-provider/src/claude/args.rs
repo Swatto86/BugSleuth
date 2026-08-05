@@ -13,13 +13,19 @@ pub(super) fn build_args(run: &Run<'_>) -> Vec<String> {
         "--safe-mode".into(),
         "--output-format".into(),
         "json".into(),
-        "--json-schema".into(),
-        run.schema.to_string(),
         "--max-turns".into(),
         run.max_turns.to_string(),
         "--allowedTools".into(),
         run.allowed.into(),
     ];
+    // A null schema means "no schema", not "the schema `null`". Applying fixes
+    // is the one invocation whose answer is prose for a person rather than a
+    // structure for us, and `--json-schema null` would constrain the reply to
+    // the JSON literal `null` — an empty report for work that really happened.
+    if !run.schema.is_null() {
+        args.push("--json-schema".into());
+        args.push(run.schema.to_string());
+    }
     if !run.denied.is_empty() {
         args.push("--disallowedTools".into());
         args.push(run.denied.into());

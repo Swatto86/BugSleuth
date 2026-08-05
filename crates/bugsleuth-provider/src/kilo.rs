@@ -28,9 +28,12 @@ use serde_json::Value;
 use crate::error::ProviderError;
 use crate::process::{self, Invocation, preview};
 
+mod apply;
 mod discover;
 mod events;
 mod repair;
+
+pub use apply::apply;
 
 pub(crate) const VENDOR: &str = "kilo";
 
@@ -135,34 +138,7 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
     })
     .await?;
 
-    if !output.succeeded() {
-        let code = output.code.unwrap_or(-1);
-        // stderr *then* stdout. Kilo says almost nothing on stderr and streams
-        // its errors as NDJSON events on stdout alongside everything else, so
-        // looking only at stderr reported "no diagnostic output" for a failure
-        // that had said exactly what was wrong. That cost a long time to find.
-        let message = match preview(output.stderr.trim(), 2000) {
-            text if !text.is_empty() => text,
-            _ => events::error_events(&output.stdout),
-        };
-        return Err(if message.is_empty() {
-            ProviderError::FailedSilently {
-                vendor: VENDOR,
-                code,
-            }
-        } else {
-            ProviderError::Failed {
-                vendor: VENDOR,
-                code,
-                message,
-            }
-        });
-    }
-
-    let text = events::assistant_text(&output.stdout);
-    if text.trim().is_empty() {
-        return Err(ProviderError::Empty(VENDOR));
-    }
+    let text = assistant_text_or_error(&output)?;
 
     match crate::json::structured(&Value::String(text.clone())) {
         Ok(findings) => Ok(KiloResult { findings }),
@@ -186,19 +162,65 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
     }
 }
 
-/// Build the non-interactive argv.
+/// The model's answer, or whatever the CLI said about failing to produce one.
+///
+/// stderr *then* stdout. Kilo says almost nothing on stderr and streams its
+/// errors as NDJSON events on stdout alongside everything else, so looking only
+/// at stderr reported "no diagnostic output" for a failure that had said exactly
+/// what was wrong. That cost a long time to find.
+///
+/// Shared by every invocation of this CLI, so a fix to how a failure is read
+/// cannot land on one path and miss the other.
+pub(crate) fn assistant_text_or_error(
+    output: &crate::process::CliOutput,
+) -> Result<String, ProviderError> {
+    if !output.succeeded() {
+        let code = output.code.unwrap_or(-1);
+        let message = match preview(output.stderr.trim(), 2000) {
+            text if !text.is_empty() => text,
+            _ => events::error_events(&output.stdout),
+        };
+        return Err(if message.is_empty() {
+            ProviderError::FailedSilently {
+                vendor: VENDOR,
+                code,
+            }
+        } else {
+            ProviderError::Failed {
+                vendor: VENDOR,
+                code,
+                message,
+            }
+        });
+    }
+
+    let text = events::assistant_text(&output.stdout);
+    if text.trim().is_empty() {
+        return Err(ProviderError::Empty(VENDOR));
+    }
+    Ok(text)
+}
+
+/// The flags every Kilo invocation carries, whatever it is for.
 ///
 /// `--pure` is Kilo's nearest equivalent to the other vendors' safe modes: it
 /// skips external plugins, so a plugin installed on this machine cannot change
 /// what the review does. It does **not** neutralise agent permissions, which is
-/// why the worktree exists.
+/// why the worktree exists. One list, for the same reason Codex has one: a
+/// check or a second entry point that invokes the CLI differently from the work
+/// is not exercising the work.
+pub(crate) const BASE_FLAGS: [&str; 5] = ["run", "--auto", "--pure", "--format", "json"];
+
+/// Build the non-interactive argv for a sweep.
+///
+/// `--agent ask` is the sweep's own addition: it is the read-oriented agent, and
+/// applying fixes deliberately does not pass it.
 fn build_args(spec: &KiloSweep<'_>) -> Vec<String> {
-    let mut args: Vec<String> = [
-        "run", "--auto", "--pure", "--format", "json", "--agent", "ask",
-    ]
-    .iter()
-    .map(|s| (*s).to_string())
-    .collect();
+    let mut args: Vec<String> = BASE_FLAGS
+        .iter()
+        .chain(["--agent", "ask"].iter())
+        .map(|s| (*s).to_string())
+        .collect();
 
     // Pin the working directory explicitly as well as via the spawned process's
     // cwd. Kilo resolves some paths from `--dir` rather than the process cwd,
@@ -280,20 +302,11 @@ pub async fn signin() -> crate::signin::SignIn {
     let _guard = repair::Cleanup(sandbox.clone());
 
     // The same flags a sweep uses, so this checks what a sweep would do.
-    let args: Vec<String> = [
-        "run",
-        "--auto",
-        "--pure",
-        "--format",
-        "json",
-        "--agent",
-        "ask",
-        "--dir",
-        &sandbox.to_string_lossy(),
-    ]
-    .iter()
-    .map(|a| (*a).to_string())
-    .collect();
+    let args: Vec<String> = BASE_FLAGS
+        .iter()
+        .chain(["--agent", "ask", "--dir", &sandbox.to_string_lossy()].iter())
+        .map(|a| (*a).to_string())
+        .collect();
 
     crate::signin::one_shot(
         &binary.to_string_lossy(),

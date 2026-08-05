@@ -23,6 +23,8 @@ export interface RunDeps {
   findings: HTMLDivElement;
   copyPrompt: HTMLButtonElement;
   promptPath: HTMLParagraphElement;
+  /** Where the fixes are handed to a model. Offered once there is a prompt. */
+  applyPanel: HTMLDivElement;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
   renderPlanSummary: () => void;
   settings: () => Settings;
@@ -45,6 +47,10 @@ export async function startRun(deps: RunDeps): Promise<void> {
   deps.setStatus("Running — this takes tens of minutes", "running");
   deps.output.textContent = "Starting…";
   deps.findings.replaceChildren();
+  // The panel applies *the last run's* prompt, and that file is about to be
+  // rewritten. Offering it during a run would apply a report the pane is no
+  // longer showing.
+  deps.applyPanel.classList.add("hidden");
   // Re-enabled per run: it disables itself once pressed, so a second press
   // cannot arrive while the first is still killing processes.
   deps.stop.disabled = false;
@@ -96,13 +102,19 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // about unswept lanes and how severities were graded.
     deps.findings.replaceChildren(findingsList(event.payload.findings ?? []));
     deps.output.textContent = event.payload.text;
-    deps.setStatus(event.payload.ok ? "Finished" : "Run failed", event.payload.ok ? "" : "error");
+    deps.setStatus(
+      event.payload.ok ? "Finished" : "Run failed",
+      event.payload.ok ? "" : "error",
+    );
 
     // The prompt is the point of the run, so it is offered the moment there
     // is one — and its path is shown either way, because a window can be
     // closed and tens of minutes of sweeping should not go with it.
     fixPrompt = event.payload.prompt ?? "";
     deps.copyPrompt.classList.toggle("hidden", fixPrompt === "");
+    // Applying reads the prompt Rust wrote to disk, so it is offered only when
+    // this run actually produced one.
+    deps.applyPanel.classList.toggle("hidden", !event.payload.promptPath);
     const path = event.payload.promptPath;
     deps.promptPath.classList.toggle("hidden", !path);
     deps.promptPath.textContent = path ? `Also saved to ${path}` : "";

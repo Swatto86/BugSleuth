@@ -10,6 +10,7 @@
 //! than a parallel implementation of it. A Tauri command should be a
 //! deserialize, a call in here, and a serialize.
 
+pub mod apply;
 pub mod atomic;
 pub mod brief;
 pub mod bulk;

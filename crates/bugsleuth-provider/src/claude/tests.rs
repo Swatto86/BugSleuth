@@ -107,3 +107,18 @@ fn a_salvage_is_never_itself_salvaged() {
     spec.resume = Some("abc");
     assert!(spec.resume.is_some(), "the wrapper keys off exactly this");
 }
+
+#[test]
+fn an_invocation_with_no_schema_asks_for_none_rather_than_for_null() {
+    // Applying fixes answers in prose. `--json-schema null` is not "no schema":
+    // it constrains the reply to the JSON literal `null`, which would report an
+    // empty account of work that really happened.
+    let mut spec = run("sonnet");
+    spec.schema = serde_json::Value::Null;
+    let args = build_args(&spec);
+    assert!(!args.iter().any(|a| a == "--json-schema"));
+    assert!(!args.iter().any(|a| a == "null"));
+    // The schema is the only thing dropped; everything else still applies.
+    assert!(args.iter().any(|a| a == "--safe-mode"));
+    assert!(args.iter().any(|a| a == "--allowedTools"));
+}

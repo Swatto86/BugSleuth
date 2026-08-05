@@ -17,6 +17,7 @@ use crate::process::{self, Invocation, preview};
 
 use discover::resolve_binary;
 
+mod apply;
 pub(crate) mod args;
 mod discover;
 mod envelope;
@@ -24,6 +25,7 @@ mod prove;
 mod salvage;
 mod triage;
 
+pub use apply::{ApplyRequest, apply};
 pub use envelope::Usage;
 pub use prove::{ProveRequest, ProveResult, prove};
 pub use triage::{TriageRequest, TriageResult, triage};

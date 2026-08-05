@@ -162,8 +162,34 @@ These are the ones to protect when changing anything:
   `cognitive_complexity`.
 - Crate boundaries, which the compiler enforces for free.
 
+## Applying the fixes
+
+The window can hand the report straight back to a model, which is the one thing
+in BugSleuth that writes to the repository. It runs the same `fix-prompt.md` the
+Copy button gives you, read from disk rather than from the window — the argument
+that becomes instructions to an agent with write access should not be a string
+the webview chose.
+
+There is no sandbox here and no pretending otherwise. The guarantee is git:
+
+- **The working tree must be clean**, or it is refused. Your uncommitted work
+  and the model's changes would otherwise be one indistinguishable pile.
+- **What changed is reported from git, never from the model.** Compared against
+  the commit the repository started on, so a fix the model *committed* still
+  counts — `git status` alone would show a clean tree and read as "nothing
+  happened".
+- A sweep and an apply may not overlap, enforced in the shell rather than by
+  disabling a button: a review reading the tree while an apply rewrites it
+  reports on code that no longer exists.
+
+One vendor difference is worth knowing, because it was silent: Codex refuses
+every write when `--ignore-user-config` is set, whatever `--sandbox` says, and
+no config override restores it. Writing invocations therefore drop that flag.
+The same defect had been quietly disabling every Codex *proof attempt*, which
+reported as "not proven" rather than as "could not write".
+
 ## Not built, deliberately
 
-No patch application, PRs, or CI integration. No persistence beyond
+No PRs or CI integration. No persistence beyond
 per-sweep JSON files — `--resume` reads those rather than a database, which is
 the smallest thing that makes a dead run recoverable.

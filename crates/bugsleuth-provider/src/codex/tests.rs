@@ -97,3 +97,35 @@ fn the_configuration_and_rules_of_the_host_and_the_repo_are_both_ignored() {
     assert!(SHARED_FLAGS.contains(&"--ignore-rules"));
     assert!(SHARED_FLAGS.contains(&"--skip-git-repo-check"));
 }
+
+#[test]
+fn an_invocation_with_no_schema_names_no_schema_file() {
+    // No schema file is written when none was asked for, so naming one would
+    // point the CLI at a path that does not exist and fail the whole run.
+    let mut spec = spec("", Sandbox::WorkspaceWrite);
+    spec.schema = serde_json::Value::Null;
+    let args = build_args(&spec, Path::new("s.json"), Path::new("a.json")).join(" ");
+    assert!(!args.contains("--output-schema"));
+    // The final message still comes back through a file rather than the events.
+    assert!(args.contains("--output-last-message a.json"));
+}
+
+#[test]
+fn an_invocation_that_must_write_does_not_also_ignore_the_machines_config() {
+    // Measured against the real CLI: `--ignore-user-config` makes it reject
+    // every patch as "writing is blocked by read-only sandbox" no matter what
+    // `--sandbox` says. Keeping both flags produced an invocation that ran, cost
+    // quota, described the change it wanted to make — and changed nothing.
+    let writing = args_for("", Sandbox::WorkspaceWrite).join(" ");
+    assert!(!writing.contains("--ignore-user-config"));
+    // The repository under review still cannot supply its own execution policy.
+    assert!(writing.contains("--ignore-rules"));
+    assert!(writing.contains("--sandbox workspace-write"));
+
+    // A read-only sweep is unaffected and keeps the isolation.
+    assert!(
+        args_for("", Sandbox::ReadOnly)
+            .join(" ")
+            .contains("--ignore-user-config")
+    );
+}

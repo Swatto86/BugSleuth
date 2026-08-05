@@ -145,18 +145,28 @@ export function matrixRows(
     const idCell = document.createElement("td");
     idCell.className = "model-id";
     idCell.append(
-      modelPicker(index, model, catalogue, handlers, (id) => {
-        // A model that does not accept the effort already chosen must not keep
-        // it: it would be sent to the CLI and rejected. Clearing is the honest
-        // reset — different model, different levels.
-        const { vendor: v, model: m } = splitId(id);
-        const allowed = catalogue[v]?.efforts.length
-          ? catalogue[v].efforts
-          : (catalogue[v]?.efforts_by_model[m] ?? []);
-        const effort = allowed.includes(live.effort) ? live.effort : "";
-        if (effort !== live.effort) handlers.onEffort(index, effort);
-        live = { ...live, id, effort };
-        drawEffort();
+      modelPicker({
+        key: `model-${index}`,
+        label: `Model for row ${index + 1}`,
+        id: model.id,
+        catalogue,
+        onChange: (id) => {
+          handlers.onRename(index, id);
+          // A model that does not accept the effort already chosen must not keep
+          // it: it would be sent to the CLI and rejected. Clearing is the honest
+          // reset — different model, different levels.
+          const { vendor: v, model: m } = splitId(id);
+          const allowed = catalogue[v]?.efforts.length
+            ? catalogue[v].efforts
+            : (catalogue[v]?.efforts_by_model[m] ?? []);
+          const effort = allowed.includes(live.effort) ? live.effort : "";
+          if (effort !== live.effort) handlers.onEffort(index, effort);
+          live = { ...live, id, effort };
+          // Which efforts apply depends on which model this is, so that control
+          // has to follow it. Only that one cell is rebuilt: re-rendering the row
+          // on every keystroke would take focus out of the box mid-word.
+          drawEffort();
+        },
       }),
     );
     row.append(idCell);
@@ -179,7 +189,9 @@ export function matrixRows(
         "aria-label",
         `${current || vendor} covers the ${LANE_TITLES[lane]} lane`,
       );
-      box.addEventListener("change", () => handlers.onToggle(index, lane, box.checked));
+      box.addEventListener("change", () =>
+        handlers.onToggle(index, lane, box.checked),
+      );
       cell.append(box);
       row.append(cell);
     }
