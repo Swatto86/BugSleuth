@@ -54,6 +54,13 @@ say "frontend formatting"
 # machines on different prettier minors format differently, and then each
 # person's commit reformats the other's file.
 #
+# `endOfLine: "auto"` in `.prettierrc.json`, because line endings are git's job
+# and prettier's default disagrees. This check passed on the machine it was
+# written on and failed every Windows CI run: a fresh checkout there is CRLF,
+# while the author's working tree was LF, so prettier called all 21 files
+# misformatted. Formatting is still enforced — only the line ending is left to
+# `core.autocrlf`, which is the thing that actually decides it.
+#
 # This check was vacuous when first written. `.prettierignore` held `*`
 # followed by a re-inclusion, which gitignore semantics do not allow under an
 # excluded parent, so it scanned nothing and passed — over a file deliberately
