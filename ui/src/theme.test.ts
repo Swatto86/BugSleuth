@@ -28,7 +28,9 @@ function paletteAfter(marker: string): Record<string, string> {
   assert.notEqual(start, -1, `theme.css no longer contains ${marker}`);
   const block = css.slice(start, css.indexOf("}", start));
   const palette: Record<string, string> = {};
-  for (const [, name, value] of block.matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6});/g)) {
+  for (const [, name, value] of block.matchAll(
+    /(--[\w-]+):\s*(#[0-9a-fA-F]{6});/g,
+  )) {
     palette[name!] = value!;
   }
   return palette;
@@ -64,17 +66,47 @@ const PAIRS: Array<{ fg: string; bg: string; min: number; what: string }> = [
   { fg: "--text", bg: "--bg", min: 4.5, what: "body text on the page" },
   { fg: "--text", bg: "--bg-raised", min: 4.5, what: "body text on a panel" },
   { fg: "--text", bg: "--bg-sunken", min: 4.5, what: "input text" },
-  { fg: "--text-dim", bg: "--bg-raised", min: 4.5, what: "section headings and field labels" },
+  {
+    fg: "--text-dim",
+    bg: "--bg-raised",
+    min: 4.5,
+    what: "section headings and field labels",
+  },
   { fg: "--text-faint", bg: "--bg-raised", min: 4.5, what: "hint text" },
-  { fg: "--text-faint", bg: "--bg-sunken", min: 4.5, what: "the version detail in a provider pill" },
-  { fg: "--accent", bg: "--bg-raised", min: 3, what: "the running-status colour" },
+  {
+    fg: "--text-faint",
+    bg: "--bg-sunken",
+    min: 4.5,
+    what: "the version detail in a provider pill",
+  },
+  {
+    fg: "--accent",
+    bg: "--bg-raised",
+    min: 3,
+    what: "the running-status colour",
+  },
   { fg: "--on-accent", bg: "--accent", min: 4.5, what: "the primary button" },
-  { fg: "--critical", bg: "--bg-raised", min: 4.5, what: "a critical severity label" },
+  {
+    fg: "--critical",
+    bg: "--bg-raised",
+    min: 4.5,
+    what: "a critical severity label",
+  },
   { fg: "--high", bg: "--bg-raised", min: 4.5, what: "a high severity badge" },
-  { fg: "--medium", bg: "--bg-raised", min: 4.5, what: "a medium severity badge" },
+  {
+    fg: "--medium",
+    bg: "--bg-raised",
+    min: 4.5,
+    what: "a medium severity badge",
+  },
   { fg: "--low", bg: "--bg-raised", min: 4.5, what: "a low severity badge" },
   { fg: "--good", bg: "--bg-raised", min: 4.5, what: "an available provider" },
-  { fg: "--warn", bg: "--bg-raised", min: 4.5, what: "the uncovered-lane warning" },
+  {
+    fg: "--warn",
+    bg: "--bg-raised",
+    min: 4.5,
+    what: "the uncovered-lane warning",
+  },
   { fg: "--border-strong", bg: "--bg-raised", min: 3, what: "control borders" },
 ];
 
@@ -104,7 +136,11 @@ test("both themes define the same set of colours", () => {
   const darkKeys = Object.keys(dark).sort();
   const lightKeys = Object.keys(light).sort();
   const missing = darkKeys.filter((key) => !lightKeys.includes(key));
-  assert.deepEqual(missing, [], `the light theme does not override: ${missing.join(", ")}`);
+  assert.deepEqual(
+    missing,
+    [],
+    `the light theme does not override: ${missing.join(", ")}`,
+  );
 });
 
 test("the two themes are actually different", () => {

@@ -48,7 +48,7 @@ pub struct Settings {
     ///
     /// Separate from the sweep matrix on purpose: finding a defect and fixing it
     /// are different jobs, and the one you would spend a cheap model on to read
-    /// four lanes is not necessarily the one you want editing your code. Empty
+    /// every lane is not necessarily the one you want editing your code. Empty
     /// until chosen, and the button refuses rather than guessing.
     #[serde(default)]
     pub apply_model: String,
@@ -112,6 +112,7 @@ impl Default for Settings {
                         "security".into(),
                         "contract".into(),
                         "ux".into(),
+                        "gate".into(),
                     ],
                 },
                 ModelSetting {
@@ -192,7 +193,7 @@ mod tests {
             .iter()
             .flat_map(|m| m.lanes.iter().map(String::as_str))
             .collect();
-        for lane in ["correctness", "security", "contract", "ux"] {
+        for lane in ["correctness", "security", "contract", "ux", "gate"] {
             assert!(covered.contains(&lane), "{lane} has no model by default");
         }
     }

@@ -47,7 +47,10 @@ export function savingSettings(deps: PersistDeps): () => void {
         .catch((error: unknown) => {
           failed = true;
           if (!deps.quiet()) {
-            deps.setStatus(`Settings are not being saved: ${String(error)}`, "error");
+            deps.setStatus(
+              `Settings are not being saved: ${String(error)}`,
+              "error",
+            );
           }
         });
     }, 400);

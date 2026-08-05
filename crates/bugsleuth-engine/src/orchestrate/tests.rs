@@ -97,8 +97,10 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
     );
     assert_eq!(report.ranked[0].cluster.agreement, 2);
 
-    // Three lanes had no model, and must be visible as holes.
-    assert_eq!(report.gaps.len(), 3);
+    // Only Correctness had a model. Every other lane must be visible as a
+    // hole — counted from `Lane::ALL` rather than written out, so a lane added
+    // later is one this assertion already covers.
+    assert_eq!(report.gaps.len(), Lane::ALL.len() - 1);
     let text = report.to_text();
     assert!(text.contains("NOT SWEPT"));
     assert!(text.contains("found by 2 of 2 models"));

@@ -88,4 +88,21 @@ mod tests {
         inventory.add(item("B", 1, 300));
         assert_eq!(inventory.average_price(), 200);
     }
+
+    /// Every operation that can panic has to say so in its documentation.
+    #[test]
+    fn panicking_operations_document_that_they_panic() {
+        let source = include_str!("inventory.rs");
+        let functions: Vec<&str> = source.split("\npub fn ").skip(1).collect();
+        let undocumented: Vec<&&str> = functions
+            .iter()
+            .filter(|body| body.contains("unwrap(") || body.contains("[.."))
+            .filter(|body| !body.contains("# Panics"))
+            .collect();
+        assert!(
+            undocumented.is_empty(),
+            "{} undocumented panics",
+            undocumented.len()
+        );
+    }
 }

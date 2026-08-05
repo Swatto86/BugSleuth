@@ -70,7 +70,11 @@ test("a round names what is about to run and where it sits in the sequence", () 
 });
 
 test("a reused sweep says it was reused rather than pretending to be fresh", () => {
-  const reused: RunEvent = { kind: "reused", model: "sonnet", lane: "Contract" };
+  const reused: RunEvent = {
+    kind: "reused",
+    model: "sonnet",
+    lane: "Contract",
+  };
   const text = describe(reused);
   assert.ok(text.includes("reused"), text);
   assert.ok(text.includes("Contract"), text);
@@ -80,5 +84,8 @@ test("names are joined the way English does", () => {
   assert.equal(listOf([]), "");
   assert.equal(listOf(["Security"]), "Security");
   assert.equal(listOf(["Security", "UX"]), "Security and UX");
-  assert.equal(listOf(["Security", "Contract", "UX"]), "Security, Contract and UX");
+  assert.equal(
+    listOf(["Security", "Contract", "UX"]),
+    "Security, Contract and UX",
+  );
 });

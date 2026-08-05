@@ -72,7 +72,10 @@ export function wireUpdate(deps: UpdateDeps): void {
           // the reader looking at their network instead of at the install.
           await invoke("install_update");
         } catch (error: unknown) {
-          setStatus(`Could not install ${update.version}: ${String(error)}`, "error");
+          setStatus(
+            `Could not install ${update.version}: ${String(error)}`,
+            "error",
+          );
         }
       })
       .catch((error: unknown) => {

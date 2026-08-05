@@ -16,6 +16,8 @@ import { test } from "node:test";
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 import {
+  type ModelSetting,
+  type Settings,
   LANES,
   LANE_TITLES,
   MAX_PROVE_TOP,
@@ -32,7 +34,20 @@ import {
   vendorOf,
 } from "./model.ts";
 
-test("every shipped preset covers all four lanes", () => {
+/**
+ * A matrix row, with the fields every row really has.
+ *
+ * The tests used to write `{ id, lanes }` object literals, which type-check
+ * only because nothing type-checked them: `tsconfig.json` excluded `*.test.ts`
+ * and `node --experimental-strip-types` erases annotations without reading
+ * them. Both are fixed, so the fixtures now have to be the real shape — and
+ * where a test deliberately means an *older* shape, it says so with a cast.
+ */
+function row(id: string, lanes: string[]): ModelSetting {
+  return { id, lanes, effort: "", passes: 1 };
+}
+
+test("every shipped preset covers every lane", () => {
   // A preset is exactly what someone picks when they have not thought about
   // lane coverage, so one that silently left a lane unswept would be the worst
   // possible default.
@@ -46,26 +61,29 @@ test("every shipped preset covers all four lanes", () => {
 });
 
 test("an uncovered lane is reported", () => {
-  const models = [{ id: "sonnet", lanes: ["correctness"] }];
-  assert.deepEqual(uncoveredLanes(models), ["security", "contract", "ux"]);
+  // Derived from LANES rather than written out. A hand-copied list fails the
+  // day a lane is added, for no defect, and the natural repair is to paste the
+  // new name in — which is how a list stops meaning "all of them".
+  const models = [row("sonnet", ["correctness"])];
+  assert.deepEqual(
+    uncoveredLanes(models),
+    LANES.filter((lane) => lane !== "correctness"),
+  );
 });
 
 test("a model with no id contributes nothing", () => {
   // A blank row is a half-typed entry, not a request to sweep.
-  assert.equal(unitCount([{ id: "  ", lanes: [...LANES] }]), 0);
+  assert.equal(unitCount([row("  ", [...LANES])]), 0);
 });
 
 test("unknown lane names are ignored rather than counted", () => {
-  assert.equal(
-    unitCount([{ id: "sonnet", lanes: ["correctness", "nonsense"] }]),
-    1,
-  );
+  assert.equal(unitCount([row("sonnet", ["correctness", "nonsense"])]), 1);
 });
 
 test("two models on one lane is two sweeps, because that is the point", () => {
   const models = [
-    { id: "sonnet", lanes: ["correctness"] },
-    { id: "codex:", lanes: ["correctness"] },
+    row("sonnet", ["correctness"]),
+    row("codex:", ["correctness"]),
   ];
   assert.equal(unitCount(models), 2);
 });
@@ -84,15 +102,15 @@ test("rounds are driven by the busiest vendor, not the total", () => {
   // The engine never runs two invocations of one vendor at once, so four sweeps
   // spread over two vendors is two rounds, not four.
   const models = [
-    { id: "sonnet", lanes: ["correctness", "security"] },
-    { id: "codex:", lanes: ["correctness", "security"] },
+    row("sonnet", ["correctness", "security"]),
+    row("codex:", ["correctness", "security"]),
   ];
   assert.equal(unitCount(models), 4);
   assert.equal(batchCount(models), 2);
 });
 
 test("one vendor doing everything is one round per lane", () => {
-  assert.equal(batchCount([{ id: "sonnet", lanes: [...LANES] }]), 4);
+  assert.equal(batchCount([row("sonnet", [...LANES])]), LANES.length);
 });
 
 test("an empty configuration needs no rounds", () => {
@@ -106,7 +124,11 @@ test("a run needs both a repository and at least one sweep", () => {
     theme: "system" as const,
     prove_top: 0,
     test_command: "",
-  };
+    reuse_completed: true,
+    triage_model: "haiku",
+    apply_model: "",
+    apply_effort: "",
+  } satisfies Omit<Settings, "repo" | "models">;
   assert.equal(
     canRun({ ...base, repo: "", models: preset("balanced") }),
     false,
@@ -119,10 +141,7 @@ test("a run needs both a repository and at least one sweep", () => {
 });
 
 test("toggling a lane leaves other models untouched", () => {
-  const models = [
-    { id: "a", lanes: ["correctness"] },
-    { id: "b", lanes: ["correctness"] },
-  ];
+  const models = [row("a", ["correctness"]), row("b", ["correctness"])];
   const next = toggleLane(models, 0, "security", true);
   assert.deepEqual(next[0]?.lanes.sort(), ["correctness", "security"]);
   assert.deepEqual(next[1]?.lanes, ["correctness"]);
@@ -131,7 +150,7 @@ test("toggling a lane leaves other models untouched", () => {
 });
 
 test("toggling a lane off removes exactly it, and twice on is idempotent", () => {
-  const models = [{ id: "a", lanes: ["correctness", "security"] }];
+  const models = [row("a", ["correctness", "security"])];
   assert.deepEqual(toggleLane(models, 0, "security", false)[0]?.lanes, [
     "correctness",
   ]);
@@ -222,7 +241,7 @@ test("an unknown prefix is treated as a Claude model, colon and all", () => {
 test("a repeated pass is a whole extra sweep, and an extra round", () => {
   // Two passes of one model is two invocations of one vendor, which the engine
   // will never run at once — so it costs a round as well as a sweep.
-  const models = [{ id: "sonnet", lanes: ["correctness"], passes: 2 }];
+  const models = [{ ...row("sonnet", ["correctness"]), passes: 2 }];
   assert.equal(unitCount(models), 2);
   assert.equal(batchCount(models), 2);
 });
@@ -230,7 +249,18 @@ test("a repeated pass is a whole extra sweep, and an extra round", () => {
 test("settings saved before passes existed still estimate as one pass each", () => {
   // Reading a missing field as NaN would put "NaN sweeps" in front of someone
   // whose only mistake was having used the app last week.
-  assert.equal(unitCount([{ id: "sonnet", lanes: ["correctness"] }]), 1);
+  //
+  // Deliberately the *old* shape, with no `passes` field at all — the cast is
+  // the point. Type-checking the tests turned this into `row(...)`, which
+  // supplies `passes: 1`, and the test stopped exercising the missing-field
+  // path entirely: it asserted 1 about an object that already said 1. A check
+  // that can no longer fail, introduced by the very change that added the lane
+  // which hunts them.
+  const legacy = {
+    id: "sonnet",
+    lanes: ["correctness"],
+  } as unknown as ModelSetting;
+  assert.equal(unitCount([legacy]), 1);
 });
 
 test("a model listed twice with different passes counts like the engine: max, not sum", () => {
@@ -239,8 +269,8 @@ test("a model listed twice with different passes counts like the engine: max, no
   // passes 2 and 3 - its pass 1 collides with the first row's. Summing rows
   // shows "4 sweeps" for a run the engine executes as 3.
   const models = [
-    { id: "sonnet", lanes: ["correctness"], passes: 1 },
-    { id: "sonnet", lanes: ["correctness"], passes: 3 },
+    { ...row("sonnet", ["correctness"]), passes: 1 },
+    { ...row("sonnet", ["correctness"]), passes: 3 },
   ];
   assert.equal(unitCount(models), 3);
   assert.equal(batchCount(models), 3);
@@ -248,8 +278,8 @@ test("a model listed twice with different passes counts like the engine: max, no
 
 test("an identical duplicate row adds nothing, exactly like the engine", () => {
   const models = [
-    { id: "sonnet", lanes: ["correctness"] },
-    { id: "sonnet", lanes: ["correctness"] },
+    row("sonnet", ["correctness"]),
+    row("sonnet", ["correctness"]),
   ];
   assert.equal(unitCount(models), 1);
 });

@@ -57,7 +57,10 @@ export function walk(node: ts.Node, visit: (node: ts.Node) => void): void {
 }
 
 /** Every call to a named function, wherever it appears. */
-export function callsTo(source: ts.SourceFile, name: string): ts.CallExpression[] {
+export function callsTo(
+  source: ts.SourceFile,
+  name: string,
+): ts.CallExpression[] {
   const found: ts.CallExpression[] = [];
   walk(source, (node) => {
     if (!ts.isCallExpression(node)) return;
@@ -68,10 +71,16 @@ export function callsTo(source: ts.SourceFile, name: string): ts.CallExpression[
 }
 
 /** The literal text of a call's nth argument, if it is a plain string. */
-export function stringArgument(call: ts.CallExpression, index = 0): string | undefined {
+export function stringArgument(
+  call: ts.CallExpression,
+  index = 0,
+): string | undefined {
   const argument = call.arguments[index];
   if (!argument) return undefined;
-  if (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument)) {
+  if (
+    ts.isStringLiteral(argument) ||
+    ts.isNoSubstitutionTemplateLiteral(argument)
+  ) {
     return argument.text;
   }
   return undefined;
@@ -98,7 +107,7 @@ export function lineOf(source: ts.SourceFile, node: ts.Node): number {
  * this project shipped on the folder-picker button, and the regex version
  * exempted it because the word `await` was present.
  */
-export function rejectionIsHandled(source: ts.SourceFile, call: ts.CallExpression): boolean {
+export function rejectionIsHandled(call: ts.CallExpression): boolean {
   let node: ts.Node = call;
   let awaited = false;
 
@@ -140,7 +149,10 @@ export function rejectionIsHandled(source: ts.SourceFile, call: ts.CallExpressio
 }
 
 /** The property names of an `interface`, or undefined if there is no such one. */
-export function interfaceFields(sources: ts.SourceFile[], name: string): string[] | undefined {
+export function interfaceFields(
+  sources: ts.SourceFile[],
+  name: string,
+): string[] | undefined {
   for (const source of sources) {
     let fields: string[] | undefined;
     walk(source, (node) => {
@@ -179,7 +191,11 @@ export function unionArms(
           (p) => ts.isIdentifier(p.name) && p.name.text === discriminant,
         );
         const literal = tag?.type;
-        if (!literal || !ts.isLiteralTypeNode(literal) || !ts.isStringLiteral(literal.literal)) {
+        if (
+          !literal ||
+          !ts.isLiteralTypeNode(literal) ||
+          !ts.isStringLiteral(literal.literal)
+        ) {
           continue;
         }
         arms.set(
@@ -243,7 +259,7 @@ test("a chain ending in .catch is handled, however many statements are inside it
   const source = parse("sample.ts", SAMPLE);
   const call = callsTo(source, "invoke").find((c) => stringArgument(c) === "a");
   assert.ok(call, "did not find the chained call");
-  assert.equal(rejectionIsHandled(source, call), true);
+  assert.equal(rejectionIsHandled(call), true);
 });
 
 test("an awaited call in a discarded callback is not handled", () => {
@@ -253,7 +269,7 @@ test("an awaited call in a discarded callback is not handled", () => {
   const source = parse("sample.ts", SAMPLE);
   const call = callsTo(source, "invoke").find((c) => stringArgument(c) === "b");
   assert.ok(call, "did not find the listener call");
-  assert.equal(rejectionIsHandled(source, call), false);
+  assert.equal(rejectionIsHandled(call), false);
 });
 
 test("an awaited call in a catch or finally is not covered by that try", () => {
@@ -277,10 +293,12 @@ async function handler(): Promise<void> {
 `,
   );
   for (const command of ["in-catch", "in-finally", "after"]) {
-    const call = callsTo(source, "invoke").find((c) => stringArgument(c) === command);
+    const call = callsTo(source, "invoke").find(
+      (c) => stringArgument(c) === command,
+    );
     assert.ok(call, `did not find the ${command} call`);
     assert.equal(
-      rejectionIsHandled(source, call),
+      rejectionIsHandled(call),
       false,
       `a call in "${command}" was read as protected by a try that does not cover it`,
     );
@@ -291,14 +309,14 @@ test("an awaited call inside its own try is handled", () => {
   const source = parse("sample.ts", SAMPLE);
   const call = callsTo(source, "invoke").find((c) => stringArgument(c) === "c");
   assert.ok(call, "did not find the guarded call");
-  assert.equal(rejectionIsHandled(source, call), true);
+  assert.equal(rejectionIsHandled(call), true);
 });
 
 test("a bare voided call is not handled", () => {
   const source = parse("sample.ts", SAMPLE);
   const call = callsTo(source, "invoke").find((c) => stringArgument(c) === "d");
   assert.ok(call, "did not find the bare call");
-  assert.equal(rejectionIsHandled(source, call), false);
+  assert.equal(rejectionIsHandled(call), false);
 });
 
 test("every arm of a union is read, not just the first", () => {

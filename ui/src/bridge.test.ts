@@ -62,7 +62,8 @@ function matches(source: string, pattern: RegExp): Set<string> {
 }
 
 /** Commands the page calls. `invoke<T>("name")` and `invoke("name")` both. */
-const invoked = () => matches(frontend(), /\binvoke(?:<[^>]*>)?\(\s*"([a-z_]+)"/g);
+const invoked = () =>
+  matches(frontend(), /\binvoke(?:<[^>]*>)?\(\s*"([a-z_]+)"/g);
 
 /** Commands Rust defines — the attribute, then the function it sits on. */
 const defined = () =>
@@ -76,7 +77,10 @@ const defined = () =>
  */
 const registered = () => {
   const handler = /generate_handler!\s*\[([\s\S]*?)\]/.exec(rust());
-  assert.ok(handler, "no invoke handler found in src-tauri; the scan is broken");
+  assert.ok(
+    handler,
+    "no invoke handler found in src-tauri; the scan is broken",
+  );
   return new Set(
     handler[1]!
       .split(",")
@@ -86,7 +90,8 @@ const registered = () => {
   );
 };
 
-const listened = () => matches(frontend(), /\blisten(?:<[\s\S]*?>)?\(\s*"([a-z-]+)"/g);
+const listened = () =>
+  matches(frontend(), /\blisten(?:<[\s\S]*?>)?\(\s*"([a-z-]+)"/g);
 const emitted = () => matches(rust(), /\bemit\w*\(\s*"([a-z-]+)"/g);
 
 test("both sides are actually being read", () => {
@@ -107,7 +112,11 @@ test("every command the page calls exists in Rust and is exposed", () => {
     (name) => rustCommands.has(name) && !exposed.has(name),
   );
 
-  assert.deepEqual(broken, [], "the page calls these; no Rust function answers to the name");
+  assert.deepEqual(
+    broken,
+    [],
+    "the page calls these; no Rust function answers to the name",
+  );
   // Defined but left out of the handler list is the subtler half: the function
   // is right there in the file, so a reader checking by eye finds it.
   assert.deepEqual(
@@ -132,14 +141,18 @@ test("no command is exposed to the page that the page never calls", () => {
 
 /** The field names of a `pub struct` in the Rust behind the window. */
 function rustFields(name: string): string[] {
-  const struct = new RegExp(`pub struct ${name} \\{([\\s\\S]*?)\\n\\}`).exec(rust());
+  const struct = new RegExp(`pub struct ${name} \\{([\\s\\S]*?)\\n\\}`).exec(
+    rust(),
+  );
   assert.ok(struct, `no "pub struct ${name}" in src-tauri; the scan is broken`);
   // Serde renames would break the mapping silently, so refuse to guess.
   assert.ok(
     !/#\[serde\(rename/.test(struct[1]!),
     `${name} renames a field for the wire; this scan compares Rust names directly`,
   );
-  const fields = [...struct[1]!.matchAll(/^\s*pub ([a-z_]+):/gm)].map((m) => m[1]!).sort();
+  const fields = [...struct[1]!.matchAll(/^\s*pub ([a-z_]+):/gm)]
+    .map((m) => m[1]!)
+    .sort();
   // Two empty lists compare equal, so a scan that stops matching turns the
   // comparison below into a pass. It happened to the lane check in this file.
   assert.ok(fields.length >= 3, `read no fields out of Rust's ${name}`);
@@ -152,7 +165,10 @@ test("the settings the window writes are the settings Rust reads", () => {
   // chose. The symptom is a control that appears to work and changes nothing.
   for (const shape of ["Settings", "ModelSetting"]) {
     const window = interfaceFields(frontendFiles(), shape);
-    assert.ok(window, `no "${shape}" interface in the frontend; the scan is broken`);
+    assert.ok(
+      window,
+      `no "${shape}" interface in the frontend; the scan is broken`,
+    );
     assert.deepEqual(
       window,
       rustFields(shape),
@@ -168,7 +184,9 @@ test("a lane is spelled the same way in the window as in the engine", () => {
     path.join(here, "..", "..", "crates", "bugsleuth-domain", "src", "lane.rs"),
     "utf8",
   );
-  const titles = new Set([...lane.matchAll(/Lane::\w+ => "([^"]+)"/g)].map((m) => m[1]!));
+  const titles = new Set(
+    [...lane.matchAll(/Lane::\w+ => "([^"]+)"/g)].map((m) => m[1]!),
+  );
   assert.ok(titles.size >= 4, "found almost no lane titles in the engine");
 
   // Anchored on the declaration. Matching bare `LANE_TITLES` finds the import
@@ -176,7 +194,9 @@ test("a lane is spelled the same way in the window as in the engine", () => {
   // empty set it produced made this test pass while the lane was renamed.
   const table = /\bconst LANE_TITLES[^{]*\{([\s\S]*?)\n\}/.exec(frontend());
   assert.ok(table, "no LANE_TITLES table in the frontend; the scan is broken");
-  const shown = new Set([...table[1]!.matchAll(/:\s*"([^"]+)"/g)].map((m) => m[1]!));
+  const shown = new Set(
+    [...table[1]!.matchAll(/:\s*"([^"]+)"/g)].map((m) => m[1]!),
+  );
   assert.ok(shown.size >= 4, `read no titles out of the table: ${table[1]!}`);
 
   assert.deepEqual(
@@ -192,7 +212,15 @@ test("a progress event carries the fields the window renders from", () => {
   // renamed in the engine does not fail anywhere: the property is simply
   // undefined, and the log reads "Round undefined/undefined".
   const engine = fs.readFileSync(
-    path.join(here, "..", "..", "crates", "bugsleuth-engine", "src", "orchestrate.rs"),
+    path.join(
+      here,
+      "..",
+      "..",
+      "crates",
+      "bugsleuth-engine",
+      "src",
+      "orchestrate.rs",
+    ),
     "utf8",
   );
   const enumeration = /pub enum RunEvent \{([\s\S]*?)\n\}/.exec(engine);
@@ -208,9 +236,15 @@ test("a progress event carries the fields the window renders from", () => {
     const name = /^\s*([A-Z]\w*)/.exec(chunk);
     if (!name) continue;
     const snake = name[1]!.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-    variants.set(snake, [...chunk.matchAll(/(\w+):\s*\w/g)].map((f) => f[1]!).sort());
+    variants.set(
+      snake,
+      [...chunk.matchAll(/(\w+):\s*\w/g)].map((f) => f[1]!).sort(),
+    );
   }
-  assert.ok(variants.size >= 3, `read ${variants.size} variants out of the engine`);
+  assert.ok(
+    variants.size >= 3,
+    `read ${variants.size} variants out of the engine`,
+  );
 
   // The window's side comes from TypeScript's own parser. Reading it with a
   // regex matched to the first semicolon returned one arm of three, because a
@@ -224,7 +258,11 @@ test("a progress event carries the fields the window renders from", () => {
     "the window and the engine disagree about which events exist",
   );
   for (const [kind, fields] of variants) {
-    assert.deepEqual(mirrored.get(kind), fields, `the ${kind} event carries different fields`);
+    assert.deepEqual(
+      mirrored.get(kind),
+      fields,
+      `the ${kind} event carries different fields`,
+    );
   }
 });
 
@@ -259,7 +297,10 @@ test("the proof cap is the same number in the window, the markup and Rust", () =
 
   const outcome = fs.readFileSync(path.join(rustDir, "outcome.rs"), "utf8");
   const inRust = /const MAX_PROVE_TOP: usize = (\d+);/.exec(outcome);
-  assert.ok(inRust, "Rust does not define a proof cap; it is trusting the window again");
+  assert.ok(
+    inRust,
+    "Rust does not define a proof cap; it is trusting the window again",
+  );
 
   assert.equal(inHtml[1], inTs[1], "the markup and the window disagree");
   assert.equal(inRust[1], inTs[1], "Rust and the window disagree");

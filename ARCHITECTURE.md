@@ -70,6 +70,23 @@ Two consequences worth knowing:
 Vendor dispatch is an enum, not a trait. The set is closed and small, and the
 differences above are worth seeing rather than hiding behind one interface.
 
+## The lane that reviews the checks
+
+Four lanes read `src`. The fifth, **Gate**, reads the test suite, the workflows
+and the verification scripts, and hunts one shape: *a check that passes whether
+or not the behaviour it names is correct.* It follows from the constraint at the
+top of this file — if a claim nobody can check is worthless, so is a check that
+cannot fail, and nothing else was looking at those.
+
+It was graded before it shipped, against four gate defects seeded into
+`fixtures/seeded-repo`: three sweeps scored 4/4, 3/4 and 4/4, with no false
+positives and nothing reported that belonged to another lane. Then it was run
+against this repository and found two real ones — a lane round-trip test whose
+`unwrap_or` fallback was the value under test, so the Ux case could not fail,
+and a `tsconfig.json` that excluded every `*.test.ts` from the only
+type-checking the gate does, so a mismatch between a function and its own test
+passed everything. Both are fixed; both had been read over many times.
+
 ## The path a run takes
 
 1. **Plan** — the config assigns lanes to models; the (model × lane) product is

@@ -4,7 +4,7 @@
     "Two models on the same lane is the point, not a mistake - lanes buy coverage,",
     "doubling up within a lane buys depth.",
     "",
-    "Any of the four lanes (correctness, security, contract, ux) with no model",
+    "Any lane (correctness, security, contract, ux, gate) with no model",
     "assigned is reported as NOT SWEPT and makes the run exit non-zero. It is never",
     "silently omitted, because a missing lane reads exactly like a clean one.",
     "",
@@ -15,7 +15,7 @@
   "models": [
     {
       "id": "sonnet",
-      "lanes": ["correctness", "security", "contract", "ux"]
+      "lanes": ["correctness", "security", "contract", "ux", "gate"]
     },
     {
       "id": "codex:",

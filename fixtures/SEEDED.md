@@ -36,6 +36,24 @@ off. C7 was found by both.
 It is left in place, because an answer key that the tool improved on is a more
 honest fixture than one curated to match what the tool already finds.
 
+## Gate lane should find
+
+Defects in the *checks*, not in the code they are meant to protect. Every one of
+these leaves a suite that passes, which is the only reason they are worth
+planting: nothing about a green run distinguishes them from real coverage.
+
+| # | File | What | Why it is a defect |
+|---|---|---|---|
+| G1 | `src/inventory.rs` · `panicking_operations_document_that_they_panic` | `source.split("\npub fn ")` over a file whose functions are all `impl` methods | Every function in that file is indented, so the split matches **nothing**, the list is empty and `assert!(undocumented.is_empty())` passes on an empty scan. Confirmed by counting: 0 top-level `pub fn`, 7 indented. The check reads as protection and cannot fail. |
+| G2 | `src/pricing.rs` · `a_basket_total_is_never_negative` | `assert!(basket_total(100, 3) >= 0)` | `basket_total` returns `u64`. The assertion is true for every possible value, including a wrong one. A test that cannot fail is worse than no test: it occupies the place where a real one would go. |
+| G3 | `scripts/check.sh` | `cargo test --quiet 2>&1 \| tail -5` followed by an unconditional `echo "checks passed"` | A pipeline exits with the status of its **last** stage, so the gate reports the exit code of `tail`, which is always 0. `set -e` does not save it. The script prints "checks passed" over a red suite. |
+| G4 | `src/pricing.rs` · `parses_a_price_with_no_pence` | `#[ignore = "flaky on CI"]` | It is not flaky. Un-ignored it fails deterministically — `parse_price("12")` panics at `pricing.rs:26`, which is defect C4. The ignore hides a known failure behind an excuse the code contradicts. Confirmed by running `cargo test -- --ignored`. |
+
+G1 and G4 were confirmed by running the code, not by reading it, as C6 and C7
+were. G3 cannot be confirmed by `cargo test` at all — it is only visible by
+reading the script, which is the point of giving this lane a slice of the
+repository the others never look at.
+
 ## Notes
 
 - C1, C2, C3 and C4 are all reachable panics; C5 is a silent wrong answer.
@@ -44,3 +62,11 @@ honest fixture than one curated to match what the tool already finds.
   it is the situation BugSleuth exists for.
 - C5 is the hardest: finding it requires reading the doc comment and comparing
   it to the code, not just reading the code.
+
+### Measured
+
+Three `sonnet` sweeps of the Gate lane against this fixture, before it shipped:
+**4/4, 3/4, 4/4**. Eleven findings, none false, and not one about the production
+defects the other lanes cover. The single miss was G1 both times — the mandate
+finds it on a thorough pass and can skip it on a short one, which is an argument
+for a second pass rather than for more prose.

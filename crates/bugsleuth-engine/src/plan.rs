@@ -265,18 +265,21 @@ mod tests {
         let plan = plan(&config(&[("sonnet", &["correctness"])]))
             .unwrap_or_else(|e| panic!("plan failed: {e}"));
         assert_eq!(plan.units.len(), 1);
-        assert_eq!(plan.uncovered.len(), 3);
+        assert_eq!(plan.uncovered.len(), Lane::ALL.len() - 1);
         assert!(plan.uncovered.contains(&Lane::Security));
     }
 
     #[test]
     fn a_fully_covered_run_reports_no_gaps() {
-        let plan = plan(&config(&[(
-            "sonnet",
-            &["correctness", "security", "contract", "ux"],
-        )]))
-        .unwrap_or_else(|e| panic!("plan failed: {e}"));
+        // Derived from `Lane::ALL`, not written out: a hand-copied lane list
+        // means adding a lane fails this test for no defect, and the natural
+        // repair is to paste the new name in without asking whether the rest of
+        // the product covers it.
+        let every: Vec<&str> = Lane::ALL.iter().map(|lane| lane.slug()).collect();
+        let plan =
+            plan(&config(&[("sonnet", &every)])).unwrap_or_else(|e| panic!("plan failed: {e}"));
         assert!(plan.uncovered.is_empty());
+        assert_eq!(plan.units.len(), Lane::ALL.len());
     }
 
     #[test]

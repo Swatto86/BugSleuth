@@ -19,7 +19,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const root = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+);
 
 /**
  * Read a file with its line endings normalised.
@@ -48,8 +52,13 @@ const workflow = () => read(".github", "workflows", "release.yml");
  * of the empty list quietly satisfying every comparison downstream.
  */
 function suffixes(): string[] {
-  const found = [...workflow().matchAll(/"suffix":"([^"]+)"/g)].map((m) => m[1]!);
-  assert.ok(found.length >= 3, `the release matrix names ${found.length} platforms`);
+  const found = [...workflow().matchAll(/"suffix":"([^"]+)"/g)].map(
+    (m) => m[1]!,
+  );
+  assert.ok(
+    found.length >= 3,
+    `the release matrix names ${found.length} platforms`,
+  );
   return found;
 }
 
@@ -61,10 +70,17 @@ test("the README's download table names assets the workflow builds", () => {
   const table = /\| You want \| Download \|([\s\S]*?)\n\n/.exec(text);
   assert.ok(table, "no download table in the README; the scan is broken");
 
-  const stems = [...table[1]!.matchAll(/`([A-Za-z][\w.-]*?)[_-](?:x\.y\.z|windows|linux|macos)/g)]
+  const stems = [
+    ...table[1]!.matchAll(
+      /`([A-Za-z][\w.-]*?)[_-](?:x\.y\.z|windows|linux|macos)/g,
+    ),
+  ]
     .map((m) => m[1]!)
     .filter((stem, index, all) => all.indexOf(stem) === index);
-  assert.ok(stems.length >= 3, `read ${stems.length} asset names out of the table`);
+  assert.ok(
+    stems.length >= 3,
+    `read ${stems.length} asset names out of the table`,
+  );
 
   const missing = stems.filter((stem) => !yaml.includes(stem));
   assert.deepEqual(
@@ -92,7 +108,8 @@ test("the README still promises a single file that runs with nothing installed",
   // at all. If this sentence goes, the rule has quietly been dropped.
   const text = readme().toLowerCase();
   assert.ok(
-    text.includes("runs with nothing installed") || text.includes("no installer"),
+    text.includes("runs with nothing installed") ||
+      text.includes("no installer"),
     "the README no longer promises a standalone binary",
   );
   assert.ok(
@@ -114,15 +131,19 @@ test("the documentation does not point at files that no longer exist", () => {
     const text = read(doc);
     for (const match of text.matchAll(/`(scripts\/[\w.-]+)`/g)) {
       const named = match[1]!;
-      if (!fs.existsSync(path.join(root, named))) missing.push(`${doc}: ${named}`);
+      if (!fs.existsSync(path.join(root, named)))
+        missing.push(`${doc}: ${named}`);
     }
   }
   // Guard the guard: these documents do name scripts, so an empty result must
   // mean they all exist rather than that the pattern stopped matching.
-  const mentioned = docs
-    .flatMap((doc) => [...read(doc).matchAll(/`(scripts\/[\w.-]+)`/g)])
-    .length;
-  assert.ok(mentioned >= 3, `found only ${mentioned} script references to check`);
+  const mentioned = docs.flatMap((doc) => [
+    ...read(doc).matchAll(/`(scripts\/[\w.-]+)`/g),
+  ]).length;
+  assert.ok(
+    mentioned >= 3,
+    `found only ${mentioned} script references to check`,
+  );
 
   assert.deepEqual(
     missing,

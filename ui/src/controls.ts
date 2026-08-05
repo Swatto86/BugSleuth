@@ -99,7 +99,9 @@ export function bindControls(deps: ControlDeps): void {
   ui.triageSeverities.addEventListener("change", () => {
     // Off is an empty model rather than a separate flag, so there is one thing
     // to read on the Rust side and no way for the two to disagree.
-    settings().triage_model = ui.triageSeverities.checked ? deps.triageModel : "";
+    settings().triage_model = ui.triageSeverities.checked
+      ? deps.triageModel
+      : "";
     refresh();
   });
 
@@ -116,7 +118,10 @@ export function bindControls(deps: ControlDeps): void {
         refresh();
       })
       .catch((error: unknown) => {
-        deps.setStatus(`Could not open the folder picker: ${String(error)}`, "error");
+        deps.setStatus(
+          `Could not open the folder picker: ${String(error)}`,
+          "error",
+        );
       });
   });
 
@@ -127,7 +132,9 @@ export function bindControls(deps: ControlDeps): void {
     ui.checkSignin.disabled = true;
     const previous = ui.checkSignin.textContent;
     ui.checkSignin.textContent = "Asking each vendor…";
-    invoke<{ name: string; available: boolean; detail: string }[]>("check_signin")
+    invoke<{ name: string; available: boolean; detail: string }[]>(
+      "check_signin",
+    )
       .then((results) => {
         ui.vendors.replaceChildren(...signinPills(results));
         const working = results.filter((r) => r.available).length;
@@ -146,7 +153,10 @@ export function bindControls(deps: ControlDeps): void {
   });
 
   ui.addModel.addEventListener("click", () => {
-    settings().models = [...settings().models, { id: "", lanes: [], effort: "", passes: 1 }];
+    settings().models = [
+      ...settings().models,
+      { id: "", lanes: [], effort: "", passes: 1 },
+    ];
     render();
   });
 

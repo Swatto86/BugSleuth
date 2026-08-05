@@ -47,7 +47,7 @@ node every control the matrix rebuilds can be found again afterwards
 node every element the code looks up exists in the markup
 node every event has both an emitter and a listener
 node every platform the release builds for is offered in the README
-node every shipped preset covers all four lanes
+node every shipped preset covers every lane
 node every silent-failure opt-out gives a reason
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
@@ -154,6 +154,7 @@ rust claude::tests::an_invocation_with_no_schema_asks_for_none_rather_than_for_n
 rust claude::tests::customizations_are_disabled_so_the_reviewed_repo_cannot_alter_the_review
 rust claude::tests::read_only_sweeps_cannot_be_granted_write_tools
 rust claude::tests::the_schema_is_passed_as_one_argv_entry_not_shell_text
+rust cli::tests::the_lane_help_lists_every_lane
 rust cluster::tests::a_cluster_reports_the_most_severe_assessment_not_the_mildest
 rust cluster::tests::a_triage_grade_decides_the_severity_and_the_original_is_still_readable
 rust cluster::tests::clustering_does_not_depend_on_the_order_findings_arrive_in
@@ -246,11 +247,12 @@ rust kilo::tests::every_route_can_be_described_to_a_person
 rust kilo::tests::external_plugins_are_skipped_so_the_machine_cannot_change_the_review
 rust kilo::tests::the_model_id_says_which_account_a_sweep_will_spend_from
 rust kilo::tests::the_working_directory_is_pinned_explicitly
+rust lane::mandates::tests::the_contract_mandate_asks_about_a_rule_written_down_on_both_sides
+rust lane::mandates::tests::the_correctness_mandate_asks_for_the_two_classes_it_measurably_missed
+rust lane::mandates::tests::the_gate_mandate_names_the_shapes_it_was_graded_on
+rust lane::mandates::tests::the_security_mandate_asks_for_the_other_uses_of_a_sink_it_measurably_missed
+rust lane::mandates::tests::the_ux_mandate_warns_about_native_keyboard_paths_it_measurably_missed
 rust lane::tests::every_lane_parses_back_from_its_own_slug
-rust lane::tests::the_contract_mandate_asks_about_a_rule_written_down_on_both_sides
-rust lane::tests::the_correctness_mandate_asks_for_the_two_classes_it_measurably_missed
-rust lane::tests::the_security_mandate_asks_for_the_other_uses_of_a_sink_it_measurably_missed
-rust lane::tests::the_ux_mandate_warns_about_native_keyboard_paths_it_measurably_missed
 rust limits::prose_tests::no_user_facing_string_carries_stray_indentation
 rust limits::tests::every_limit_is_a_statement_about_method_rather_than_a_hedge
 rust limits::tests::the_list_renders_one_bullet_per_limit

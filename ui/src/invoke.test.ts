@@ -37,7 +37,13 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import ts from "typescript";
 
-import { callsTo, frontendFiles, lineOf, rejectionIsHandled, stringArgument } from "./ast.test.ts";
+import {
+  callsTo,
+  frontendFiles,
+  lineOf,
+  rejectionIsHandled,
+  stringArgument,
+} from "./ast.test.ts";
 
 const OPT_OUT = "invoke-may-fail-silently:";
 
@@ -65,7 +71,10 @@ function commentsAbove(source: ts.SourceFile, call: ts.CallExpression): string {
   let node: ts.Node = call;
   while (node.parent && !ts.isFunctionLike(node)) {
     if (ts.isStatement(node)) {
-      for (const range of ts.getLeadingCommentRanges(text, node.getFullStart()) ?? []) {
+      for (const range of ts.getLeadingCommentRanges(
+        text,
+        node.getFullStart(),
+      ) ?? []) {
         found.push(text.slice(range.pos, range.end));
       }
     }
@@ -80,7 +89,7 @@ function invokeSites(): Site[] {
       file: source.fileName,
       line: lineOf(source, call),
       command: stringArgument(call) ?? "<not a literal>",
-      handled: rejectionIsHandled(source, call),
+      handled: rejectionIsHandled(call),
       optOut: commentsAbove(source, call),
     })),
   );
@@ -129,7 +138,11 @@ test("the two calls this rule was wrong about are classified correctly", () => {
 
   const settings = sites.find((s) => s.command === "save_settings");
   assert.ok(settings, "save_settings is no longer called");
-  assert.equal(settings.handled, true, "a chain with a .catch read as unhandled");
+  assert.equal(
+    settings.handled,
+    true,
+    "a chain with a .catch read as unhandled",
+  );
 
   const picker = sites.find((s) => s.command === "pick_directory");
   assert.ok(picker, "pick_directory is no longer called");

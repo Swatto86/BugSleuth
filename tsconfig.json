@@ -11,8 +11,17 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "isolatedModules": true,
-    "noEmit": true
+    "noEmit": true,
+    // The tests import `./model.ts` by its real extension, because
+    // `node --experimental-strip-types` resolves the file it is given rather
+    // than a compiled one. With `noEmit` there is nothing to rewrite, so the
+    // extension can simply be allowed.
+    "allowImportingTsExtensions": true
   },
-  "include": ["ui/src"],
-  "exclude": ["ui/src/**/*.test.ts"]
+  // Tests included. They used to be excluded, and nothing else type-checked
+  // them: `node --experimental-strip-types` erases the annotations without
+  // analysing them, so a genuine mismatch between a function and its own test
+  // passed the whole gate. Found by BugSleuth's Gate lane reviewing this
+  // repository's checks.
+  "include": ["ui/src"]
 }

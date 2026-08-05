@@ -148,7 +148,7 @@ pub(crate) struct SweepArgs {
     /// Repository to review.
     #[arg(long)]
     pub(crate) repo: PathBuf,
-    /// Review mandate: correctness, security, contract, or ux.
+    /// Review mandate: correctness, security, contract, ux, or gate.
     #[arg(long)]
     pub(crate) lane: Lane,
     /// Model alias or id, e.g. sonnet, opus, haiku.
@@ -175,4 +175,30 @@ pub(crate) struct SweepArgs {
     /// cannot end up in a shell history or a process listing.
     #[arg(long)]
     pub(crate) use_api_key: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The help text names every lane there is.
+    ///
+    /// Two hand-written lists of the same set, one in a doc comment and one in
+    /// `Lane::ALL`. Nothing makes them agree: adding a lane leaves the help
+    /// quietly advertising a smaller product, and the reader has no way to know
+    /// the option they want exists. This is the same "one rule written down
+    /// twice" the contract lane hunts for, in our own argument parser.
+    #[test]
+    fn the_lane_help_lists_every_lane() {
+        let help = <SweepArgs as clap::CommandFactory>::command()
+            .render_long_help()
+            .to_string();
+        for lane in Lane::ALL {
+            assert!(
+                help.contains(lane.slug()),
+                "`--lane` help does not mention {}",
+                lane.slug()
+            );
+        }
+    }
 }

@@ -157,8 +157,11 @@ function classesStyled(): Set<string> {
     // Selectors only. Declaration bodies go first, so `content: ".foo"` cannot
     // masquerade as a rule; comments go too, because they name files, and
     // `theme.test.ts` in a comment otherwise reads as a rule for `.ts`.
-    const selectors = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\{[^{}]*\}/g, " ");
-    for (const match of selectors.matchAll(/\.([a-zA-Z][\w-]*)/g)) styled.add(match[1]!);
+    const selectors = source
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(/\{[^{}]*\}/g, " ");
+    for (const match of selectors.matchAll(/\.([a-zA-Z][\w-]*)/g))
+      styled.add(match[1]!);
   }
   return styled;
 }
@@ -181,7 +184,9 @@ function idsUsed(): { names: string[]; prefixes: string[] } {
   const prefixes: string[] = [];
   for (const file of sources()) {
     const source = fs.readFileSync(file, "utf8");
-    for (const match of source.matchAll(/\bel(?:<[^>]*>)?\(\s*(?:"([^"]*)"|`([^`]*)`)/g)) {
+    for (const match of source.matchAll(
+      /\bel(?:<[^>]*>)?\(\s*(?:"([^"]*)"|`([^`]*)`)/g,
+    )) {
       const literal = match[1];
       if (literal !== undefined) {
         names.push(literal);
@@ -201,7 +206,10 @@ test("the scans find things at all, so a passing run means something", () => {
   // moved — every assertion below would pass on an empty set.
   assert.ok(classesUsed().size >= 15, "suspiciously few classes used");
   assert.ok(classesStyled().size >= 15, "suspiciously few classes styled");
-  assert.ok(possibleClassWords().size >= 100, "the string scan found almost nothing");
+  assert.ok(
+    possibleClassWords().size >= 100,
+    "the string scan found almost nothing",
+  );
 });
 
 test("the precise scan sees each of the three ways a class is set", () => {
@@ -218,10 +226,15 @@ test("every element the code looks up exists in the markup", () => {
   const defined = idsDefined();
   const { names, prefixes } = idsUsed();
   assert.ok(names.length >= 15, "found almost no element lookups");
-  assert.ok(prefixes.includes("preset-"), `no built ids found: ${prefixes.join(" ")}`);
+  assert.ok(
+    prefixes.includes("preset-"),
+    `no built ids found: ${prefixes.join(" ")}`,
+  );
 
   const missing = names.filter((id) => !defined.has(id));
-  const unbuilt = prefixes.filter((p) => ![...defined].some((id) => id.startsWith(p)));
+  const unbuilt = prefixes.filter(
+    (p) => ![...defined].some((id) => id.startsWith(p)),
+  );
 
   assert.deepEqual(
     missing,
@@ -229,7 +242,11 @@ test("every element the code looks up exists in the markup", () => {
     "the code looks these up by id and the markup has no such element, so the " +
       "window throws on startup and shows a blank page instead",
   );
-  assert.deepEqual(unbuilt, [], "ids are built from these prefixes and the markup has none");
+  assert.deepEqual(
+    unbuilt,
+    [],
+    "ids are built from these prefixes and the markup has none",
+  );
 });
 
 test("no element asks for a class the stylesheet does not define", () => {
@@ -251,7 +268,9 @@ test("a class built from a prefix counts as used, not as dead style", () => {
   // If prefix detection breaks, the check below deletes four live rules.
   assert.ok(classPrefixes().includes("sev-"), classPrefixes().join(" "));
   assert.deepEqual(interpolationFreeWords("sev sev-${severity}"), ["sev"]);
-  assert.deepEqual(interpolationFreeWords("pill ${x ? 'ok' : 'bad'}"), ["pill"]);
+  assert.deepEqual(interpolationFreeWords("pill ${x ? 'ok' : 'bad'}"), [
+    "pill",
+  ]);
 });
 
 test("no CSS rule styles a class nothing uses", () => {
@@ -284,8 +303,13 @@ test("every control the matrix rebuilds can be found again afterwards", () => {
     .join("\n");
 
   // Anything focusable that the row builder creates.
-  const created = [...source.matchAll(/createElement\("(input|select|button)"\)/g)].length;
-  assert.ok(created >= 6, `found only ${created} focusable controls in the row builder`);
+  const created = [
+    ...source.matchAll(/createElement\("(input|select|button)"\)/g),
+  ].length;
+  assert.ok(
+    created >= 6,
+    `found only ${created} focusable controls in the row builder`,
+  );
 
   const keyed = [...source.matchAll(/dataset\["focusKey"\]/g)].length;
   assert.ok(
