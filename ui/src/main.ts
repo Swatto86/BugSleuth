@@ -76,6 +76,7 @@ let settings: Settings = {
   reuse_completed: true,
   triage_model: TRIAGE_MODEL,
   apply_model: "",
+  apply_effort: "",
 };
 /**
  * What the model and effort dropdowns offer, keyed by vendor.
@@ -252,6 +253,7 @@ function bind(): void {
     ui: {
       vendor: ui.applyVendor,
       model: ui.applyModel,
+      effort: ui.applyEffort,
       button: ui.applyFixes,
       output: ui.output,
     },

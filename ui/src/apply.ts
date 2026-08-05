@@ -17,7 +17,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { confirmDialog } from "./dialog";
 import { VENDORS, joinId, splitId, type Settings, type Vendor } from "./model";
-import { modelPicker, option } from "./pickers";
+import { effortPicker, modelPicker, option } from "./pickers";
 import type { Catalogue } from "./view";
 
 const NEWLINE = String.fromCharCode(10);
@@ -27,6 +27,8 @@ export interface ApplyDeps {
     vendor: HTMLSelectElement;
     /** Holds the model box, which is rebuilt when the provider changes. */
     model: HTMLDivElement;
+    /** Holds the effort control, rebuilt whenever the model changes. */
+    effort: HTMLDivElement;
     button: HTMLButtonElement;
     output: HTMLPreElement;
   };
@@ -52,11 +54,18 @@ export function bindApply(deps: ApplyDeps): () => void {
     ui.vendor.append(option(name, name, false));
   }
 
-  /** Draw the provider and model controls from the stored spec. */
+  /** Draw the provider, model and effort controls from the stored settings. */
   const draw = (): void => {
+    // Read through `deps.settings()` every time, never captured into a handler.
+    // The window replaces its settings object once, when the stored ones load,
+    // and a closure holding the old one would write to an object nothing reads.
     const stored = deps.settings().apply_model;
-    const { vendor } = splitId(stored);
-    ui.vendor.value = stored === "" ? "" : vendor;
+    // `splitId("")` answers Claude, which is also what typing a bare model name
+    // into the box would mean — so that is what the provider control has to
+    // show. Setting it to "" left the control blank with no option matching,
+    // and choosing "claude" from the list made it go blank again: the stored
+    // spec for a Claude model with no name *is* the empty string.
+    ui.vendor.value = splitId(stored).vendor;
     ui.model.replaceChildren(
       modelPicker({
         key: "apply-model",
@@ -64,13 +73,47 @@ export function bindApply(deps: ApplyDeps): () => void {
         id: stored,
         catalogue: deps.catalogue(),
         onChange: (id) => {
-          deps.settings().apply_model = id;
+          const live = deps.settings();
+          live.apply_model = id;
+          // A model that does not accept the effort already chosen must not
+          // keep it — it would be sent to the CLI and rejected. Same reset the
+          // matrix does, for the same reason.
+          live.apply_effort = allowedEffort(id, live.apply_effort);
           deps.refresh();
+          drawEffort();
           setButtonState();
         },
       }),
     );
+    drawEffort();
     setButtonState();
+  };
+
+  /** Which levels apply depends on the model, so this is redrawn on its own. */
+  const drawEffort = (): void => {
+    ui.effort.replaceChildren(
+      effortPicker({
+        key: "apply-effort",
+        label: "Effort for the model that applies the fixes",
+        id: deps.settings().apply_model,
+        effort: deps.settings().apply_effort,
+        catalogue: deps.catalogue(),
+        onChange: (effort) => {
+          deps.settings().apply_effort = effort;
+          deps.refresh();
+        },
+      }),
+    );
+  };
+
+  /** The stored effort, or nothing when this model does not take it. */
+  const allowedEffort = (id: string, effort: string): string => {
+    const { vendor, model } = splitId(id);
+    const menu = deps.catalogue()[vendor];
+    const levels = menu?.efforts.length
+      ? menu.efforts
+      : (menu?.efforts_by_model[model] ?? []);
+    return levels.includes(effort) ? effort : "";
   };
 
   /**
@@ -91,13 +134,18 @@ export function bindApply(deps: ApplyDeps): () => void {
   ui.vendor.addEventListener("change", () => {
     // The model goes with the old provider: an id from one vendor means nothing
     // to another, and carrying it over would send a real-looking model id to a
-    // CLI that has never heard of it.
+    // CLI that has never heard of it. The effort goes with it for the same
+    // reason — the levels differ between vendors.
     deps.settings().apply_model = joinId(ui.vendor.value as Vendor, "");
+    deps.settings().apply_effort = "";
     deps.refresh();
     draw();
   });
 
   ui.button.addEventListener("click", () => {
+    // Checked here as well as inside `start`, so a second click cannot even
+    // open a second dialog on top of the first.
+    if (applying) return;
     void confirmDialog({
       title: "Apply these fixes to your code?",
       message:
@@ -143,8 +191,18 @@ export function bindApply(deps: ApplyDeps): () => void {
 }
 
 function start(deps: ApplyDeps): void {
+  // Checked again, after the dialog. It can sit open for as long as anyone
+  // likes, and two confirmed dialogs used to send two `apply_fixes` calls: the
+  // second is refused by Rust, and its rejection then cleared the flag and
+  // re-enabled the button while the first was still editing the repository.
+  if (applying) return;
   applying = true;
   deps.ui.button.disabled = true;
+  // Redrawn, not just disabled here: the Run button is disabled from the same
+  // flag, and without this it stayed live for the whole apply — every press
+  // rejected by Rust with an error, which reads as the app being broken rather
+  // than as a button that should not have been offered.
+  deps.refresh();
   deps.setStatus("Applying the fixes — this edits your repository", "running");
   append(deps.ui.output, "Applying the fixes…");
   invoke("apply_fixes", { settings: deps.settings() }).catch(

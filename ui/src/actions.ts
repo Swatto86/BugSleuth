@@ -14,6 +14,7 @@ import { listen } from "@tauri-apps/api/event";
 import { confirmDialog } from "./dialog";
 import { type Preset, type Settings, preset } from "./model";
 import { type RunDeps, isRunning, startRun } from "./run";
+import { isApplying } from "./apply";
 
 export interface ActionDeps {
   ui: {
@@ -120,19 +121,27 @@ export function bindGuardedActions(deps: ActionDeps): void {
   ui.quit.addEventListener("click", askBeforeQuitting);
 
   function askBeforeQuitting(): void {
-    if (!isRunning()) {
+    if (!isRunning() && !isApplying()) {
       // invoke-may-fail-silently: if quitting fails the window is still here,
       // which is the whole feedback there is to give, and there is no fallback
       // to offer beyond the tray item that does the same thing.
       void invoke("quit");
       return;
     }
+    // Applying is the worse of the two to kill and used to go unwarned: a run
+    // loses sweeps that can be paid for again, while an apply is killed
+    // part-way through editing the repository, and nobody is left to say which
+    // files it had already changed.
+    const applying = isApplying();
     void confirmDialog({
-      title: "A review is running",
-      message:
-        "Quitting abandons it. Every sweep not yet written to disk is lost, " +
-        "along with the subscription quota it cost. Stop the review instead " +
-        "if you want to keep what has finished.",
+      title: applying ? "Fixes are being applied" : "A review is running",
+      message: applying
+        ? "Quitting kills the model part-way through editing this repository. " +
+          "Some files may already have changed and nothing will be left to say " +
+          "which — check `git status` afterwards."
+        : "Quitting abandons it. Every sweep not yet written to disk is lost, " +
+          "along with the subscription quota it cost. Stop the review instead " +
+          "if you want to keep what has finished.",
       confirmLabel: "Quit anyway",
       destructive: true,
     }).then((yes) => {

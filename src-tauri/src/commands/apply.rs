@@ -50,6 +50,7 @@ pub async fn apply_fixes(
         return Err("choose a provider and model to apply the fixes with".to_string());
     }
 
+    let effort = settings.apply_effort.trim().to_string();
     let prompt_path = run_output_dir(&repo).join("fix-prompt.md");
     let prompt = std::fs::read_to_string(&prompt_path).map_err(|e| {
         format!(
@@ -63,7 +64,7 @@ pub async fn apply_fixes(
         let report = bugsleuth_engine::apply::apply(bugsleuth_engine::apply::ApplyRequest {
             repo: &repo,
             model: &model,
-            effort: "",
+            effort: &effort,
             prompt: &prompt,
             timeout: APPLY_TIMEOUT,
             max_turns: APPLY_MAX_TURNS,
@@ -105,16 +106,15 @@ fn describe(report: &bugsleuth_engine::apply::ApplyReport) -> String {
                       the repository is different.\n\n",
         );
     } else {
+        let files = report.changed_files.len();
         out.push_str(&format!(
-            "{} file{} changed, in {} commit{}:\n",
-            report.changed_files.len(),
-            if report.changed_files.len() == 1 {
-                ""
-            } else {
-                "s"
+            "{files} file{} changed, {}:\n",
+            if files == 1 { "" } else { "s" },
+            match report.commits {
+                0 => "none of it committed".to_string(),
+                1 => "in 1 commit".to_string(),
+                n => format!("in {n} commits"),
             },
-            report.commits,
-            if report.commits == 1 { "" } else { "s" },
         ));
         for file in &report.changed_files {
             out.push_str(&format!("  {file}\n"));
@@ -156,12 +156,26 @@ mod tests {
             changed_files: vec!["src/a.rs".into(), "src/b.rs".into()],
             commits: 2,
         });
-        assert!(text.contains("2 files changed, in 2 commits"));
+        assert!(text.contains("2 files changed, in 2 commits"), "{text}");
         assert!(text.contains("src/b.rs"));
         assert!(
             text.find("src/a.rs") < text.find("The model's own account"),
             "the claim is shown before the evidence"
         );
+        // Uncommitted work is the common case — the prompt asks for a commit per
+        // defect, but a model that stops early has changed files and committed
+        // none of them, and "in 0 commits" read as a count nobody had noticed
+        // was zero.
+        let uncommitted = describe(&ApplyReport {
+            text: "done".into(),
+            changed_files: vec!["src/a.rs".into()],
+            commits: 0,
+        });
+        assert!(
+            uncommitted.contains("1 file changed, none of it committed"),
+            "{uncommitted}"
+        );
+
         // Nobody has checked these edits, and the text must not imply otherwise.
         assert!(text.contains("git diff"));
     }

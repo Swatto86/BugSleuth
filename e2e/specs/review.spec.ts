@@ -20,7 +20,11 @@ import os from "node:os";
 import path from "node:path";
 
 const REPO = path.resolve(process.cwd(), "fixtures/seeded-repo");
-const RUNS_ROOT = path.join(process.env["APPDATA"] ?? os.tmpdir(), "BugSleuth", "runs");
+const RUNS_ROOT = path.join(
+  process.env["APPDATA"] ?? os.tmpdir(),
+  "BugSleuth",
+  "runs",
+);
 
 /**
  * The app's run directory for the fixture, found by prefix.
@@ -60,7 +64,9 @@ describe("BugSleuth desktop app", () => {
     // said "blank page" and nothing about why. The URL alone separates all of
     // them: tauri://… or http://… is a production binary, localhost:5173 is a
     // development one pointed at a server that is not running.
-    const url = await browser.getUrl().catch((e: unknown) => `getUrl failed: ${String(e)}`);
+    const url = await browser
+      .getUrl()
+      .catch((e: unknown) => `getUrl failed: ${String(e)}`);
     const source = await browser.getPageSource().catch(() => "");
     console.log(`
 [diagnostic] url=${url}`);
@@ -74,30 +80,33 @@ describe("BugSleuth desktop app", () => {
     // need different fixes: the driver attached to a second, blank window
     // handle; the webview had not navigated yet when we looked; or the page
     // genuinely never loads. These three lines separate them.
-    const handles = await browser.getWindowHandles().catch(() => [] as string[]);
-    console.log(`[diagnostic] window handles: ${handles.length} ${JSON.stringify(handles)}`);
+    const handles = await browser
+      .getWindowHandles()
+      .catch(() => [] as string[]);
+    console.log(
+      `[diagnostic] window handles: ${handles.length} ${JSON.stringify(handles)}`,
+    );
     for (const handle of handles) {
       await browser.switchToWindow(handle).catch(() => undefined);
       const u = await browser.getUrl().catch(() => "?");
       const len = (await browser.getPageSource().catch(() => "")).length;
-      console.log(`[diagnostic]   handle ${handle}: url=${u} source=${len} chars`);
+      console.log(
+        `[diagnostic]   handle ${handle}: url=${u} source=${len} chars`,
+      );
     }
     await new Promise((r) => setTimeout(r, 8000));
     const later = await browser.getUrl().catch(() => "?");
     const laterLen = (await browser.getPageSource().catch(() => "")).length;
     console.log(`[diagnostic] after 8s: url=${later} source=${laterLen} chars`);
 
-    await browser.waitUntil(
-      async () => (await (await $$("#app")).length) > 0,
-      {
-        timeout: 30_000,
-        timeoutMsg:
-          "the app shell never rendered. If the page is blank, the binary is " +
-          "probably a development build: run `cargo clean --release` then " +
-          "`cargo tauri build`, because Tauri caches the dev/production choice " +
-          "in its own build script and a plain cargo release build poisons it.",
-      },
-    );
+    await browser.waitUntil(async () => (await (await $$("#app")).length) > 0, {
+      timeout: 30_000,
+      timeoutMsg:
+        "the app shell never rendered. If the page is blank, the binary is " +
+        "probably a development build: run `cargo clean --release` then " +
+        "`cargo tauri build`, because Tauri caches the dev/production choice " +
+        "in its own build script and a plain cargo release build poisons it.",
+    });
     await expect($("h1")).toHaveText("BugSleuth");
     await expect($("#run")).toBeExisting();
   });
@@ -140,7 +149,8 @@ describe("BugSleuth desktop app", () => {
     // A real model on a real repository. Slow by nature.
     this.timeout(15 * 60_000);
     const existing = runsDir();
-    if (existing !== undefined) fs.rmSync(existing, { recursive: true, force: true });
+    if (existing !== undefined)
+      fs.rmSync(existing, { recursive: true, force: true });
 
     await $("#repo").setValue(REPO);
 
@@ -157,27 +167,57 @@ describe("BugSleuth desktop app", () => {
     await expect($("#run")).toBeEnabled();
     await $("#run").click();
 
-    await browser.waitUntil(async () => (await $("#status").getText()).startsWith("Finished"), {
-      timeout: 14 * 60_000,
-      interval: 2_000,
-      timeoutMsg: `run never finished; last status: ${await $("#status").getText()}`,
-    });
+    await browser.waitUntil(
+      async () => (await $("#status").getText()).startsWith("Finished"),
+      {
+        timeout: 14 * 60_000,
+        interval: 2_000,
+        timeoutMsg: `run never finished; last status: ${await $("#status").getText()}`,
+      },
+    );
 
     // Effect one: the window shows a merged report naming the defects.
     const output = await $("#output").getText();
-    assert.ok(output.includes("distinct defect"), `no merged report in output:\n${output}`);
+    assert.ok(
+      output.includes("distinct defect"),
+      `no merged report in output:\n${output}`,
+    );
+
+    // The handoff is offered, in the real window: a finished run reveals the
+    // panel that applies the fixes, and its controls are really there. The
+    // panel is the only route to a command that writes to the repository, and
+    // nothing outside this suite exercises it in the packaged app.
+    await expect($("#apply-panel")).toBeDisplayed();
+    await expect($("#apply-vendor")).toBeExisting();
+    await expect($("#apply-model input")).toBeExisting();
+    await expect($("#apply-effort select")).toBeExisting();
+    // Deliberately not asserted: whether the button is enabled. That depends on
+    // the model stored in this machine's settings, and a check that fails for a
+    // reason unrelated to the code is a check someone switches off.
 
     // Effect two — the one that cannot be faked by the frontend: the sweep's
     // own JSON is on disk, in the app's runs directory, naming the model.
     const runs = runsDir();
-    assert.ok(runs !== undefined, `no seeded-repo run directory under ${RUNS_ROOT}`);
+    assert.ok(
+      runs !== undefined,
+      `no seeded-repo run directory under ${RUNS_ROOT}`,
+    );
     const written = fs.readdirSync(runs).filter((f) => f.endsWith(".json"));
     assert.ok(written.length > 0, `no sweep reports written to ${runs}`);
 
-    const report = JSON.parse(fs.readFileSync(path.join(runs, written[0]!), "utf8"));
+    const report = JSON.parse(
+      fs.readFileSync(path.join(runs, written[0]!), "utf8"),
+    );
     assert.equal(report.lane, "Correctness");
-    assert.ok(String(report.model).includes(MODEL), `report model was ${report.model}`);
-    assert.equal(report.status.state, "swept", `sweep did not run: ${JSON.stringify(report.status)}`);
+    assert.ok(
+      String(report.model).includes(MODEL),
+      `report model was ${report.model}`,
+    );
+    assert.equal(
+      report.status.state,
+      "swept",
+      `sweep did not run: ${JSON.stringify(report.status)}`,
+    );
 
     // The fixture has six known defects; a sweep that found none of them means
     // the pipeline ran but did nothing useful, which a status check would miss.
@@ -247,9 +287,12 @@ ${output}`,
     );
 
     // And nothing is still burning quota in the background.
-    const still = execSync('tasklist /FI "IMAGENAME eq claude.exe" /FI "IMAGENAME eq codex.exe"', {
-      encoding: "utf8",
-    });
+    const still = execSync(
+      'tasklist /FI "IMAGENAME eq claude.exe" /FI "IMAGENAME eq codex.exe"',
+      {
+        encoding: "utf8",
+      },
+    );
     assert.ok(
       !/claude\.exe|codex\.exe/.test(still),
       `a provider CLI survived the cancel:
@@ -279,8 +322,16 @@ ${still}`,
 
     assert.equal(light.attr, "light");
     assert.equal(dark.attr, "dark");
-    assert.equal(system.attr, null, "match-system must remove the override, not resolve it");
-    assert.notEqual(light.bg, dark.bg, "the two themes render the same background");
+    assert.equal(
+      system.attr,
+      null,
+      "match-system must remove the override, not resolve it",
+    );
+    assert.notEqual(
+      light.bg,
+      dark.bg,
+      "the two themes render the same background",
+    );
   });
 
   it("leaves the reviewed repository untouched", () => {

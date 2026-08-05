@@ -131,11 +131,15 @@ export function matrixRows(
     let live: ModelSetting = model;
     const drawEffort = () => {
       effortCell.replaceChildren(
-        effortPicker(index, live, catalogue, {
-          ...handlers,
-          onEffort: (i, effort) => {
+        effortPicker({
+          key: `effort-${index}`,
+          label: `Effort for row ${index + 1}`,
+          id: live.id,
+          effort: live.effort,
+          catalogue,
+          onChange: (effort) => {
             live = { ...live, effort };
-            handlers.onEffort(i, effort);
+            handlers.onEffort(index, effort);
           },
         }),
       );

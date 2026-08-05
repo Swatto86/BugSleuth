@@ -64,7 +64,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         );
     }
 
-    let dirty = dirty_files(&git(repo, &["status", "--porcelain"])?);
+    let dirty = theirs(dirty_files(&git(repo, &["status", "--porcelain"])?));
     if !dirty.is_empty() {
         anyhow::bail!(
             "the working tree has uncommitted changes, so applying fixes is refused: your work \
@@ -84,7 +84,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     });
 
     let (vendor, model) = Vendor::parse(request.model);
-    let text = match vendor {
+    let attempt = match vendor {
         Vendor::Claude => {
             bugsleuth_provider::claude::apply(bugsleuth_provider::claude::ApplyRequest {
                 repo,
@@ -94,7 +94,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
                 timeout: request.timeout,
                 max_turns: request.max_turns,
             })
-            .await?
+            .await
         }
         Vendor::Codex => {
             bugsleuth_provider::codex::apply(
@@ -104,7 +104,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
                 request.prompt,
                 request.timeout,
             )
-            .await?
+            .await
         }
         Vendor::Kilo => {
             bugsleuth_provider::kilo::apply(
@@ -114,8 +114,20 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
                 request.prompt,
                 request.timeout,
             )
-            .await?
+            .await
         }
+    };
+
+    // A failure is not "nothing happened". The invocation is killed on timeout
+    // and can fail after the model has already rewritten half the tree, and an
+    // error on its own would send someone away believing their repository was
+    // untouched. Whatever git can see is named in the error too.
+    let text = match attempt {
+        Ok(text) => text,
+        Err(error) => anyhow::bail!(failure_message(
+            &error.to_string(),
+            &changed_since(repo, base.as_deref())
+        )),
     };
 
     Ok(ApplyReport {
@@ -123,6 +135,24 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         changed_files: changed_since(repo, base.as_deref()),
         commits: commits_since(repo, base.as_deref()),
     })
+}
+
+/// A vendor failure, plus whatever it had already done to the repository.
+///
+/// A failure is not "nothing happened". The invocation is killed on timeout and
+/// can fail after the model has rewritten half the tree, so an error on its own
+/// would send someone away believing their checkout was untouched — the same
+/// "absence of a result read as a result" this whole project exists to stop.
+fn failure_message(error: &str, changed: &[String]) -> String {
+    match changed.len() {
+        0 => format!("{error} — git shows no files changed."),
+        n => format!(
+            "{error} — but {n} file{} had already changed when it stopped: {}. \
+             Check `git status` and `git diff` before running anything again.",
+            if n == 1 { "" } else { "s" },
+            summarise(changed)
+        ),
+    }
 }
 
 /// Repo-relative paths differing from `base`, committed or not.
@@ -148,7 +178,7 @@ fn changed_since(repo: &Path, base: Option<&str>) -> Vec<String> {
     );
     files.sort();
     files.dedup();
-    files
+    theirs(files)
 }
 
 fn commits_since(repo: &Path, base: Option<&str>) -> usize {
@@ -157,6 +187,22 @@ fn commits_since(repo: &Path, base: Option<&str>) -> usize {
         .ok()
         .and_then(|out| out.trim().parse().ok())
         .unwrap_or(0)
+}
+
+/// Where BugSleuth's own throwaway checkouts live inside a reviewed repository.
+///
+/// A proof attempt that was killed rather than dropped leaves one behind, and
+/// git reports it as untracked. Judged as the user's uncommitted work it would
+/// refuse every apply — with advice to "commit or stash" litter this tool left —
+/// until someone deleted a directory by hand. It is not their work, so it is not
+/// counted as theirs, in the guard or in the list of what changed.
+const OURS: &str = ".bugsleuth-worktrees/";
+
+fn theirs(files: Vec<String>) -> Vec<String> {
+    files
+        .into_iter()
+        .filter(|path| !path.starts_with(OURS))
+        .collect()
 }
 
 /// The paths in `git status --porcelain` output.
@@ -235,6 +281,38 @@ mod tests {
         // then the empty string, and one of those in the list is enough to
         // refuse to apply anything on a repository that is perfectly clean.
         assert!(dirty_files("?? \n").is_empty());
+    }
+
+    #[test]
+    fn bugsleuths_own_leftovers_are_not_treated_as_the_users_uncommitted_work() {
+        // A proof attempt that was killed leaves a worktree behind, and git
+        // calls it untracked. Counting it would refuse every apply — telling
+        // the user to commit or stash a directory this tool created — until
+        // they deleted it by hand.
+        let mixed = vec![
+            ".bugsleuth-worktrees/prove-1/src/main.rs".to_string(),
+            "src/real.rs".to_string(),
+        ];
+        assert_eq!(theirs(mixed), ["src/real.rs"]);
+        // And a repository whose only "changes" are ours reads as clean.
+        assert!(theirs(vec![".bugsleuth-worktrees/x".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn a_failed_apply_still_says_what_it_had_already_changed() {
+        // The timeout case: the CLI is killed, and everything it wrote before
+        // that is still on disk. Reporting only the error would send someone
+        // away believing their repository was untouched.
+        let text = failure_message("the codex CLI timed out", &["src/a.rs".to_string()]);
+        assert!(text.contains("timed out"));
+        assert!(text.contains("1 file had already changed"), "{text}");
+        assert!(text.contains("src/a.rs"));
+        assert!(text.contains("git status"));
+
+        // And when nothing changed, it says so rather than staying silent —
+        // "the run failed" alone leaves the reader guessing about their tree.
+        let clean = failure_message("the kilo CLI exited with code 1", &[]);
+        assert!(clean.contains("no files changed"), "{clean}");
     }
 
     #[test]

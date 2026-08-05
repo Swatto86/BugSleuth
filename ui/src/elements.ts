@@ -47,6 +47,7 @@ const ui = {
   applyPanel: el<HTMLDivElement>("apply-panel"),
   applyVendor: el<HTMLSelectElement>("apply-vendor"),
   applyModel: el<HTMLDivElement>("apply-model"),
+  applyEffort: el<HTMLDivElement>("apply-effort"),
   applyFixes: el<HTMLButtonElement>("apply-fixes"),
 };
 

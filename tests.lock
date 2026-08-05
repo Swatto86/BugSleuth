@@ -96,7 +96,9 @@ rust anchor::tests::rejects_code_that_does_not_exist_in_the_file
 rust anchor::tests::tolerates_re_indented_code
 rust apply::tests::a_clean_tree_reads_as_clean_rather_than_as_one_empty_path
 rust apply::tests::a_dirty_tree_is_read_out_of_git_status_whatever_the_status_letters_are
+rust apply::tests::a_failed_apply_still_says_what_it_had_already_changed
 rust apply::tests::a_repository_without_git_is_refused_before_anything_is_spent
+rust apply::tests::bugsleuths_own_leftovers_are_not_treated_as_the_users_uncommitted_work
 rust apply::tests::the_refusal_names_a_few_files_rather_than_all_of_them
 rust atomic::tests::a_failed_write_destroys_nothing_and_leaves_no_debris
 rust atomic::tests::a_file_is_replaced_whole

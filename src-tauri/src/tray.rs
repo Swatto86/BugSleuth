@@ -85,7 +85,7 @@ fn toggle<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Quit, unless a review is running — in which case ask first.
+/// Quit, unless work is in flight — in which case ask first.
 ///
 /// The tray's Quit exited immediately while the window's Quit asked for
 /// confirmation, for the identical action. The README calls the tray item the
@@ -94,10 +94,14 @@ fn toggle<R: Runtime>(app: &AppHandle<R>) {
 /// Both go through the same question now: the window is revealed and asked to
 /// put it, which also keeps the wording in one place.
 pub(crate) fn quit_or_ask<R: Runtime>(app: &AppHandle<R>) {
-    let running = app
+    // Applying counts as well as sweeping. It is the worse of the two to kill —
+    // a run loses sweeps that can be paid for again, an apply is killed
+    // part-way through editing the repository — and it was not asked about at
+    // all, so the tray's Quit could stop a model mid-edit in silence.
+    let busy = app
         .try_state::<crate::commands::RunControl>()
-        .is_some_and(|control| control.running());
-    if !running {
+        .is_some_and(|control| control.running() || control.applying());
+    if !busy {
         app.exit(0);
         return;
     }

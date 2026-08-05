@@ -183,37 +183,43 @@ export function effortsFor(
  * Disabled, not hidden, when a vendor accepts no effort setting — a control
  * that silently does nothing is exactly the failure this tool exists to catch.
  */
-export function effortPicker(
-  index: number,
-  model: ModelSetting,
-  catalogue: Catalogue,
-  handlers: MatrixHandlers,
-): HTMLSelectElement {
-  const { vendor, model: current } = splitId(model.id);
+export function effortPicker(opts: {
+  /** Distinguishes this control from every other one on the page. */
+  key: string;
+  label: string;
+  /** The stored `vendor:model` spec whose levels these are. */
+  id: string;
+  /** The effort currently stored. Empty is the vendor's own default. */
+  effort: string;
+  catalogue: Catalogue;
+  onChange: (effort: string) => void;
+}): HTMLSelectElement {
+  // Keyed like `modelPicker`, and for the same reason: the matrix is no longer
+  // the only place a model and its effort are chosen.
+  const { key, label, effort, catalogue, onChange } = opts;
+  const { vendor, model: current } = splitId(opts.id);
   const menu = catalogue[vendor];
   const { levels, unavailable } = effortsFor(menu, vendor, current);
 
   const select = document.createElement("select");
-  select.setAttribute("aria-label", `Effort for row ${index + 1}`);
-  select.dataset["focusKey"] = `effort-${index}`;
-  select.append(option("", "Default", model.effort === ""));
+  select.setAttribute("aria-label", label);
+  select.dataset["focusKey"] = key;
+  select.append(option("", "Default", effort === ""));
   for (const level of levels) {
-    select.append(option(level, level, level === model.effort));
+    select.append(option(level, level, level === effort));
   }
   // A stored effort the catalogue does not list — because it has not loaded
   // yet, or the model's levels changed — must still show. Otherwise the row
   // reads "Default" while the run uses the stored value, and the control is
   // lying about what will happen.
-  if (model.effort !== "" && !levels.includes(model.effort)) {
-    select.append(option(model.effort, model.effort, true));
+  if (effort !== "" && !levels.includes(effort)) {
+    select.append(option(effort, effort, true));
   }
   if (levels.length === 0) {
     select.disabled = true;
     select.title = unavailable;
   }
-  select.addEventListener("change", () =>
-    handlers.onEffort(index, select.value),
-  );
+  select.addEventListener("change", () => onChange(select.value));
   return select;
 }
 
