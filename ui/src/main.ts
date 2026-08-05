@@ -282,8 +282,9 @@ function bind(): void {
   wireUpdate({
     button: ui.checkUpdate,
     setStatus,
-    // A run in flight has already been paid for; installing restarts the app.
-    busy: isRunning,
+    // Installing restarts the process, so neither reviews nor repository edits
+    // may be in flight.
+    busy: () => isRunning() || isApplying(),
   });
 
   bindGuardedActions({

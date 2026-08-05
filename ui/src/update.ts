@@ -24,7 +24,7 @@ interface Available {
 export interface UpdateDeps {
   button: HTMLButtonElement;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
-  /** True while a review is running: an install would restart out from under it. */
+  /** True while work that an install-and-restart would interrupt is in flight. */
   busy: () => boolean;
 }
 
@@ -43,11 +43,11 @@ export function wireUpdate(deps: UpdateDeps): void {
           return;
         }
 
-        // Asked, not assumed. An install restarts the app, and a review in
-        // flight has already been paid for.
+        // Asked, not assumed. An install restarts the app, and a review or an
+        // apply in flight would be killed part-way.
         if (deps.busy()) {
           setStatus(
-            `Version ${update.version} is available — finish or stop the run first`,
+            `Version ${update.version} is available — finish the current operation first`,
             "error",
           );
           return;
