@@ -51,7 +51,7 @@ mod tests {
 
     #[test]
     fn a_basket_total_is_never_negative() {
-        assert!(basket_total(100, 3) >= 0);
+        assert_eq!(basket_total(100, 3), 300);
     }
 
     #[test]
