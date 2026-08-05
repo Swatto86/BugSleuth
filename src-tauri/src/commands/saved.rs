@@ -42,10 +42,14 @@ pub async fn clear_saved(
     control: tauri::State<'_, RunControl>,
     settings: Settings,
 ) -> Result<Cleared, String> {
-    if control.running() || control.applying() {
-        return Err("wait for the work in flight to finish — it is writing here".to_string());
-    }
-    clear(&settings)
+    // Reserve the clearing state atomically first: a run or an apply writes
+    // into this directory as it goes, and a check-then-delete could race one
+    // that starts in the gap. Always release it once the delete returns,
+    // including its error path, then hand back the delete's own result.
+    control.try_start_clear()?;
+    let outcome = clear(&settings);
+    control.finish_clear();
+    outcome
 }
 
 /// The whole of what the command does, minus the guard.

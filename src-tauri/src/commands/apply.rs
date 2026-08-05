@@ -34,16 +34,6 @@ pub async fn apply_fixes(
     control: tauri::State<'_, RunControl>,
     settings: Settings,
 ) -> Result<(), String> {
-    if control.running() {
-        return Err(
-            "a review is running — applying fixes now would edit the code it is reading"
-                .to_string(),
-        );
-    }
-    if control.applying() {
-        return Err("fixes are already being applied".to_string());
-    }
-
     let repo = checked_repo(&settings.repo)?;
     let model = settings.apply_model.trim().to_string();
     if model.is_empty() {
@@ -59,7 +49,12 @@ pub async fn apply_fixes(
         )
     })?;
 
-    control.set_applying(true);
+    // Reserve the applying state atomically, after the fallible setup above and
+    // immediately before spawning. A review reads the tree while this rewrites
+    // it, so the two must never overlap — and a single check-then-set could let
+    // a run start in the gap. Every early return before here has reserved
+    // nothing, so none leaks the state.
+    control.try_start_apply()?;
     tauri::async_runtime::spawn(async move {
         let report = bugsleuth_engine::apply::apply(bugsleuth_engine::apply::ApplyRequest {
             repo: &repo,
@@ -85,7 +80,7 @@ pub async fn apply_fixes(
         };
         let _ = app.emit("apply-finished", payload);
         if let Some(control) = app.try_state::<RunControl>() {
-            control.set_applying(false);
+            control.finish_apply();
         }
     });
 

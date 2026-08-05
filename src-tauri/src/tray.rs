@@ -94,13 +94,13 @@ fn toggle<R: Runtime>(app: &AppHandle<R>) {
 /// Both go through the same question now: the window is revealed and asked to
 /// put it, which also keeps the wording in one place.
 pub(crate) fn quit_or_ask<R: Runtime>(app: &AppHandle<R>) {
-    // Applying counts as well as sweeping. It is the worse of the two to kill —
-    // a run loses sweeps that can be paid for again, an apply is killed
-    // part-way through editing the repository — and it was not asked about at
-    // all, so the tray's Quit could stop a model mid-edit in silence.
+    // Any work in flight counts, not just sweeping. Applying is the worst to
+    // kill — a run loses sweeps that can be paid for again, an apply is killed
+    // part-way through editing the repository — and clearing is deleting on
+    // disk; none should be stopped in silence by the tray's Quit.
     let busy = app
         .try_state::<crate::commands::RunControl>()
-        .is_some_and(|control| control.running() || control.applying());
+        .is_some_and(|control| control.running() || control.applying() || control.clearing());
     if !busy {
         app.exit(0);
         return;
