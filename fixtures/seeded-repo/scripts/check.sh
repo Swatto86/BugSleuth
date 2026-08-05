@@ -1,9 +1,12 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # The project gate. Run this before pushing.
 #
 # Builds, runs the tests, and reports whether the tree is good.
 
-set -e
+# `pipefail` is why this is bash, not sh: `cargo test ... | tail -5` otherwise
+# takes its exit status from `tail`, which succeeds even when the tests fail —
+# so the gate would print "checks passed" over a red suite.
+set -euo pipefail
 
 echo "== build =="
 cargo build --quiet
