@@ -5,58 +5,58 @@
  * rather than mutating settings on the spot.
  *
  * The behaviour itself is exercised end-to-end in e2e/specs/review.spec.ts; this
- * reads main.ts's own syntax so a regression is caught without a live app.
+ * reads the frontend's own syntax so a regression is caught without a live app.
  */
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import ts from "typescript";
 
-import { callsTo, frontendFiles } from "./ast.test.ts";
+import { callsTo, frontendFiles, walk } from "./ast.test.ts";
 
-/** The source text of a named handler in any object-literal argument of a call. */
-function handlerText(
-  call: ts.CallExpression,
-  name: string,
-): string | undefined {
-  for (const argument of call.arguments) {
-    if (!ts.isObjectLiteralExpression(argument)) continue;
-    for (const member of argument.properties) {
-      if (
-        (ts.isPropertyAssignment(member) ||
-          ts.isMethodDeclaration(member) ||
-          ts.isShorthandPropertyAssignment(member)) &&
-        ts.isIdentifier(member.name) &&
-        member.name.text === name
-      ) {
-        return member.getText();
-      }
+/** The source text of a named object-literal member, wherever it appears. */
+function memberText(source: ts.SourceFile, name: string): string | undefined {
+  let found: string | undefined;
+  walk(source, (node) => {
+    if (
+      (ts.isPropertyAssignment(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isShorthandPropertyAssignment(node)) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === name
+    ) {
+      found ??= node.getText();
     }
-  }
-  return undefined;
+  });
+  return found;
 }
 
 test("removing a configured model row is guarded by a confirmation", () => {
-  const main = frontendFiles().find((file) => file.fileName === "main.ts");
+  const files = frontendFiles();
+  const matrix = files.find((file) => file.fileName === "matrix.ts");
+  assert.ok(matrix, "matrix.ts is no longer a shipped frontend module");
+
+  // Assert the handler was found first, so a rename cannot make this pass
+  // vacuously — an absent handler satisfies every assertion below it.
+  const onRemove = memberText(matrix, "onRemove");
+  assert.ok(onRemove, "matrix.ts defines no onRemove handler");
+  assert.match(
+    onRemove,
+    /confirmDialog/,
+    `the model-row remove handler deletes without confirmation: ${onRemove}`,
+  );
+
+  // And those handlers really are the ones the table is built with. A guarded
+  // handler in a module nothing wires up would pass the check above while every
+  // Remove button in the window deleted on the spot.
+  const main = files.find((file) => file.fileName === "main.ts");
   assert.ok(main, "main.ts is no longer a shipped frontend module");
-
-  // Assert the call was found first, so a rename cannot make this pass vacuously.
-  const calls = callsTo(main, "matrixRows");
-  assert.ok(calls.length >= 1, "matrixRows is no longer called from main.ts");
-
-  let checked = 0;
-  for (const call of calls) {
-    const onRemove = handlerText(call, "onRemove");
-    if (!onRemove) continue;
-    checked += 1;
-    assert.match(
-      onRemove,
-      /confirmDialog/,
-      `the model-row remove handler deletes without confirmation: ${onRemove}`,
-    );
-  }
   assert.ok(
-    checked >= 1,
-    "no onRemove handler was found on any matrixRows call",
+    callsTo(main, "matrixHandlers").length >= 1,
+    "main.ts no longer builds the row handlers",
+  );
+  assert.ok(
+    callsTo(main, "matrixRows").length >= 1,
+    "matrixRows is no longer called from main.ts",
   );
 });

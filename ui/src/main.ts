@@ -15,13 +15,12 @@ import {
   batchCount,
   canRun,
   preset,
-  toggleLane,
   uncoveredLanes,
   unitCount,
 } from "./model";
 import { bindGuardedActions } from "./actions";
 import { bindControls } from "./controls";
-import { confirmDialog } from "./dialog";
+import { matrixHandlers } from "./matrix";
 import { wireUpdate } from "./update";
 import { savingSettings } from "./persist";
 import { listOf } from "./format";
@@ -188,52 +187,15 @@ function render(): void {
   }
 }
 
+const rowHandlers = matrixHandlers({
+  settings: () => settings,
+  render,
+  refresh,
+});
+
 function renderRows(): void {
   ui.matrixBody.replaceChildren(
-    ...matrixRows(settings.models, catalogue, {
-      onRename: (index, id) => {
-        const existing = settings.models[index];
-        if (existing) settings.models[index] = { ...existing, id };
-        refresh();
-      },
-      onVendor: (index, id) => {
-        const existing = settings.models[index];
-        // The effort goes with the old vendor: the levels differ between them,
-        // and carrying one over would send a value the new CLI may reject.
-        if (existing) settings.models[index] = { ...existing, id, effort: "" };
-        render();
-      },
-      onPasses: (index, passes) => {
-        const existing = settings.models[index];
-        if (existing) settings.models[index] = { ...existing, passes };
-        refresh();
-      },
-      onEffort: (index, effort) => {
-        const existing = settings.models[index];
-        if (existing) settings.models[index] = { ...existing, effort };
-        refresh();
-      },
-      onToggle: (index, lane, on) => {
-        settings.models = toggleLane(settings.models, index, lane, on);
-        render();
-      },
-      onRemove: (index) => {
-        const model = settings.models[index];
-        if (!model) return;
-        void confirmDialog({
-          title: "Remove this model?",
-          message:
-            `This removes ${model.id || `row ${index + 1}`} and all of its ` +
-            "lane, effort, and pass settings. This cannot be undone.",
-          confirmLabel: "Remove model",
-          destructive: true,
-        }).then((yes) => {
-          if (!yes) return;
-          settings.models = settings.models.filter((_, i) => i !== index);
-          render();
-        });
-      },
-    }),
+    ...matrixRows(settings.models, catalogue, rowHandlers),
   );
   refresh();
 }

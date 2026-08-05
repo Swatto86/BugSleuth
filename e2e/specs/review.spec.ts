@@ -16,49 +16,16 @@
 import { strict as assert } from "node:assert";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-const REPO = path.resolve(process.cwd(), "fixtures/seeded-repo");
-const RUNS_ROOT = path.join(
-  process.env["APPDATA"] ?? os.tmpdir(),
-  "BugSleuth",
-  "runs",
-);
-
-/**
- * The app's run directory for the fixture, found by prefix.
- *
- * This used to be hardcoded as `runs/seeded-repo`, and the app now appends a
- * hash of the full repository path — two checkouts of one project share a leaf
- * name, and sharing a run directory means resume hands one of them the other's
- * sweeps. So the name is `seeded-repo-<hash>`, the hash comes from Rust's
- * DefaultHasher and is not reproducible from here, and the old constant pointed
- * at a directory that is never created. The assertion that a run had been
- * written could therefore never pass.
- */
-function runsDir(): string | undefined {
-  if (!fs.existsSync(RUNS_ROOT)) return undefined;
-  const match = fs
-    .readdirSync(RUNS_ROOT)
-    .find((name) => name === "seeded-repo" || name.startsWith("seeded-repo-"));
-  return match === undefined ? undefined : path.join(RUNS_ROOT, match);
-}
-
-/** Model used for the live run. Overridable so the journey is not pinned to one vendor. */
-const MODEL = process.env["BUGSLEUTH_E2E_MODEL"] ?? "haiku";
-
-/** Click the in-app dialog's button whose label matches, failing loudly if none. */
-async function clickDialogButton(label: string): Promise<void> {
-  const buttons = await $$(".dialog-buttons button");
-  for (const button of buttons) {
-    if ((await button.getText()) === label) {
-      await button.click();
-      return;
-    }
-  }
-  assert.fail(`the dialog had no "${label}" button`);
-}
+import {
+  MODEL,
+  REPO,
+  RUNS_ROOT,
+  clickDialogButton,
+  logWebviewDiagnostics,
+  runsDir,
+} from "./support";
 
 describe("BugSleuth desktop app", () => {
   it("shows its window with the shell mounted", async () => {
@@ -70,46 +37,7 @@ describe("BugSleuth desktop app", () => {
     // than `cargo tauri build`, so it points at the dev server instead of
     // embedding the frontend — and every other spec then fails with a confusing
     // "element not found" that says nothing about the real cause.
-    // What the webview is *actually* showing, printed before the wait rather
-    // than guessed at afterwards. Six runs were spent on plausible theories —
-    // a dev build, a driver mismatch, a stale instance — because the failure
-    // said "blank page" and nothing about why. The URL alone separates all of
-    // them: tauri://… or http://… is a production binary, localhost:5173 is a
-    // development one pointed at a server that is not running.
-    const url = await browser
-      .getUrl()
-      .catch((e: unknown) => `getUrl failed: ${String(e)}`);
-    const source = await browser.getPageSource().catch(() => "");
-    console.log(`
-[diagnostic] url=${url}`);
-    console.log(`[diagnostic] page source is ${source.length} chars`);
-    console.log(`[diagnostic] source head: ${source.slice(0, 300).replace(/\s+/g, " ")}
-`);
-
-    // Which browsing context are we actually in, and is this a race?
-    //
-    // `about:blank` with an empty document has three possible causes and they
-    // need different fixes: the driver attached to a second, blank window
-    // handle; the webview had not navigated yet when we looked; or the page
-    // genuinely never loads. These three lines separate them.
-    const handles = await browser
-      .getWindowHandles()
-      .catch(() => [] as string[]);
-    console.log(
-      `[diagnostic] window handles: ${handles.length} ${JSON.stringify(handles)}`,
-    );
-    for (const handle of handles) {
-      await browser.switchToWindow(handle).catch(() => undefined);
-      const u = await browser.getUrl().catch(() => "?");
-      const len = (await browser.getPageSource().catch(() => "")).length;
-      console.log(
-        `[diagnostic]   handle ${handle}: url=${u} source=${len} chars`,
-      );
-    }
-    await new Promise((r) => setTimeout(r, 8000));
-    const later = await browser.getUrl().catch(() => "?");
-    const laterLen = (await browser.getPageSource().catch(() => "")).length;
-    console.log(`[diagnostic] after 8s: url=${later} source=${laterLen} chars`);
+    await logWebviewDiagnostics();
 
     await browser.waitUntil(async () => (await (await $$("#app")).length) > 0, {
       timeout: 30_000,
