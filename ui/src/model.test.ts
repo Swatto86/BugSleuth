@@ -26,6 +26,7 @@ import {
   boundedProveTop,
   canRun,
   joinId,
+  passChoices,
   preset,
   splitId,
   toggleLane,
@@ -333,4 +334,17 @@ test("an apply that changed nothing does not claim to have applied anything", ()
   assert.match(applyStatus(true, 1), /1 file changed/);
   assert.match(applyStatus(true, 3), /3 files changed/);
   assert.match(applyStatus(false, 0), /failed/);
+});
+
+test("a stored pass count outside the picker presets remains visible", () => {
+  // Rust runs `passes.max(1)` of an unrestricted usize, so a stored 5 is a
+  // valid backend instruction. The selector must offer it rather than silently
+  // showing 1 while Run still sends 5.
+  assert.deepEqual(passChoices(5), [1, 2, 3, 5]);
+  assert.ok(passChoices(5).includes(5));
+  // Pre-passes settings (no field) and Rust's max(1) both normalise to one.
+  assert.deepEqual(passChoices(undefined), [1, 2, 3]);
+  assert.deepEqual(passChoices(0), [1, 2, 3]);
+  // The usual values are unchanged and not duplicated.
+  assert.deepEqual(passChoices(2), [1, 2, 3]);
 });

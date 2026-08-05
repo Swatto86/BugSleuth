@@ -10,7 +10,7 @@
  * there is no import cycle at runtime.
  */
 
-import { joinId, splitId, type ModelSetting } from "./model";
+import { joinId, passChoices, splitId, type ModelSetting } from "./model";
 import type { Catalogue, MatrixHandlers, VendorModels } from "./view";
 
 export function option(
@@ -240,7 +240,7 @@ export function passPicker(
   select.setAttribute("aria-label", `Passes for row ${index + 1}`);
   select.dataset["focusKey"] = `passes-${index}`;
   const chosen = Math.max(1, model.passes ?? 1);
-  for (const n of [1, 2, 3]) {
+  for (const n of passChoices(model.passes)) {
     select.append(option(String(n), n === 1 ? "1" : `${n}x`, n === chosen));
   }
   select.title =
