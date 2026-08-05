@@ -172,9 +172,20 @@ function render(): void {
   const restored = ui.matrixBody.querySelector<HTMLElement>(
     `[data-focus-key="${CSS.escape(key)}"]`,
   );
-  // Nothing to restore to when the row itself was just removed. Leaving focus
-  // where the browser put it beats guessing at a neighbour.
-  restored?.focus();
+  if (restored) {
+    restored.focus();
+    return;
+  }
+
+  // Removing the focused final row deletes its focus key. Continue at the new
+  // final row, or at Add model when the matrix is now empty — otherwise focus
+  // falls to <body> and a keyboard user restarts from the top of the page.
+  if (key.startsWith("remove-")) {
+    const lastRemove = ui.matrixBody.querySelector<HTMLElement>(
+      `[data-focus-key="remove-${settings.models.length - 1}"]`,
+    );
+    (lastRemove ?? ui.addModel).focus();
+  }
 }
 
 function renderRows(): void {

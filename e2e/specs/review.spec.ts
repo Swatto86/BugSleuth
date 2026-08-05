@@ -405,6 +405,51 @@ ${still}`,
     );
   });
 
+  it("keeps keyboard focus on the matrix after removing the final row", async () => {
+    // A keyboard or screen-reader user who removes the last row must not be
+    // dropped to <body> and made to tab in from the top of the page again.
+    const rowCount = async () => (await $$("#matrix-body tr")).length;
+    while ((await rowCount()) < 2) {
+      await $("#add-model").click();
+    }
+
+    const removeLastRow = async () => {
+      const before = await rowCount();
+      await $("#matrix-body tr:last-child button").click();
+      await clickDialogButton("Remove model");
+      await browser.waitUntil(async () => (await rowCount()) === before - 1, {
+        timeout: 5_000,
+        timeoutMsg: "the row was not removed",
+      });
+    };
+
+    // Removing the focused final row lands focus on the new final row's Remove
+    // button — the removal confirmation restores focus to the button it just
+    // deleted, so the rebuild has to redirect it.
+    await removeLastRow();
+    const onLastRemove = await browser.execute(() => {
+      const rows = document.querySelectorAll("#matrix-body tr");
+      const last = rows[rows.length - 1];
+      return (
+        last != null && document.activeElement === last.querySelector("button")
+      );
+    });
+    assert.ok(onLastRemove, "focus was lost after removing the final row");
+
+    // Remove down to the sole remaining row, then remove it too: focus moves to
+    // Add model rather than to <body>.
+    while ((await rowCount()) > 0) {
+      await removeLastRow();
+    }
+    const onAddModel = await browser.execute(
+      () => document.activeElement === document.querySelector("#add-model"),
+    );
+    assert.ok(
+      onAddModel,
+      "focus did not move to Add model when the matrix emptied",
+    );
+  });
+
   it("leaves the reviewed repository untouched", () => {
     // The promise the whole tool rests on. A review that modified its target
     // would be worse than useless.
