@@ -130,6 +130,13 @@ async fn invoke<T: serde::de::DeserializeOwned>(spec: Invoke<'_>) -> Result<T, P
 
 /// One invocation, answering with whatever the CLI's final message was.
 pub(crate) async fn invoke_text(spec: Invoke<'_>) -> Result<String, ProviderError> {
+    // The accepted reasoning efforts belong to the model, not the CLI, so an
+    // effort forwarded to `model_reasoning_effort` is validated against the
+    // model's catalogue before anything is spent. Here rather than in one
+    // caller, so structured sweeps and prose apply calls are both covered;
+    // proof passes an empty effort and is unaffected.
+    crate::models::validate_effort(VENDOR, spec.model, spec.effort).await?;
+
     let binary = match spec.binary {
         Some(path) => PathBuf::from(path),
         None => discover::resolve_binary().ok_or_else(not_found)?,

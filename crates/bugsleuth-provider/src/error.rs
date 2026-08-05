@@ -31,6 +31,15 @@ pub enum ProviderError {
     },
     #[error("the model's reply did not match the required structure: {0}")]
     Schema(String),
+    #[error(
+        "model `{model}` asks for effort `{effort}`, which {vendor} does not accept (try: {accepted})"
+    )]
+    InvalidEffort {
+        vendor: &'static str,
+        model: String,
+        effort: String,
+        accepted: String,
+    },
     #[error("could not prepare the {vendor} CLI's working files: {detail}")]
     Scratch {
         vendor: &'static str,

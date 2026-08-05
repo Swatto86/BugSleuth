@@ -113,10 +113,13 @@ impl Plan {
 /// the run completes, the report looks normal, and nothing says the depth you
 /// asked for was never applied.
 ///
-/// Only Claude and Codex are checked. Kilo passes `--variant` through to
-/// whichever provider is behind the model, so its accepted values are a
-/// property of that model and are discovered at runtime; refusing what we
-/// cannot enumerate would block valid configurations.
+/// Claude is checked here from its CLI-wide list. Codex is checked against its
+/// per-model catalogue by the provider before invocation — its accepted levels
+/// vary by model, so a synchronous vendor-wide list here would either reject
+/// valid depths or wave through invalid ones. Kilo passes `--variant` through to
+/// whichever provider is behind the model, so its accepted values are a property
+/// of that model and are discovered at runtime; refusing what we cannot
+/// enumerate would block valid configurations.
 pub fn check_effort(id: &str, effort: &str) -> Result<()> {
     if effort.is_empty() {
         return Ok(());
@@ -236,13 +239,13 @@ mod tests {
 
     #[test]
     fn every_effort_the_vendor_documents_is_accepted() {
+        // Claude's levels are CLI-wide and validated here. Codex is deliberately
+        // not asserted: its levels are model-specific and are checked against the
+        // per-model catalogue by the provider before invocation, not by the
+        // planner — see the provider's `effort_not_supported_by_codex_model`.
         for level in ["low", "medium", "high", "xhigh", "max"] {
             assert!(
                 plan(&with_effort("sonnet", level)).is_ok(),
-                "{level} refused"
-            );
-            assert!(
-                plan(&with_effort("codex:", level)).is_ok(),
                 "{level} refused"
             );
         }

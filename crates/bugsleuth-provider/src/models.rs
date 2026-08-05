@@ -78,6 +78,67 @@ pub fn efforts(vendor: &str) -> &'static [&'static str] {
     }
 }
 
+/// Validate a Codex effort against its selected model's catalogue entry.
+///
+/// The contract [`efforts`] documents: an empty vendor-wide list means the
+/// answer is per-model, in [`VendorCatalogue::efforts_by_model`]. Codex returns
+/// an empty vendor-wide list for exactly that reason, so an effort forwarded to
+/// `model_reasoning_effort` must be checked against the model's own accepted
+/// levels rather than waved through. Fetches the catalogue and defers to
+/// [`effort_ok`], which is pure so it can be tested without the CLI.
+pub(crate) async fn validate_effort(
+    vendor: &'static str,
+    model: &str,
+    effort: &str,
+) -> Result<(), ProviderError> {
+    // Nothing to fetch when there is nothing to check: an empty effort is the
+    // CLI's own default, and only Codex is gated here — Claude's levels are
+    // CLI-wide and checked by the planner, Kilo's variants are provider-specific.
+    if effort.trim().is_empty() || vendor != "codex" {
+        return Ok(());
+    }
+    let catalogue = available(vendor).await?;
+    effort_ok(vendor, &catalogue, model, effort)
+}
+
+/// Whether a Codex effort is one the model's catalogue entry accepts.
+///
+/// Pure, so the rule can be tested without invoking a CLI. A model with no entry
+/// cannot be verified and is refused rather than forwarded unchecked — an empty
+/// vendor-wide list means "consult the per-model catalogue", never "accept
+/// anything".
+pub(crate) fn effort_ok(
+    vendor: &'static str,
+    catalogue: &VendorCatalogue,
+    model: &str,
+    effort: &str,
+) -> Result<(), ProviderError> {
+    let effort = effort.trim();
+    if effort.is_empty() || vendor != "codex" {
+        return Ok(());
+    }
+    let model = model.trim();
+    let accepted =
+        catalogue
+            .efforts_by_model
+            .get(model)
+            .ok_or_else(|| ProviderError::InvalidEffort {
+                vendor,
+                model: model.to_string(),
+                effort: effort.to_string(),
+                accepted: "choose a listed model or leave effort at its default".to_string(),
+            })?;
+    if accepted.iter().any(|level| level == effort) {
+        return Ok(());
+    }
+    Err(ProviderError::InvalidEffort {
+        vendor,
+        model: model.to_string(),
+        effort: effort.to_string(),
+        accepted: accepted.join(", "),
+    })
+}
+
 /// Claude's documented aliases. Each always points at the newest of its family.
 const CLAUDE_MODELS: &[&str] = &["fable", "opus", "sonnet", "haiku"];
 
@@ -285,6 +346,36 @@ ollama/qwen3-coder
                 .efforts_by_model
                 .contains_key("kilo/ai21/jamba-large-1.7")
         );
+    }
+
+    #[test]
+    fn effort_not_supported_by_codex_model_is_rejected() {
+        // Codex's vendor-wide list is empty on purpose: accepted levels are a
+        // property of the model. `gpt-5.5` takes up to `xhigh` and rejects `max`.
+        let mut catalogue = VendorCatalogue::default();
+        catalogue.efforts_by_model.insert(
+            "gpt-5.5".to_string(),
+            vec![
+                "low".to_string(),
+                "medium".to_string(),
+                "high".to_string(),
+                "xhigh".to_string(),
+            ],
+        );
+
+        assert!(effort_ok("codex", &catalogue, "gpt-5.5", "xhigh").is_ok());
+        assert!(
+            effort_ok("codex", &catalogue, "gpt-5.5", "max").is_err(),
+            "`max` is not in the model's catalogue and must be refused"
+        );
+        // A model absent from the catalogue cannot be verified, so it is refused
+        // rather than forwarded unchecked.
+        assert!(effort_ok("codex", &catalogue, "gpt-absent", "high").is_err());
+        // Empty effort is always fine — the CLI's own default.
+        assert!(effort_ok("codex", &catalogue, "gpt-5.5", "").is_ok());
+        assert!(effort_ok("codex", &catalogue, "gpt-5.5", "   ").is_ok());
+        // Other vendors are not gated here; their efforts are checked elsewhere.
+        assert!(effort_ok("claude", &catalogue, "opus", "max").is_ok());
     }
 
     #[test]
