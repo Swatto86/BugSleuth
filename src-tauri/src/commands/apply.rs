@@ -124,9 +124,34 @@ fn describe(report: &bugsleuth_engine::apply::ApplyReport) -> String {
              what is uncommitted, `git log -p` for what was committed.\n\n",
         );
     }
-    // Before the model's account, because it is about to be pushed. The prompt
-    // asks the model not to do this and every CLI does it by default, so it is
-    // reported from the commits themselves rather than taken on trust.
+    // Said plainly, because rewriting someone's commits without telling them is
+    // worse than leaving the trailer on.
+    if !report.stripped.is_empty() {
+        out.push_str(&format!(
+            "{}, so this tool does not sign your history:
+",
+            match report.stripped.len() {
+                1 => "Removed a tool authorship trailer from 1 commit".to_string(),
+                n => format!("Removed tool authorship trailers from {n} commits"),
+            }
+        ));
+        for subject in &report.stripped {
+            out.push_str(&format!(
+                "  {subject}
+"
+            ));
+        }
+        out.push_str(
+            "
+The changes themselves are untouched — only the trailer lines are gone.
+
+",
+        );
+    }
+
+    // What could not be rewritten, because it was already published or HEAD was
+    // detached. Reported rather than forced: forking history to tidy a trailer
+    // is a worse outcome than the trailer.
     if !report.attributed.is_empty() {
         out.push_str(&format!(
             "{}:\n",
@@ -164,6 +189,7 @@ mod tests {
             text: "I fixed all seven defects.".into(),
             changed_files: vec![],
             commits: 0,
+            stripped: vec![],
             attributed: vec![],
         });
         assert!(text.contains("no files changed"));
@@ -176,6 +202,7 @@ mod tests {
             text: "done".into(),
             changed_files: vec!["src/a.rs".into(), "src/b.rs".into()],
             commits: 2,
+            stripped: vec![],
             attributed: vec![],
         });
         assert!(text.contains("2 files changed, in 2 commits"), "{text}");
@@ -192,6 +219,7 @@ mod tests {
             text: "done".into(),
             changed_files: vec!["src/a.rs".into()],
             commits: 0,
+            stripped: vec![],
             attributed: vec![],
         });
         assert!(
@@ -213,6 +241,7 @@ mod tests {
             text: "done".into(),
             changed_files: vec!["src/a.rs".into()],
             commits: 1,
+            stripped: vec![],
             attributed: vec!["fix(auth): stop demanding re-sign-in".into()],
         });
         assert!(text.contains("1 commit credits a tool"), "{text}");
@@ -226,6 +255,7 @@ mod tests {
             text: "done".into(),
             changed_files: vec!["a".into()],
             commits: 2,
+            stripped: vec![],
             attributed: vec!["one".into(), "two".into()],
         });
         assert!(two.contains("2 commits credit a tool"), "{two}");
@@ -233,6 +263,7 @@ mod tests {
             text: "done".into(),
             changed_files: vec!["a".into()],
             commits: 1,
+            stripped: vec![],
             attributed: vec![],
         });
         assert!(!clean.contains("credit"), "{clean}");

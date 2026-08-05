@@ -122,3 +122,14 @@ fn an_invocation_with_no_schema_asks_for_none_rather_than_for_null() {
     assert!(args.iter().any(|a| a == "--safe-mode"));
     assert!(args.iter().any(|a| a == "--allowedTools"));
 }
+
+#[test]
+fn every_invocation_tells_the_cli_not_to_sign_the_commit() {
+    // Without this the CLI adds `Co-Authored-By: Claude …` to every commit it
+    // makes, and applying fixes asks it to commit per defect — so the tool
+    // wrote attribution into a user's history as a side effect. Measured both
+    // ways against a real repository before this was added.
+    let args = build_args(&run("sonnet")).join(" ");
+    assert!(args.contains("--settings"), "{args}");
+    assert!(args.contains(r#"{"includeCoAuthoredBy":false}"#), "{args}");
+}

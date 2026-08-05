@@ -37,57 +37,6 @@ pub(super) fn changed_since(repo: &Path, base: Option<&str>) -> Vec<String> {
     theirs(files)
 }
 
-/// Subjects of new commits whose message carries a tool authorship trailer.
-///
-/// `%x1e` between commits and `%x00` between the subject and the body, because
-/// a commit message contains blank lines and any separator that occurs in prose
-/// eventually splits one in half.
-pub(super) fn attributed_since(repo: &Path, base: Option<&str>) -> Vec<String> {
-    let Some(base) = base else { return vec![] };
-    git(
-        repo,
-        &["log", "--format=%s%x00%b%x1e", &format!("{base}..HEAD")],
-    )
-    .map(|log| attributed(&log))
-    .unwrap_or_default()
-}
-
-/// The subjects of commits that credit a tool for the work.
-///
-/// Deliberately narrow. A `Co-Authored-By` naming a colleague is a normal thing
-/// to want; one naming the CLI that BugSleuth just drove is attribution nobody
-/// asked for, in a repository whose owner may have a rule against it — and it
-/// arrives by default, which is why an instruction alone cannot be trusted.
-pub(super) fn attributed(log: &str) -> Vec<String> {
-    // Names and the domains they sign from: a trailer reading
-    // `Assistant <noreply@anthropic.com>` names no tool this list would
-    // otherwise catch, and it is the same attribution.
-    const TOOLS: [&str; 9] = [
-        "claude",
-        "codex",
-        "kilo",
-        "copilot",
-        "chatgpt",
-        "gemini",
-        "anthropic.com",
-        "openai.com",
-        "noreply@google.com",
-    ];
-    log.split('\u{1e}')
-        .filter_map(|record| {
-            let (subject, body) = record.trim_start().split_once('\u{0}')?;
-            let lower = body.to_lowercase();
-            let credited = lower.lines().any(|line| {
-                let line = line.trim();
-                (line.starts_with("co-authored-by:") || line.contains("generated with"))
-                    && TOOLS.iter().any(|tool| line.contains(tool))
-            });
-            credited.then(|| subject.trim().to_string())
-        })
-        .filter(|subject| !subject.is_empty())
-        .collect()
-}
-
 pub(super) fn commits_since(repo: &Path, base: Option<&str>) -> usize {
     let Some(base) = base else { return 0 };
     git(repo, &["rev-list", "--count", &format!("{base}..HEAD")])
@@ -152,7 +101,22 @@ pub(super) fn summarise(files: &[String]) -> String {
 }
 
 pub(super) fn git(repo: &Path, args: &[&str]) -> anyhow::Result<String> {
-    let output = bugsleuth_verify::hide_console_window(&mut Command::new("git"))
+    git_with_env(repo, args, &[])
+}
+
+/// `git`, with extra environment. Used to carry an original commit's author and
+/// dates onto its rewrite, which `commit-tree` would otherwise stamp with this
+/// process's identity and the time of day.
+pub(super) fn git_with_env(
+    repo: &Path,
+    args: &[&str],
+    env: &[(String, String)],
+) -> anyhow::Result<String> {
+    let mut command = Command::new("git");
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    let output = bugsleuth_verify::hide_console_window(&mut command)
         .args(args)
         .current_dir(repo)
         .output()
@@ -203,82 +167,6 @@ mod tests {
         assert_eq!(theirs(mixed), ["src/real.rs"]);
         // And a repository whose only "changes" are ours reads as clean.
         assert!(theirs(vec![".bugsleuth-worktrees/x".to_string()]).is_empty());
-    }
-
-    #[test]
-    fn a_commit_crediting_the_tool_is_spotted_and_an_ordinary_one_is_not() {
-        // Subject, NUL, body, RS per commit — exactly the format
-        // `attributed_since` asks git for.
-        let log = concat!(
-            "fix(auth): stop the loop\u{0}Body.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\u{1e}",
-            "fix(ui): focus the dialog\u{0}Body with no trailer.\n\u{1e}",
-            "chore: tidy\u{0}Generated with Codex\n\u{1e}",
-            "feat: pairing\u{0}Co-authored-by: Sam <sam@example.com>\n\u{1e}",
-            // Names nothing on the list, but signs from a domain that is.
-            "docs: notes\u{0}Co-Authored-By: Assistant <noreply@anthropic.com>\n\u{1e}",
-        );
-        assert_eq!(
-            attributed(log),
-            ["fix(auth): stop the loop", "chore: tidy", "docs: notes"],
-            "a human co-author is not attribution and must not be flagged"
-        );
-    }
-
-    #[test]
-    fn the_format_string_is_the_one_git_actually_produces() {
-        // The test above builds the log by hand, which proves the parser and
-        // nothing about `git log --format=...`. One separator wrong and the
-        // whole warning silently never fires. So: a real repository, real
-        // commits, the real format string.
-        let dir = std::env::temp_dir().join(format!("bugsleuth-attr-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let _ = std::fs::create_dir_all(&dir);
-        let run = |args: &[&str]| {
-            let out = Command::new("git")
-                .args(args)
-                .current_dir(&dir)
-                .output()
-                .expect("git");
-            assert!(out.status.success(), "git {args:?}: {out:?}");
-        };
-        run(&["init", "-q"]);
-        run(&["config", "user.email", "t@example.com"]);
-        run(&["config", "user.name", "Tester"]);
-        let _ = std::fs::write(dir.join("a.txt"), "one");
-        run(&["add", "-A"]);
-        run(&["commit", "-qm", "base"]);
-        let base = git(&dir, &["rev-parse", "HEAD"])
-            .expect("head")
-            .trim()
-            .to_string();
-
-        let _ = std::fs::write(dir.join("a.txt"), "two");
-        run(&["add", "-A"]);
-        run(&[
-            "commit",
-            "-qm",
-            "fix: something real\n\nA body.\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
-        ]);
-        let _ = std::fs::write(dir.join("a.txt"), "three");
-        run(&["add", "-A"]);
-        run(&["commit", "-qm", "fix: another\n\nNo trailer here."]);
-
-        assert_eq!(
-            attributed_since(&dir, Some(&base)),
-            ["fix: something real"],
-            "only the credited commit, with its subject intact"
-        );
-        assert_eq!(commits_since(&dir, Some(&base)), 2);
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn a_clean_history_reports_nothing_rather_than_an_empty_subject() {
-        // The window keys off `is_empty()`, so one stray blank entry would warn
-        // about a commit that does not exist.
-        assert!(attributed("").is_empty());
-        assert!(attributed("\u{1e}\u{1e}").is_empty());
-        assert!(attributed("subject with no separator\u{1e}").is_empty());
     }
 
     #[test]

@@ -21,10 +21,10 @@ use std::time::Duration;
 
 use crate::sweep::Vendor;
 
+mod attribution;
 mod observed;
-use observed::{
-    attributed_since, changed_since, commits_since, dirty_files, git, summarise, theirs,
-};
+use attribution::{attributed_since, strip_attribution};
+use observed::{changed_since, commits_since, dirty_files, git, summarise, theirs};
 
 pub struct ApplyRequest<'a> {
     /// The repository to edit. Its working tree must be clean.
@@ -50,13 +50,21 @@ pub struct ApplyReport {
     /// Commits made during the run. The prompt asks for one per defect, so a
     /// clean tree afterwards is the expected outcome rather than a suspicious one.
     pub commits: usize,
-    /// Subjects of commits carrying an authorship trailer naming a tool.
+    /// Subjects of commits whose authorship trailer was removed after the fact.
     ///
-    /// The prompt tells the model not to add one, and every CLI this drives adds
-    /// one by default — so the instruction is a request and this is the check.
-    /// It landed in a real repository before anyone noticed: seven commits, each
-    /// with a `Co-Authored-By` line, in a project whose published history had
-    /// none. Caught before they were pushed, by luck rather than by design.
+    /// This tool does not attribute an AI in someone else's repository. The CLI
+    /// setting removes the cause for the vendor that has one; this catches the
+    /// rest, including a model that types the trailer out by hand. Seven such
+    /// commits reached a real repository before any of this existed, and were
+    /// caught in the minute before they were pushed.
+    ///
+    /// Named rather than silently fixed: a tool that rewrites your commits and
+    /// says nothing is worse than one that leaves them alone.
+    pub stripped: Vec<String>,
+    /// Commits still carrying a trailer, because they could not be rewritten —
+    /// they had already reached a remote, or HEAD was detached. Reported so the
+    /// user can act, since the tool must not fork published history to fix its
+    /// own mess.
     pub attributed: Vec<String>,
 }
 
@@ -142,11 +150,28 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         )),
     };
 
+    // Attribution comes off before anything else is reported, so what the user
+    // reads describes the repository as it now stands. Only commits this apply
+    // created, only while they are still local — see `strip_attribution`.
+    //
+    // A failure here is not a failed apply: the fixes are real and already
+    // committed. What is left is named instead, which is the whole difference
+    // between a tool that quietly forks published history and one that says
+    // "these two are yours to deal with".
+    let (stripped, attributed) = match base.as_deref() {
+        Some(base) => match strip_attribution(repo, base) {
+            Ok(stripped) => (stripped, vec![]),
+            Err(_) => (vec![], attributed_since(repo, Some(base))),
+        },
+        None => (vec![], vec![]),
+    };
+
     Ok(ApplyReport {
         text,
         changed_files: changed_since(repo, base.as_deref()),
         commits: commits_since(repo, base.as_deref()),
-        attributed: attributed_since(repo, base.as_deref()),
+        stripped,
+        attributed,
     })
 }
 

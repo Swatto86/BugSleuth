@@ -95,12 +95,13 @@ rust anchor::tests::rejects_a_file_that_does_not_exist
 rust anchor::tests::rejects_a_path_that_climbs_out_of_the_repository
 rust anchor::tests::rejects_code_that_does_not_exist_in_the_file
 rust anchor::tests::tolerates_re_indented_code
-rust apply::observed::tests::a_clean_history_reports_nothing_rather_than_an_empty_subject
+rust apply::attribution::tests::a_clean_history_reports_nothing_rather_than_an_empty_subject
+rust apply::attribution::tests::a_commit_crediting_the_tool_is_spotted_and_an_ordinary_one_is_not
+rust apply::attribution::tests::stripping_removes_the_trailer_and_changes_nothing_else
+rust apply::attribution::tests::the_format_string_is_the_one_git_actually_produces
 rust apply::observed::tests::a_clean_tree_reads_as_clean_rather_than_as_one_empty_path
-rust apply::observed::tests::a_commit_crediting_the_tool_is_spotted_and_an_ordinary_one_is_not
 rust apply::observed::tests::a_dirty_tree_is_read_out_of_git_status_whatever_the_status_letters_are
 rust apply::observed::tests::bugsleuths_own_leftovers_are_not_treated_as_the_users_uncommitted_work
-rust apply::observed::tests::the_format_string_is_the_one_git_actually_produces
 rust apply::observed::tests::the_refusal_names_a_few_files_rather_than_all_of_them
 rust apply::tests::a_failed_apply_still_says_what_it_had_already_changed
 rust apply::tests::a_repository_without_git_is_refused_before_anything_is_spent
@@ -155,6 +156,7 @@ rust claude::tests::an_empty_denylist_omits_the_flag_rather_than_passing_an_empt
 rust claude::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
 rust claude::tests::an_invocation_with_no_schema_asks_for_none_rather_than_for_null
 rust claude::tests::customizations_are_disabled_so_the_reviewed_repo_cannot_alter_the_review
+rust claude::tests::every_invocation_tells_the_cli_not_to_sign_the_commit
 rust claude::tests::read_only_sweeps_cannot_be_granted_write_tools
 rust claude::tests::the_schema_is_passed_as_one_argv_entry_not_shell_text
 rust cli::tests::the_lane_help_lists_every_lane

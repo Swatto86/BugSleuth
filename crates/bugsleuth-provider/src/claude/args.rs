@@ -26,6 +26,19 @@ pub(super) fn build_args(run: &Run<'_>) -> Vec<String> {
         args.push("--json-schema".into());
         args.push(run.schema.to_string());
     }
+    // BugSleuth never signs someone else's commits. This CLI adds
+    // `Co-Authored-By: Claude …` to every commit it makes unless told not to,
+    // and applying fixes asks it to commit one defect at a time — so without
+    // this, the tool writes attribution into the user's history as a side
+    // effect of being helpful. Measured both ways against a real repository:
+    // with the setting the commit is clean, without it the trailer is there.
+    //
+    // Passed on every invocation, not just the writing one: "this tool does not
+    // attribute an AI" is a property of the product, not of one code path, and
+    // a sweep that cannot commit is not harmed by a setting it never uses.
+    args.push("--settings".into());
+    args.push(r#"{"includeCoAuthoredBy":false}"#.into());
+
     if !run.denied.is_empty() {
         args.push("--disallowedTools".into());
         args.push(run.denied.into());
