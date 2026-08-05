@@ -44,6 +44,10 @@ impl Inventory {
     }
 
     /// The `n` most valuable lines by total value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` exceeds the number of items in the inventory.
     pub fn top_by_value(&self, n: usize) -> Vec<&Item> {
         let mut items: Vec<&Item> = self.items.values().collect();
         items.sort_by_key(|item| std::cmp::Reverse(item.unit_price_pence * item.quantity as u64));
@@ -93,16 +97,49 @@ mod tests {
     #[test]
     fn panicking_operations_document_that_they_panic() {
         let source = include_str!("inventory.rs");
-        let functions: Vec<&str> = source.split("\npub fn ").skip(1).collect();
-        let undocumented: Vec<&&str> = functions
-            .iter()
-            .filter(|body| body.contains("unwrap(") || body.contains("[.."))
-            .filter(|body| !body.contains("# Panics"))
-            .collect();
+
+        // Walk the methods, keeping each one paired with the doc comment that
+        // immediately precedes it. A split on `pub fn` cannot do this: it puts a
+        // method's own `# Panics` note into the *previous* segment, so the naive
+        // version passed even for a documented panic. The methods here are indented
+        // four spaces, and each has a single closing brace at that indent.
+        let mut doc = String::new();
+        let mut undocumented = Vec::new();
+        let mut lines = source.lines().peekable();
+        while let Some(line) = lines.next() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("///") {
+                doc.push_str(trimmed);
+                doc.push('\n');
+                continue;
+            }
+            if let Some(rest) = line.strip_prefix("    pub fn ") {
+                let name = rest.split('(').next().unwrap_or("").trim();
+                let mut body = String::new();
+                for body_line in lines.by_ref() {
+                    if body_line == "    }" {
+                        break;
+                    }
+                    body.push_str(body_line);
+                    body.push('\n');
+                }
+                let panics = body.contains("unwrap(") || body.contains("[..");
+                if panics && !doc.contains("# Panics") {
+                    undocumented.push(name.to_string());
+                }
+                doc.clear();
+                continue;
+            }
+            // Anything else that is not blank breaks a doc block off from a `fn`.
+            if !trimmed.is_empty() {
+                doc.clear();
+            }
+        }
+
         assert!(
             undocumented.is_empty(),
-            "{} undocumented panics",
-            undocumented.len()
+            "undocumented panics: {}",
+            undocumented.join(", ")
         );
     }
 }
