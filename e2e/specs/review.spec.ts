@@ -48,6 +48,18 @@ function runsDir(): string | undefined {
 /** Model used for the live run. Overridable so the journey is not pinned to one vendor. */
 const MODEL = process.env["BUGSLEUTH_E2E_MODEL"] ?? "haiku";
 
+/** Click the in-app dialog's button whose label matches, failing loudly if none. */
+async function clickDialogButton(label: string): Promise<void> {
+  const buttons = await $$(".dialog-buttons button");
+  for (const button of buttons) {
+    if ((await button.getText()) === label) {
+      await button.click();
+      return;
+    }
+  }
+  assert.fail(`the dialog had no "${label}" button`);
+}
+
 describe("BugSleuth desktop app", () => {
   it("shows its window with the shell mounted", async () => {
     // The window starts hidden and the frontend reveals it. If that ever breaks
@@ -148,6 +160,60 @@ describe("BugSleuth desktop app", () => {
     await expect($("#uncovered-warning")).toBeDisplayed();
     await expect($("#uncovered-warning")).toHaveText(/NOT SWEPT/);
     await expect($("#run")).toBeDisabled();
+  });
+
+  it("confirms before removing a configured model row", async () => {
+    // A row holds a provider, model id, effort, pass count and five lane
+    // assignments, and removal is immediate with no undo. Like preset
+    // replacement and clearing saved sweeps, it must be confirmed first, so a
+    // stray click on Remove cannot silently discard a hand-built row.
+    const UNIQUE = "vendor/remove-me-12345";
+    const rowCount = async () => (await $$("#matrix-body tr")).length;
+    const before = await rowCount();
+
+    await $("#add-model").click();
+    await browser.waitUntil(async () => (await rowCount()) === before + 1, {
+      timeout: 5_000,
+      timeoutMsg: "adding a model did not add a row",
+    });
+
+    const modelInput = () => $("#matrix-body tr:last-child td.model-id input");
+    await modelInput().setValue(UNIQUE);
+    assert.equal(await modelInput().getValue(), UNIQUE);
+
+    const removeButton = () => $("#matrix-body tr:last-child button");
+
+    // Removal raises the guard rather than deleting on the spot.
+    await removeButton().click();
+    await expect($(".dialog")).toBeDisplayed();
+    assert.equal(
+      await rowCount(),
+      before + 1,
+      "the row went before the guard was answered",
+    );
+
+    // Cancelling keeps the row exactly as it was.
+    await clickDialogButton("Cancel");
+    await expect($(".dialog")).not.toBeExisting();
+    assert.equal(
+      await rowCount(),
+      before + 1,
+      "cancelling still removed the row",
+    );
+    assert.equal(
+      await modelInput().getValue(),
+      UNIQUE,
+      "cancelling changed the row",
+    );
+
+    // Confirming removes it.
+    await removeButton().click();
+    await expect($(".dialog")).toBeDisplayed();
+    await clickDialogButton("Remove model");
+    await browser.waitUntil(async () => (await rowCount()) === before, {
+      timeout: 5_000,
+      timeoutMsg: "confirming Remove did not remove the row",
+    });
   });
 
   it("runs a real review and writes the result to disk", async function () {

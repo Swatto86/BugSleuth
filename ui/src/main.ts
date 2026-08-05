@@ -21,6 +21,7 @@ import {
 } from "./model";
 import { bindGuardedActions } from "./actions";
 import { bindControls } from "./controls";
+import { confirmDialog } from "./dialog";
 import { wireUpdate } from "./update";
 import { savingSettings } from "./persist";
 import { listOf } from "./format";
@@ -206,8 +207,20 @@ function renderRows(): void {
         render();
       },
       onRemove: (index) => {
-        settings.models = settings.models.filter((_, i) => i !== index);
-        render();
+        const model = settings.models[index];
+        if (!model) return;
+        void confirmDialog({
+          title: "Remove this model?",
+          message:
+            `This removes ${model.id || `row ${index + 1}`} and all of its ` +
+            "lane, effort, and pass settings. This cannot be undone.",
+          confirmLabel: "Remove model",
+          destructive: true,
+        }).then((yes) => {
+          if (!yes) return;
+          settings.models = settings.models.filter((_, i) => i !== index);
+          render();
+        });
       },
     }),
   );
