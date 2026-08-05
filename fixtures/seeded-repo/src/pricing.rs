@@ -22,8 +22,11 @@ pub fn basket_total(unit_price_pence: u64, quantity: u32) -> u64 {
 }
 
 /// Parse a price written as pounds, e.g. "12.34", into pence.
+///
+/// A whole-pound price with no decimal point, like "12", is a supported input
+/// and parses as if it were written "12.0".
 pub fn parse_price(input: &str) -> u64 {
-    let (pounds, pence) = input.split_once('.').unwrap();
+    let (pounds, pence) = input.split_once('.').unwrap_or((input, "0"));
     pounds.parse::<u64>().unwrap() * 100 + pence.parse::<u64>().unwrap()
 }
 
@@ -52,7 +55,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "flaky on CI"]
     fn parses_a_price_with_no_pence() {
         assert_eq!(parse_price("12"), 1200);
     }
