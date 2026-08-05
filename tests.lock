@@ -95,12 +95,15 @@ rust anchor::tests::rejects_a_file_that_does_not_exist
 rust anchor::tests::rejects_a_path_that_climbs_out_of_the_repository
 rust anchor::tests::rejects_code_that_does_not_exist_in_the_file
 rust anchor::tests::tolerates_re_indented_code
-rust apply::tests::a_clean_tree_reads_as_clean_rather_than_as_one_empty_path
-rust apply::tests::a_dirty_tree_is_read_out_of_git_status_whatever_the_status_letters_are
+rust apply::observed::tests::a_clean_history_reports_nothing_rather_than_an_empty_subject
+rust apply::observed::tests::a_clean_tree_reads_as_clean_rather_than_as_one_empty_path
+rust apply::observed::tests::a_commit_crediting_the_tool_is_spotted_and_an_ordinary_one_is_not
+rust apply::observed::tests::a_dirty_tree_is_read_out_of_git_status_whatever_the_status_letters_are
+rust apply::observed::tests::bugsleuths_own_leftovers_are_not_treated_as_the_users_uncommitted_work
+rust apply::observed::tests::the_format_string_is_the_one_git_actually_produces
+rust apply::observed::tests::the_refusal_names_a_few_files_rather_than_all_of_them
 rust apply::tests::a_failed_apply_still_says_what_it_had_already_changed
 rust apply::tests::a_repository_without_git_is_refused_before_anything_is_spent
-rust apply::tests::bugsleuths_own_leftovers_are_not_treated_as_the_users_uncommitted_work
-rust apply::tests::the_refusal_names_a_few_files_rather_than_all_of_them
 rust atomic::tests::a_failed_write_destroys_nothing_and_leaves_no_debris
 rust atomic::tests::a_file_is_replaced_whole
 rust atomic::tests::a_path_that_names_no_file_is_an_error_rather_than_a_panic
@@ -182,6 +185,7 @@ rust codex::tests::the_configuration_and_rules_of_the_host_and_the_repo_are_both
 rust codex::tests::the_prompt_comes_from_stdin_so_a_long_brief_cannot_overflow_the_command_line
 rust codex::tests::the_schema_and_answer_paths_are_passed_as_files_not_inline_json
 rust codex::tests::the_signin_probe_and_a_sweep_share_one_flag_list
+rust commands::apply::tests::a_commit_that_credits_the_tool_is_named_before_it_is_pushed
 rust commands::apply::tests::a_model_that_changed_nothing_cannot_report_success_unchallenged
 rust commands::apply::tests::what_changed_is_listed_before_what_was_claimed
 rust commands::saved::tests::a_repository_that_does_not_exist_is_refused_rather_than_guessed_at
@@ -214,6 +218,7 @@ rust handoff::tests::a_single_defect_prompt_stands_on_its_own
 rust handoff::tests::the_bundle_is_replaced_whole_and_leaves_no_staging_file
 rust handoff::tests::the_bundle_states_its_own_size_and_how_to_avoid_being_truncated
 rust handoff::tests::the_fix_prompt_tells_the_agent_what_the_review_could_not_see
+rust handoff::tests::the_prompt_tells_the_agent_not_to_sign_the_commits
 rust handoff::tests::writing_prompts_clears_a_previous_runs_per_defect_files
 rust handoff::work_order::fence_tests::a_longer_run_inside_is_still_beaten
 rust handoff::work_order::fence_tests::a_snippet_containing_a_fence_gets_a_longer_one

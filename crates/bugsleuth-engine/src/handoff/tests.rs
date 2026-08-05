@@ -150,3 +150,23 @@ fn the_bundle_is_replaced_whole_and_leaves_no_staging_file() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_prompt_tells_the_agent_not_to_sign_the_commits() {
+    // Every CLI this drives adds an authorship trailer to a commit by default.
+    // BugSleuth asks the agent to commit per defect, so without this line the
+    // tool quietly writes `Co-Authored-By: <model>` into the user's history —
+    // which it did, seven times, in a repository whose published history had
+    // never carried one. Caught before the push by luck, not by design.
+    //
+    // The instruction is only half the answer: `apply::attributed` reads the
+    // commits afterwards and reports any that carry one, because a prompt is a
+    // request and this is the check.
+    let text = prompt("C:/repo", &[ranked_of(1)], &[], 2);
+    assert!(text.contains("Co-Authored-By"), "{text}");
+    assert!(text.contains("Generated with"), "{text}");
+    assert!(
+        text.contains("may add one by default"),
+        "nothing warns that the default is the problem: {text}"
+    );
+}

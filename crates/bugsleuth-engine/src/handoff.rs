@@ -214,7 +214,10 @@ pub fn preamble(repo: &str) -> String {
          is fixed\" and run it. It must fail before your change and pass after. \
          A fix with no such test is a claim, not a fix.\n\
          4. **One defect per commit.** Do not roll several together; if one \
-         turns out to be wrong, the rest should not be reverted with it.\n\n\
+         turns out to be wrong, the rest should not be reverted with it.\n\
+         5. **The commit is the repository owner's.** Do not add \
+         `Co-Authored-By`, `Generated with`, or any other trailer naming a tool \
+         or a model. Your CLI may add one by default — do not let it.\n\n\
          When you are done, report for each defect: fixed, not a real defect \
          (with why), or could not fix (with what blocked you). Do not silently \
          skip any.\n"

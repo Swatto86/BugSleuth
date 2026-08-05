@@ -124,6 +124,26 @@ fn describe(report: &bugsleuth_engine::apply::ApplyReport) -> String {
              what is uncommitted, `git log -p` for what was committed.\n\n",
         );
     }
+    // Before the model's account, because it is about to be pushed. The prompt
+    // asks the model not to do this and every CLI does it by default, so it is
+    // reported from the commits themselves rather than taken on trust.
+    if !report.attributed.is_empty() {
+        out.push_str(&format!(
+            "{}:\n",
+            match report.attributed.len() {
+                1 => "1 commit credits a tool for the work".to_string(),
+                n => format!("{n} commits credit a tool for the work"),
+            }
+        ));
+        for subject in &report.attributed {
+            out.push_str(&format!("  {subject}\n"));
+        }
+        out.push_str(
+            "\nStrip the trailer before pushing if your project does not want it — once it is \
+             published it is in the history for good.\n\n",
+        );
+    }
+
     out.push_str("The model's own account:\n\n");
     out.push_str(report.text.trim());
     out.push('\n');
@@ -144,6 +164,7 @@ mod tests {
             text: "I fixed all seven defects.".into(),
             changed_files: vec![],
             commits: 0,
+            attributed: vec![],
         });
         assert!(text.contains("no files changed"));
         assert!(text.contains("fixed all seven"));
@@ -155,6 +176,7 @@ mod tests {
             text: "done".into(),
             changed_files: vec!["src/a.rs".into(), "src/b.rs".into()],
             commits: 2,
+            attributed: vec![],
         });
         assert!(text.contains("2 files changed, in 2 commits"), "{text}");
         assert!(text.contains("src/b.rs"));
@@ -170,6 +192,7 @@ mod tests {
             text: "done".into(),
             changed_files: vec!["src/a.rs".into()],
             commits: 0,
+            attributed: vec![],
         });
         assert!(
             uncommitted.contains("1 file changed, none of it committed"),
@@ -178,5 +201,40 @@ mod tests {
 
         // Nobody has checked these edits, and the text must not imply otherwise.
         assert!(text.contains("git diff"));
+    }
+
+    #[test]
+    fn a_commit_that_credits_the_tool_is_named_before_it_is_pushed() {
+        // The prompt tells the model not to add an authorship trailer and every
+        // CLI adds one by default, so this is reported from the commits rather
+        // than taken on trust. Seven of them reached a real repository whose
+        // published history had none, and were caught by luck.
+        let text = describe(&ApplyReport {
+            text: "done".into(),
+            changed_files: vec!["src/a.rs".into()],
+            commits: 1,
+            attributed: vec!["fix(auth): stop demanding re-sign-in".into()],
+        });
+        assert!(text.contains("1 commit credits a tool"), "{text}");
+        assert!(text.contains("fix(auth): stop demanding re-sign-in"));
+        assert!(text.contains("published it is in the history for good"));
+        // Said before the model's account, which is the part someone skims.
+        assert!(text.find("credits a tool") < text.find("The model's own account"));
+
+        // Plural, and only when there is something to say.
+        let two = describe(&ApplyReport {
+            text: "done".into(),
+            changed_files: vec!["a".into()],
+            commits: 2,
+            attributed: vec!["one".into(), "two".into()],
+        });
+        assert!(two.contains("2 commits credit a tool"), "{two}");
+        let clean = describe(&ApplyReport {
+            text: "done".into(),
+            changed_files: vec!["a".into()],
+            commits: 1,
+            attributed: vec![],
+        });
+        assert!(!clean.contains("credit"), "{clean}");
     }
 }
