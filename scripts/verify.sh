@@ -44,6 +44,22 @@ cargo test --workspace
 say "frontend types"
 npm run --silent build
 
+say "frontend formatting"
+# Scoped to the TypeScript the formatter has actually been applied to. The
+# markup, CSS and prose are hand-laid-out and prettier's opinion of them is
+# not worth the churn — reformatting PROGRESS.md alone is 1200 lines nobody
+# asked for.
+#
+# The version is pinned exactly in package.json, not a caret range: two
+# machines on different prettier minors format differently, and then each
+# person's commit reformats the other's file.
+#
+# This check was vacuous when first written. `.prettierignore` held `*`
+# followed by a re-inclusion, which gitignore semantics do not allow under an
+# excluded parent, so it scanned nothing and passed — over a file deliberately
+# misformatted to test it. Reintroduce that and this must fail.
+npx --no-install prettier --check "ui/src/**/*.ts"
+
 say "frontend assets"
 # The failure this catches: a build that half-succeeds, leaving index.html
 # referencing a bundle that is not on disk. The app then starts to a blank

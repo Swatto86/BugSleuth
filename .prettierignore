@@ -1,0 +1,10 @@
+# Not a scope: the gate passes the glob it wants (`ui/src/**/*.ts` in
+# scripts/verify.sh), and this file only removes things from within it.
+#
+# It used to read `*` followed by `!ui/src/**/*.ts`, which excluded everything:
+# gitignore semantics cannot re-include a file whose parent directory is
+# excluded, so the check passed over zero files. A deliberately misformatted
+# file went through it unnoticed.
+node_modules/
+ui/dist/
+target/
