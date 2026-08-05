@@ -167,12 +167,18 @@ export function bindGuardedActions(deps: ActionDeps): void {
 
   ui.quit.addEventListener("click", askBeforeQuitting);
 
+  // One handled route out, for both the immediate and post-confirmation quits.
+  // Remaining visible is not feedback after someone pressed Quit: if the IPC
+  // rejects, say so in the live status region rather than looking broken.
+  function requestQuit(): void {
+    void invoke("quit").catch((error: unknown) => {
+      deps.setStatus(`Could not quit BugSleuth: ${String(error)}`, "error");
+    });
+  }
+
   function askBeforeQuitting(): void {
     if (!isRunning() && !isApplying()) {
-      // invoke-may-fail-silently: if quitting fails the window is still here,
-      // which is the whole feedback there is to give, and there is no fallback
-      // to offer beyond the tray item that does the same thing.
-      void invoke("quit");
+      requestQuit();
       return;
     }
     // Applying is the worse of the two to kill and used to go unwarned: a run
@@ -192,9 +198,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
       confirmLabel: "Quit anyway",
       destructive: true,
     }).then((yes) => {
-      // invoke-may-fail-silently: as above — a failed quit leaves a visible
-      // window, and the run it was abandoning carries on being reported.
-      if (yes) void invoke("quit");
+      if (yes) requestQuit();
     });
   }
 }

@@ -131,6 +131,22 @@ test("every silent-failure opt-out gives a reason", () => {
   assert.deepEqual(bare, []);
 });
 
+test("every quit into Rust reports its failure rather than looking broken", () => {
+  // Pressing Quit and seeing nothing happen is indistinguishable from a broken
+  // button. Remaining visible is not feedback, so a rejected quit must be
+  // handled and surfaced — checked by handling, not by an opt-out comment.
+  const quits = invokeSites().filter((site) => site.command === "quit");
+  assert.ok(quits.length >= 1, 'nothing calls invoke("quit") any more');
+  const unhandled = quits
+    .filter((site) => !site.handled)
+    .map((site) => `${site.file}:${site.line}`);
+  assert.deepEqual(
+    unhandled,
+    [],
+    "these quit the app and swallow the failure, leaving a window that looks stuck",
+  );
+});
+
 test("the two calls this rule was wrong about are classified correctly", () => {
   // Both directions of the regex version's failure, asserted against the real
   // code rather than a snippet, so a regression in either shows up here.
