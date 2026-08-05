@@ -11,6 +11,7 @@
 
 use std::path::Path;
 
+use super::Baseline;
 use super::observed::{git, git_with_env};
 
 /// Rewrite the commits this apply created, without their tool trailers.
@@ -27,7 +28,7 @@ use super::observed::{git, git_with_env};
 /// so it is refused and reported instead, which is the honest outcome.
 ///
 /// Returns the subjects it rewrote.
-pub(super) fn strip_attribution(repo: &Path, base: &str) -> anyhow::Result<Vec<String>> {
+pub(super) fn strip_attribution(repo: &Path, base: &Baseline) -> anyhow::Result<Vec<String>> {
     let branch = git(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"])
         .map(|b| b.trim().to_string())
         .unwrap_or_default();
@@ -35,7 +36,14 @@ pub(super) fn strip_attribution(repo: &Path, base: &str) -> anyhow::Result<Vec<S
         anyhow::bail!("HEAD is detached, so there is no branch to move");
     }
 
-    let ids: Vec<String> = git(repo, &["rev-list", "--reverse", &format!("{base}..HEAD")])?
+    // The commits this apply created. Past a real base that is `base..HEAD`;
+    // from an unborn start it is the whole of HEAD, whose first commit is a
+    // root with no parent.
+    let range = match base {
+        Baseline::Commit(base) => format!("{base}..HEAD"),
+        Baseline::Unborn => "HEAD".to_string(),
+    };
+    let ids: Vec<String> = git(repo, &["rev-list", "--reverse", &range])?
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
@@ -53,25 +61,36 @@ pub(super) fn strip_attribution(repo: &Path, base: &str) -> anyhow::Result<Vec<S
         return Ok(vec![]);
     }
 
-    let mut parent = base.to_string();
+    // The parent each rewrite sits on. A commit base is itself the first parent;
+    // an unborn base has none, so the first commit is recreated as a root
+    // (`commit-tree` with no `-p`) and every commit after it parents onto the
+    // rewrite before it.
+    let mut parent: Option<String> = match base {
+        Baseline::Commit(base) => Some(base.clone()),
+        Baseline::Unborn => None,
+    };
     let mut rewritten = Vec::new();
     for id in &ids {
-        let (new, stripped) = rewrite_one(repo, id, &parent)?;
+        let (new, stripped) = rewrite_one(repo, id, parent.as_deref())?;
         if let Some(subject) = stripped {
             rewritten.push(subject);
         }
-        parent = new;
+        parent = Some(new);
     }
 
     // `update-ref` with the expected old value, so a branch that moved while
     // this ran is left alone rather than clobbered.
     let head = git(repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    // `any_credited` above guaranteed the loop ran at least once, so `parent` is
+    // now `Some`; treat the impossible `None` as an error rather than unwrap.
+    let new_head = parent
+        .ok_or_else(|| anyhow::anyhow!("no commit was rewritten, so HEAD cannot be moved"))?;
     git(
         repo,
         &[
             "update-ref",
             &format!("refs/heads/{branch}"),
-            &parent,
+            &new_head,
             &head,
         ],
     )?;
@@ -100,23 +119,33 @@ fn message_of(repo: &Path, id: &str) -> String {
     git(repo, &["log", "-1", "--format=%B", id]).unwrap_or_default()
 }
 
-/// Re-commit one commit onto `parent` without its trailers.
+/// Re-commit one commit onto `parent` without its trailers, or as a root commit
+/// when `parent` is `None` — the initial commit of an unborn repository has no
+/// parent, and `commit-tree -p` cannot name one that does not exist.
 ///
 /// Returns the new id, and the subject when a trailer was actually removed.
-fn rewrite_one(repo: &Path, id: &str, parent: &str) -> anyhow::Result<(String, Option<String>)> {
+fn rewrite_one(
+    repo: &Path,
+    id: &str,
+    parent: Option<&str>,
+) -> anyhow::Result<(String, Option<String>)> {
     let message = git(repo, &["log", "-1", "--format=%B", id])?;
     let cleaned = without_trailers(&message);
     let tree = git(repo, &["rev-parse", &format!("{id}^{{tree}}")])?
         .trim()
         .to_string();
 
-    let new = git_with_env(
-        repo,
-        &["commit-tree", &tree, "-p", parent, "-m", cleaned.trim_end()],
-        &authorship_of(repo, id)?,
-    )?
-    .trim()
-    .to_string();
+    let cleaned = cleaned.trim_end();
+    let mut args: Vec<&str> = vec!["commit-tree", &tree];
+    if let Some(parent) = parent {
+        args.push("-p");
+        args.push(parent);
+    }
+    args.push("-m");
+    args.push(cleaned);
+    let new = git_with_env(repo, &args, &authorship_of(repo, id)?)?
+        .trim()
+        .to_string();
 
     // Asked of the lines, not of the text. Comparing `cleaned != message`
     // called every commit rewritten, because git's `%B` ends with a newline the
@@ -178,14 +207,14 @@ fn without_trailers(message: &str) -> String {
 /// `%x1e` between commits and `%x00` between the subject and the body, because
 /// a commit message contains blank lines and any separator that occurs in prose
 /// eventually splits one in half.
-pub(super) fn attributed_since(repo: &Path, base: Option<&str>) -> Vec<String> {
-    let Some(base) = base else { return vec![] };
-    git(
-        repo,
-        &["log", "--format=%s%x00%b%x1e", &format!("{base}..HEAD")],
-    )
-    .map(|log| attributed(&log))
-    .unwrap_or_default()
+pub(super) fn attributed_since(repo: &Path, base: &Baseline) -> Vec<String> {
+    let range = match base {
+        Baseline::Commit(base) => format!("{base}..HEAD"),
+        Baseline::Unborn => "HEAD".to_string(),
+    };
+    git(repo, &["log", "--format=%s%x00%b%x1e", &range])
+        .map(|log| attributed(&log))
+        .unwrap_or_default()
 }
 
 /// The subjects of commits that credit a tool for the work.

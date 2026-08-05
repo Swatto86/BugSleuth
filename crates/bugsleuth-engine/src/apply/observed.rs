@@ -11,21 +11,35 @@
 use std::path::Path;
 use std::process::Command;
 
+use super::Baseline;
+
 /// Repo-relative paths differing from `base`, committed or not.
 ///
 /// Two questions, because one command answers neither on its own: `git diff`
 /// knows about tracked files only, and a new file the model created is exactly
 /// the kind of change most worth seeing.
-pub(super) fn changed_since(repo: &Path, base: Option<&str>) -> Vec<String> {
+pub(super) fn changed_since(repo: &Path, base: &Baseline) -> Vec<String> {
     let mut files: Vec<String> = match base {
-        Some(base) => git(repo, &["diff", "--name-only", base])
+        // A real starting commit: `diff` against it covers committed and
+        // uncommitted changes to tracked files alike.
+        Baseline::Commit(base) => git(repo, &["diff", "--name-only", base])
             .map(|out| lines(&out))
             .unwrap_or_default(),
-        // No commit to compare against — a repository with no history yet. The
-        // working tree is all there is.
-        None => git(repo, &["status", "--porcelain"])
-            .map(|out| dirty_files(&out))
-            .unwrap_or_default(),
+        // Started from no commit at all, so everything now in HEAD is new
+        // against the empty tree the repository began at. A HEAD that still does
+        // not resolve — the model changed files but committed nothing — lists
+        // nothing here, and the working-tree scans below catch what it left.
+        Baseline::Unborn => {
+            let mut committed = git(repo, &["ls-tree", "-r", "--name-only", "HEAD"])
+                .map(|out| lines(&out))
+                .unwrap_or_default();
+            committed.extend(
+                git(repo, &["status", "--porcelain"])
+                    .map(|out| dirty_files(&out))
+                    .unwrap_or_default(),
+            );
+            committed
+        }
     };
     files.extend(
         git(repo, &["ls-files", "--others", "--exclude-standard"])
@@ -37,9 +51,15 @@ pub(super) fn changed_since(repo: &Path, base: Option<&str>) -> Vec<String> {
     theirs(files)
 }
 
-pub(super) fn commits_since(repo: &Path, base: Option<&str>) -> usize {
-    let Some(base) = base else { return 0 };
-    git(repo, &["rev-list", "--count", &format!("{base}..HEAD")])
+pub(super) fn commits_since(repo: &Path, base: &Baseline) -> usize {
+    // Against a real commit, count the range past it. Against an unborn start,
+    // every commit is new, so the whole of HEAD is the count — or the command
+    // fails because HEAD is still unborn and there are none.
+    let range = match base {
+        Baseline::Commit(base) => format!("{base}..HEAD"),
+        Baseline::Unborn => "HEAD".to_string(),
+    };
+    git(repo, &["rev-list", "--count", &range])
         .ok()
         .and_then(|out| out.trim().parse().ok())
         .unwrap_or(0)
@@ -167,6 +187,44 @@ mod tests {
         assert_eq!(theirs(mixed), ["src/real.rs"]);
         // And a repository whose only "changes" are ours reads as clean.
         assert!(theirs(vec![".bugsleuth-worktrees/x".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn unborn_repository_reports_its_initial_commit_as_a_change() {
+        // A repository with a `.git` but no commit is a valid apply target. Its
+        // initial commit used to read as no change at all: rev-parse HEAD failed,
+        // the baseline collapsed to "no history", and both counts came back
+        // empty even though a commit with all the edits now existed.
+        let dir = std::env::temp_dir().join(format!("bugsleuth-unborn-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        let run = |args: &[&str]| {
+            Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        };
+        if !run(&["init", "-q"]) {
+            // No usable git here; the pure-logic tests still cover the rest.
+            return;
+        }
+        let _ = run(&["config", "user.email", "t@example.com"]);
+        let _ = run(&["config", "user.name", "Tester"]);
+
+        // No commit yet — the unborn baseline apply captures before the model runs.
+        let base = Baseline::Unborn;
+
+        let _ = std::fs::write(dir.join("first.txt"), "hello\n");
+        let _ = run(&["add", "-A"]);
+        if !run(&["commit", "-qm", "initial"]) {
+            return;
+        }
+
+        assert_eq!(changed_since(&dir, &base), ["first.txt"]);
+        assert_eq!(commits_since(&dir, &base), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

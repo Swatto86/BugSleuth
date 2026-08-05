@@ -65,11 +65,11 @@ fn the_format_string_is_the_one_git_actually_produces() {
     run(&["commit", "-qm", "fix: another\n\nNo trailer here."]);
 
     assert_eq!(
-        attributed_since(&dir, Some(&base)),
+        attributed_since(&dir, &Baseline::Commit(base.clone())),
         ["fix: something real"],
         "only the credited commit, with its subject intact"
     );
-    assert_eq!(commits_since(&dir, Some(&base)), 2);
+    assert_eq!(commits_since(&dir, &Baseline::Commit(base.clone())), 2);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -118,11 +118,12 @@ fn stripping_removes_the_trailer_and_changes_nothing_else() {
     )
     .expect("authors");
 
-    let stripped = strip_attribution(&dir, &base).unwrap_or_else(|e| panic!("{e}"));
+    let stripped =
+        strip_attribution(&dir, &Baseline::Commit(base.clone())).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(stripped, ["fix: the real work"], "only the credited commit");
 
     // The trailer is gone and nothing else is.
-    assert!(attributed_since(&dir, Some(&base)).is_empty());
+    assert!(attributed_since(&dir, &Baseline::Commit(base.clone())).is_empty());
     let log = git(&dir, &["log", "--format=%B", &format!("{base}..HEAD")]).expect("log");
     assert!(!log.contains("Co-Authored-By"), "{log}");
     assert!(log.contains("Why it was wrong."), "the body is kept: {log}");
@@ -130,7 +131,11 @@ fn stripping_removes_the_trailer_and_changes_nothing_else() {
         log.contains("fix: more"),
         "the untouched commit survives: {log}"
     );
-    assert_eq!(commits_since(&dir, Some(&base)), 2, "no commit was lost");
+    assert_eq!(
+        commits_since(&dir, &Baseline::Commit(base.clone())),
+        2,
+        "no commit was lost"
+    );
     assert_eq!(
         git(&dir, &["rev-parse", "HEAD^{tree}"]).expect("tree"),
         tree_before,
@@ -159,7 +164,7 @@ fn stripping_removes_the_trailer_and_changes_nothing_else() {
     // own commits.
     let head = git(&dir, &["rev-parse", "HEAD"]).expect("head");
     assert!(
-        strip_attribution(&dir, &base)
+        strip_attribution(&dir, &Baseline::Commit(base.clone()))
             .expect("second pass")
             .is_empty()
     );
@@ -167,6 +172,61 @@ fn stripping_removes_the_trailer_and_changes_nothing_else() {
         git(&dir, &["rev-parse", "HEAD"]).expect("head"),
         head,
         "a range with no trailer must be left exactly as it was"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_unborn_repositorys_initial_commit_is_stripped_as_a_root() {
+    // The initial commit of an unborn repository has no parent, so its rewrite
+    // must be a root commit — `commit-tree` with no `-p`. Before the Baseline
+    // change this whole path was skipped, so a tool trailer on the very first
+    // commit escaped both the stripping and the report.
+    let dir = std::env::temp_dir().join(format!("bugsleuth-unborn-strip-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::create_dir_all(&dir);
+    let run = |args: &[&str]| {
+        let out = Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("git");
+        assert!(out.status.success(), "git {args:?}: {out:?}");
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Tester"]);
+    let _ = std::fs::write(dir.join("a.txt"), "one");
+    run(&["add", "-A"]);
+    run(&[
+        "commit",
+        "-qm",
+        "feat: first\n\nWhy.\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+    ]);
+
+    let tree_before = git(&dir, &["rev-parse", "HEAD^{tree}"]).expect("tree");
+    let stripped = strip_attribution(&dir, &Baseline::Unborn).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(stripped, ["feat: first"], "the initial commit was stripped");
+    assert!(attributed_since(&dir, &Baseline::Unborn).is_empty());
+    assert_eq!(
+        commits_since(&dir, &Baseline::Unborn),
+        1,
+        "the root commit must survive the rewrite"
+    );
+
+    // Still a root — the rewritten initial commit has no parent — and its code
+    // is byte-identical.
+    assert!(
+        git(&dir, &["rev-parse", "--verify", "--quiet", "HEAD^"]).is_err(),
+        "the rewritten initial commit gained a parent"
+    );
+    let log = git(&dir, &["log", "--format=%B", "HEAD"]).expect("log");
+    assert!(!log.contains("Co-Authored-By"), "{log}");
+    assert!(log.contains("Why."), "the body must be kept: {log}");
+    assert_eq!(
+        git(&dir, &["rev-parse", "HEAD^{tree}"]).expect("tree"),
+        tree_before,
+        "the code itself must be byte-identical"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

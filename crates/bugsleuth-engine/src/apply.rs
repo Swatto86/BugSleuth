@@ -26,6 +26,22 @@ mod observed;
 use attribution::{attributed_since, strip_attribution};
 use observed::{changed_since, commits_since, dirty_files, git, summarise, theirs};
 
+/// Where the repository stood before the model touched it.
+///
+/// A plain `Option<String>` conflated two very different states: "there is no
+/// initial commit yet" and "rev-parse HEAD failed for some other reason". The
+/// first is a real starting point — the empty tree — that the model can commit
+/// against, and treating it as "no baseline" made a freshly committed initial
+/// commit read as no change at all.
+#[derive(Debug, Clone)]
+pub(crate) enum Baseline {
+    /// HEAD resolved to this commit before the apply.
+    Commit(String),
+    /// The repository has a `.git` but no commit yet — an unborn branch. What
+    /// the model commits is measured against Git's empty tree.
+    Unborn,
+}
+
 pub struct ApplyRequest<'a> {
     /// The repository to edit. Its working tree must be clean.
     pub repo: &'a Path,
@@ -98,10 +114,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     // prompt asks the model to commit each fix and a committed change leaves
     // `git status` clean — reporting from status alone would say nothing
     // happened after a model had rewritten half the tree.
-    let base = git(repo, &["rev-parse", "HEAD"]).ok().and_then(|out| {
-        let id = out.trim().to_string();
-        (!id.is_empty()).then_some(id)
-    });
+    let base = baseline(repo)?;
 
     let (vendor, model) = Vendor::parse(request.model);
     let attempt = match vendor {
@@ -146,7 +159,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         Ok(text) => text,
         Err(error) => anyhow::bail!(failure_message(
             &error.to_string(),
-            &changed_since(repo, base.as_deref())
+            &changed_since(repo, &base)
         )),
     };
 
@@ -157,22 +170,47 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     // A failure here is not a failed apply: the fixes are real and already
     // committed. What is left is named instead, which is the whole difference
     // between a tool that quietly forks published history and one that says
-    // "these two are yours to deal with".
-    let (stripped, attributed) = match base.as_deref() {
-        Some(base) => match strip_attribution(repo, base) {
-            Ok(stripped) => (stripped, vec![]),
-            Err(_) => (vec![], attributed_since(repo, Some(base))),
-        },
-        None => (vec![], vec![]),
+    // "these two are yours to deal with". An unborn baseline is included: its
+    // initial commit must not escape both the stripping and the report.
+    let (stripped, attributed) = match strip_attribution(repo, &base) {
+        Ok(stripped) => (stripped, vec![]),
+        Err(_) => (vec![], attributed_since(repo, &base)),
     };
 
     Ok(ApplyReport {
         text,
-        changed_files: changed_since(repo, base.as_deref()),
-        commits: commits_since(repo, base.as_deref()),
+        changed_files: changed_since(repo, &base),
+        commits: commits_since(repo, &base),
         stripped,
         attributed,
     })
+}
+
+/// Read where the repository stands before the apply.
+///
+/// `git rev-parse --verify HEAD` resolves to the current commit or fails when
+/// the branch is unborn; `--quiet` keeps it from printing an error. A failure is
+/// not automatically "unborn", though — git could be broken — so it is
+/// confirmed with `rev-list --all --count`, which is `0` only when the
+/// repository genuinely has no commits. Anything else is propagated rather than
+/// silently treated as an empty history.
+fn baseline(repo: &Path) -> anyhow::Result<Baseline> {
+    if let Ok(out) = git(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
+        let id = out.trim().to_string();
+        if !id.is_empty() {
+            return Ok(Baseline::Commit(id));
+        }
+    }
+    let count = git(repo, &["rev-list", "--all", "--count"])?;
+    if count.trim() == "0" {
+        Ok(Baseline::Unborn)
+    } else {
+        anyhow::bail!(
+            "could not resolve HEAD in {} even though it has commits — is HEAD detached or the \
+             repository corrupt?",
+            repo.display()
+        );
+    }
 }
 
 /// A vendor failure, plus whatever it had already done to the repository.
