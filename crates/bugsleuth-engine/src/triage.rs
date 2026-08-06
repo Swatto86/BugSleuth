@@ -158,30 +158,10 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
         }
     }
 
-    let missing = clusters.len() - graded;
     Outcome {
         changed,
         graded,
-        note: if salvaged {
-            // The grading model was cut off and asked afterwards what it had
-            // decided. Worth applying, and worth not presenting as the full
-            // side-by-side comparison the pass is supposed to be.
-            format!(
-                "the triage pass ran out of turns and its grades were recovered afterwards, so {graded} of {} defects were compared rather than all of them",
-                clusters.len()
-            )
-        } else if missing == 0 {
-            String::new()
-        } else {
-            // Named rather than silently left at the model's own grade: a
-            // partial re-grade means the list is ordered by two different
-            // standards at once, which is worth knowing.
-            format!(
-                "the triage pass graded {graded} of {} defects; the other {missing} keep \
-                 the grade the model that found them gave",
-                clusters.len()
-            )
-        },
+        note: grading_note(salvaged, graded, clusters.len()),
     }
 }
 
@@ -234,6 +214,25 @@ fn acknowledgement(reason: &str, repo: &Path, cluster: &Cluster) -> Option<(Stri
 /// length of one call and means nothing outside it.
 fn id_of(index: usize) -> String {
     (index + 1).to_string()
+}
+
+/// How the report describes a grading pass that covered `graded` of `total`
+/// defects: recovered after a cutoff, a clean full pass (empty note), or a
+/// partial pass. One place so the salvaged wording has exactly one definition.
+fn grading_note(salvaged: bool, graded: usize, total: usize) -> String {
+    if salvaged {
+        format!(
+            "the triage pass ran out of turns and its grades were recovered afterwards, so {graded} of {total} defects were compared rather than all of them"
+        )
+    } else if graded == total {
+        String::new()
+    } else {
+        let missing = total - graded;
+        format!(
+            "the triage pass graded {graded} of {total} defects; the other {missing} keep \
+             the grade the model that found them gave"
+        )
+    }
 }
 
 /// The defect list, as the grading model sees it.

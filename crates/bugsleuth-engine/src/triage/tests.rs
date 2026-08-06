@@ -102,15 +102,12 @@ fn the_prompt_never_offers_tools_the_pass_does_not_have() {
 fn a_recovered_grading_is_not_presented_as_a_full_comparison() {
     // The whole mechanism is comparison. A grading model that was cut off
     // and asked afterwards what it had decided compared some of the list,
-    // and the report has to say which.
-    let outcome = Outcome {
-            graded: 4,
-            changed: 1,
-            note: "the triage pass ran out of turns and its grades were recovered afterwards,                    so 4 of 9 defects were compared rather than all of them"
-                .into(),
-        };
-    assert!(outcome.note.contains("recovered afterwards"));
-    assert!(outcome.note.contains("rather than all of them"));
+    // and the report has to say which. The wording is built by grading_note,
+    // so this assertion guards the real production code, not a hand-written copy.
+    let note = grading_note(true, 4, 9);
+    assert!(note.contains("recovered afterwards"), "{note}");
+    assert!(note.contains("rather than all of them"), "{note}");
+    assert!(note.contains("4 of 9"), "{note}");
 }
 
 fn scratch(name: &str, body: &str) -> std::path::PathBuf {
