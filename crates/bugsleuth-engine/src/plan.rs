@@ -163,6 +163,19 @@ pub fn plan(config: &Config) -> Result<Plan> {
             anyhow::bail!("a configured model has an empty id");
         }
         check_effort(&model.id, model.effort.trim())?;
+        // A config file is a file; the UI's picker is not the only way in.
+        // Enumerating even a moderately large pass count hangs the run before
+        // a single sweep is paid for, so refuse loudly (same class as
+        // MAX_PROVE_TOP in src-tauri/src/outcome.rs).
+        const MAX_PASSES: usize = 25;
+        let passes = model.passes.max(1);
+        if passes > MAX_PASSES {
+            anyhow::bail!(
+                "model `{}` asks for {passes} passes, more than the {MAX_PASSES} allowed; \
+                 lower the `passes` value in the configuration",
+                model.id
+            );
+        }
         for slug in &model.lanes {
             let lane: Lane = slug
                 .parse()
@@ -171,7 +184,7 @@ pub fn plan(config: &Config) -> Result<Plan> {
             // and still collapses. Repetition is asked for with `passes`, where
             // it is visible and deliberate, rather than by writing the same
             // line out twice and hoping that means something.
-            for pass in 1..=model.passes.max(1) {
+            for pass in 1..=passes {
                 let unit = Unit {
                     model: model.id.trim().to_string(),
                     lane,
@@ -261,6 +274,16 @@ mod tests {
         // cannot be enumerated would block valid configurations.
         assert!(plan(&with_effort("kilo:some/model", "thinking")).is_ok());
         assert!(plan(&with_effort("kilo:some/model", "anything-at-all")).is_ok());
+    }
+
+    #[test]
+    fn a_huge_pass_count_is_refused_rather_than_enumerated_forever() {
+        // The backend must not trust the UI's picker to bound this: settings
+        // are a JSON file a person can edit. Before the bound, a large value
+        // was enumerated into millions of units and the run never started.
+        let mut config = config(&[("sonnet", &["correctness"])]);
+        config.models[0].passes = 26; // one over the cap, so the test runs instantly
+        assert!(plan(&config).is_err(), "a pass count above the cap must be refused");
     }
 
     #[test]
