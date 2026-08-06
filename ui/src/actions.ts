@@ -102,11 +102,14 @@ export function bindGuardedActions(deps: ActionDeps): void {
       // rather than exiting mid-delete. Cleared on both outcomes below — a flag
       // left set on either path would warn about a clear that had finished.
       clearing = true;
+      deps.setStatus("Deleting the saved sweeps…", "running");
+      ui.clearSaved.disabled = true;
       invoke<{ removed: number }>("clear_saved", {
         settings: deps.settings(),
       })
         .then((cleared) => {
           clearing = false;
+          ui.clearSaved.disabled = false;
           // The prompt this panel would apply has just been deleted, so the
           // button would fail with "run a review first". Offering a control
           // that cannot work is the defect this app exists to find.
@@ -120,6 +123,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
         })
         .catch((error: unknown) => {
           clearing = false;
+          ui.clearSaved.disabled = false;
           // Silence here would read as "cleared", and the next run would then
           // quietly reuse everything this was meant to remove.
           deps.setStatus(
