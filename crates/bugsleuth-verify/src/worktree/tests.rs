@@ -166,6 +166,36 @@ fn worktree_creation_refuses_a_linked_container_without_deleting_its_target() {
     let _ = std::fs::remove_dir_all(long_path(&target));
 }
 
+/// A reviewed repository can commit a directory under the worktree container.
+/// Orphan cleanup must not mistake it for wreckage and delete it, or the code
+/// being reviewed can delete files from the user's working tree — the one thing
+/// the module promises never to do.
+#[test]
+fn committed_content_under_the_worktree_container_is_never_deleted() {
+    let Some(repo) = temp_repo("committed-container") else {
+        // No usable git here; the pure-logic tests still cover the rest.
+        return;
+    };
+    let committed = repo.join(".bugsleuth-worktrees").join("not-ours");
+    if std::fs::create_dir_all(&committed).is_err()
+        || std::fs::write(committed.join("keep.txt"), "do not delete\n").is_err()
+    {
+        let _ = std::fs::remove_dir_all(long_path(&repo));
+        return;
+    }
+    let _ = git(&repo, &["add", "-A"]);
+    let _ = git(&repo, &["commit", "-qm", "ship a container directory"]);
+
+    let _ = Worktree::create(&repo, "HEAD", "security");
+
+    assert!(
+        committed.join("keep.txt").exists(),
+        "orphan cleanup deleted repository-controlled content at {}",
+        committed.display()
+    );
+    let _ = std::fs::remove_dir_all(long_path(&repo));
+}
+
 #[test]
 fn creating_a_worktree_outside_a_git_repository_is_refused() {
     let not_a_repo = std::env::temp_dir().join("bugsleuth-not-a-repo");

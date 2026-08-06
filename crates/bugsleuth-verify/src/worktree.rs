@@ -241,20 +241,51 @@ fn remove_orphans(repo: &Path) {
     let Ok(entries) = std::fs::read_dir(&ours) else {
         return;
     };
+    // The container is validated as a real directory, but its *contents* are
+    // repository-controlled: the reviewed repository can commit any directory it
+    // likes under `.bugsleuth-worktrees/`. Only a genuine leftover worktree may
+    // be treated as ours and removed. Fail closed if the container will not
+    // resolve.
+    let Ok(container) = ours.canonicalize() else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
-        if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+        // Real directories only. A symlink or Windows junction reports a
+        // directory when followed; recursing into either is how a deletion
+        // escapes the container, so reject anything whose own metadata is a
+        // link or reparse point.
+        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if !metadata.is_dir()
+            || metadata.file_type().is_symlink()
+            || is_reparse_point(&metadata)
+        {
             continue;
         }
-        // Compared canonically: git reports forward slashes and its own
-        // spelling of the drive, so a textual comparison would call every live
-        // worktree an orphan and delete the lot.
-        let canonical = path.canonicalize().ok();
+        // A deregistered worktree of ours, or repository-controlled content?
+        // Only the former carries the `.git` file that `git worktree add` writes
+        // at the worktree root, and git refuses to track any path containing a
+        // `.git` component, so nothing the reviewed repository can commit
+        // satisfies this check.
+        if !path.join(".git").is_file() {
+            continue;
+        }
+        // Belt and braces: the resolved location must stay inside the container,
+        // or this is not our wreckage either. Compared canonically because git
+        // reports forward slashes and its own spelling of the drive.
+        let Ok(canonical) = path.canonicalize() else {
+            continue;
+        };
+        if !canonical.starts_with(&container) {
+            continue;
+        }
         // Liveness is re-checked against a FRESH listing immediately before
-        // deletion. The old code snapshotted the list once up front, so a
-        // worktree another process registered after the snapshot was treated
-        // as wreckage and its live checkout deleted. A listing that cannot be
-        // obtained means "do not delete", not "delete everything".
+        // deletion. Snapshotting the list once up front would treat a worktree
+        // another process registered after the snapshot as wreckage. A listing
+        // that cannot be obtained means "do not delete", not "delete
+        // everything".
         let still_live = git(repo, &["worktree", "list", "--porcelain"])
             .map(|listing| {
                 listing
@@ -264,7 +295,7 @@ fn remove_orphans(repo: &Path) {
                         PathBuf::from(known.trim())
                             .canonicalize()
                             .ok()
-                            .is_some_and(|k| Some(&k) == canonical.as_ref())
+                            .is_some_and(|k| k == canonical)
                     })
             })
             .unwrap_or(true);
