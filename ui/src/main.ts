@@ -78,6 +78,7 @@ let settings: Settings = {
   apply_model: "",
   apply_effort: "",
   push_after_apply: false,
+  tag_release_after_push: false,
 };
 /**
  * What the model and effort dropdowns offer, keyed by vendor.
@@ -247,6 +248,7 @@ function bind(): void {
       effort: ui.applyEffort,
       button: ui.applyFixes,
       push: ui.pushAfterApply,
+      tag: ui.tagReleaseAfterPush,
       output: ui.output,
     },
     settings: () => settings,

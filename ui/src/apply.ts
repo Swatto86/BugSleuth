@@ -39,6 +39,8 @@ export interface ApplyDeps {
     button: HTMLButtonElement;
     /** Opt-in to publishing what the apply commits. */
     push: HTMLInputElement;
+    /** Opt-in to tagging what the push published, so CI releases it. */
+    tag: HTMLInputElement;
     output: HTMLPreElement;
   };
   settings: () => Settings;
@@ -96,7 +98,33 @@ export function bindApply(deps: ApplyDeps): () => void {
     );
     drawEffort();
     ui.push.checked = deps.settings().push_after_apply;
+    drawTag();
     setButtonState();
+  };
+
+  /**
+   * Tagging is only offered when pushing is.
+   *
+   * A release is cut from commits on the remote, so with pushing off the box
+   * could never do anything — and a checkbox that is ticked but inert is how
+   * someone comes to believe a release went out. Disabled rather than hidden,
+   * so the dependency is visible instead of the control vanishing.
+   */
+  const drawTag = (): void => {
+    const live = deps.settings();
+    const publishing = live.push_after_apply;
+    // Corrected in the settings, not just in the display. A stored file can
+    // say "tag but do not push" — hand-edited, or written before pushing was
+    // switched off — and showing an unticked box over a stored `true` means
+    // the window and the thing it sends Rust disagree about whether a release
+    // is armed. Rust refuses that combination anyway; this makes the two say
+    // the same thing rather than relying on the far end to be the only guard.
+    if (!publishing) live.tag_release_after_push = false;
+    ui.tag.disabled = !publishing;
+    ui.tag.checked = live.tag_release_after_push;
+    ui.tag.title = publishing
+      ? "Tag the pushed commits so the repository's CI builds a release."
+      : "Turn on pushing first — a release is built from commits on the remote.";
   };
 
   /** Which levels apply depends on the model, so this is redrawn on its own. */
@@ -154,6 +182,16 @@ export function bindApply(deps: ApplyDeps): () => void {
 
   ui.push.addEventListener("change", () => {
     deps.settings().push_after_apply = ui.push.checked;
+    // `drawTag` clears the tag setting whenever pushing is off, so switching
+    // pushing off here disarms the release rather than leaving a `true` behind
+    // a disabled box — which would come back the moment pushing was turned on
+    // again. Redrawn before the save so what is written is what is shown.
+    drawTag();
+    deps.refresh();
+  });
+
+  ui.tag.addEventListener("change", () => {
+    deps.settings().tag_release_after_push = ui.tag.checked;
     deps.refresh();
   });
 
@@ -168,10 +206,16 @@ export function bindApply(deps: ApplyDeps): () => void {
     // checkbox someone ticked days ago is not informed consent at the moment
     // the commits leave the machine.
     const publishing = deps.settings().push_after_apply;
+    // Read together: tagging is stored off whenever pushing is, but the dialog
+    // is the last thing between here and someone else's release pipeline, so it
+    // does not take that on trust.
+    const releasing = publishing && deps.settings().tag_release_after_push;
     void confirmDialog({
-      title: publishing
-        ? "Apply these fixes and push them?"
-        : "Apply these fixes to your code?",
+      title: releasing
+        ? "Apply these fixes, push them, and tag a release?"
+        : publishing
+          ? "Apply these fixes and push them?"
+          : "Apply these fixes to your code?",
       message:
         "This runs the fix prompt against your repository with write access, " +
         "editing files in place and running your tests. It is refused unless " +
@@ -183,8 +227,17 @@ export function bindApply(deps: ApplyDeps): () => void {
             "upstream. That part cannot be undone: once the commits are on " +
             "the remote, anyone watching it can fetch them, and a later " +
             "rewrite does not recall them."
+          : "") +
+        (releasing
+          ? " The pushed commits will then be tagged with the next patch " +
+            "version, which starts your CI — so this can build and publish a " +
+            "release of code nobody has read yet."
           : ""),
-      confirmLabel: publishing ? "Apply and push" : "Apply the fixes",
+      confirmLabel: releasing
+        ? "Apply, push and tag"
+        : publishing
+          ? "Apply and push"
+          : "Apply the fixes",
       destructive: true,
     }).then((yes) => {
       if (!yes) return;

@@ -33,6 +33,7 @@ test("a run needs both a repository and at least one sweep", () => {
     apply_model: "",
     apply_effort: "",
     push_after_apply: false,
+    tag_release_after_push: false,
   } satisfies Omit<Settings, "repo" | "models">;
   assert.equal(
     canRun({ ...base, repo: "", models: preset("balanced") }),
@@ -56,6 +57,7 @@ test("a blank row makes the configuration unrunnable, exactly like the engine", 
     apply_model: "",
     apply_effort: "",
     push_after_apply: false,
+    tag_release_after_push: false,
   } satisfies Omit<Settings, "repo" | "models">;
   assert.equal(
     canRun({
@@ -101,6 +103,7 @@ test("a passes count above the backend cap is not runnable and is clamped in the
     apply_model: "",
     apply_effort: "",
     push_after_apply: false,
+    tag_release_after_push: false,
   } satisfies Omit<Settings, "repo" | "models">;
   assert.equal(
     canRun({

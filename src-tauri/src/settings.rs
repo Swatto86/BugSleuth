@@ -68,6 +68,18 @@ pub struct Settings {
     /// outright if any commit still credits a tool for the work.
     #[serde(default)]
     pub push_after_apply: bool,
+    /// After a successful push, tag the published commits so the repository's
+    /// own CI cuts a release from them.
+    ///
+    /// Off by default, and only ever acted on when the push succeeded: a tag is
+    /// the trigger for a release pipeline, so it is the one step here with
+    /// consequences beyond the repository — a build, artifacts, and a published
+    /// release someone else may download. The version is read from the branch's
+    /// own most recent `v*` tag and the patch bumped; a repository with no such
+    /// tag, or one that names releases some other way, is left alone rather than
+    /// given a scheme it never chose.
+    #[serde(default)]
+    pub tag_release_after_push: bool,
 }
 
 /// Serde needs a function; a bare string default is not expressible.
@@ -141,6 +153,7 @@ impl Default for Settings {
             apply_model: String::new(),
             apply_effort: String::new(),
             push_after_apply: false,
+            tag_release_after_push: false,
         }
     }
 }

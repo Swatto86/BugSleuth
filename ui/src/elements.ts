@@ -51,6 +51,7 @@ const ui = {
   applyEffort: el<HTMLDivElement>("apply-effort"),
   applyFixes: el<HTMLButtonElement>("apply-fixes"),
   pushAfterApply: el<HTMLInputElement>("push-after-apply"),
+  tagReleaseAfterPush: el<HTMLInputElement>("tag-release-after-push"),
 };
 
 export { el, ui };

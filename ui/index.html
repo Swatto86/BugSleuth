@@ -245,6 +245,19 @@
                 </span>
               </label>
             </div>
+            <div class="row" style="margin-top: 10px">
+              <label class="checkline">
+                <input id="tag-release-after-push" type="checkbox" />
+                <span>
+                  Then tag the pushed commits, so the repository's own CI builds
+                  a release from them. The version is the next patch after this
+                  branch's most recent <code>v*</code> tag — nothing is tagged if
+                  the push did not happen, if there is no such tag to follow, or
+                  if the name is already taken. This starts a build and can
+                  publish a release others download.
+                </span>
+              </label>
+            </div>
           </div>
 
           <div id="findings"></div>

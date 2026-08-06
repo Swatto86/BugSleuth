@@ -1,4 +1,148 @@
 platform windows
+node a bare Claude model never gains a redundant prefix
+node a bare voided call is not handled
+node a bare voided call is not handled
+node a bare voided call is not handled
+node a bare voided call is not handled
+node a bare voided call is not handled
+node a bare voided call is not handled
+node a bare voided call is not handled
+node a bare voided call is not handled
+node a blank row makes the configuration unrunnable, exactly like the engine
+node a chain ending in .catch is handled, however many statements are inside it
+node a chain ending in .catch is handled, however many statements are inside it
+node a chain ending in .catch is handled, however many statements are inside it
+node a chain ending in .catch is handled, however many statements are inside it
+node a chain ending in .catch is handled, however many statements are inside it
+node a chain ending in .catch is handled, however many statements are inside it
+node a chain ending in .catch is handled, however many statements are inside it
+node a chain ending in .catch is handled, however many statements are inside it
+node a class built from a prefix counts as used, not as dead style
+node a failed catalogue load is told to the user rather than swallowed
+node a lane is spelled the same way in the window as in the engine
+node a model listed twice with different passes counts like the engine: max, not sum
+node a model with no id contributes nothing
+node a name that does not exist is undefined rather than empty
+node a name that does not exist is undefined rather than empty
+node a name that does not exist is undefined rather than empty
+node a name that does not exist is undefined rather than empty
+node a name that does not exist is undefined rather than empty
+node a name that does not exist is undefined rather than empty
+node a name that does not exist is undefined rather than empty
+node a name that does not exist is undefined rather than empty
+node a passes count above the backend cap is not runnable and is clamped in the picker
+node a progress event carries the fields the window renders from
+node a proof count is always an integer the backend can deserialize
+node a proof count is clamped to the cap the field advertises
+node a repeated pass is a whole extra sweep, and an extra round
+node a reused sweep says it was reused rather than pretending to be fresh
+node a round names what is about to run and where it sits in the sequence
+node a run needs both a repository and at least one sweep
+node a single finding is not reported as '1 findings'
+node a stored pass count outside the picker presets remains visible
+node a sweep that found nothing is not confusable with one that never ran
+node an apply that changed nothing does not claim to have applied anything
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a discarded callback is not handled
+node an awaited call in a discarded callback is not handled
+node an awaited call in a discarded callback is not handled
+node an awaited call in a discarded callback is not handled
+node an awaited call in a discarded callback is not handled
+node an awaited call in a discarded callback is not handled
+node an awaited call in a discarded callback is not handled
+node an awaited call in a discarded callback is not handled
+node an awaited call inside its own try is handled
+node an awaited call inside its own try is handled
+node an awaited call inside its own try is handled
+node an awaited call inside its own try is handled
+node an awaited call inside its own try is handled
+node an awaited call inside its own try is handled
+node an awaited call inside its own try is handled
+node an awaited call inside its own try is handled
+node an empty configuration needs no rounds
+node an identical duplicate row adds nothing, exactly like the engine
+node an uncovered lane is reported
+node an unknown prefix is treated as a Claude model, colon and all
+node both sides are actually being read
+node both themes define the same set of colours
+node dark theme meets WCAG AA everywhere the UI uses it
+node every arm of a union is read, not just the first
+node every arm of a union is read, not just the first
+node every arm of a union is read, not just the first
+node every arm of a union is read, not just the first
+node every arm of a union is read, not just the first
+node every arm of a union is read, not just the first
+node every arm of a union is read, not just the first
+node every arm of a union is read, not just the first
+node every command the page calls exists in Rust and is exposed
+node every control the matrix rebuilds can be found again afterwards
+node every element the code looks up exists in the markup
+node every event has both an emitter and a listener
+node every platform the release builds for is offered in the README
+node every quit into Rust reports its failure rather than looking broken
+node every shipped preset covers every lane
+node every silent-failure opt-out gives a reason
+node interface fields come back without comments or nesting confusing them
+node interface fields come back without comments or nesting confusing them
+node interface fields come back without comments or nesting confusing them
+node interface fields come back without comments or nesting confusing them
+node interface fields come back without comments or nesting confusing them
+node interface fields come back without comments or nesting confusing them
+node interface fields come back without comments or nesting confusing them
+node interface fields come back without comments or nesting confusing them
+node lane titles match the engine's own names, including UX
+node light theme meets WCAG AA everywhere the UI uses it
+node names are joined the way English does
+node no CSS rule styles a class nothing uses
+node no call into Rust can fail without the user being told
+node no command is exposed to the page that the page never calls
+node no element asks for a class the stylesheet does not define
+node one vendor doing everything is one round per lane
+node removing a configured model row is guarded by a confirmation
+node render redirects focus when the focused row was just removed
+node rounds are driven by the busiest vendor, not the total
+node settings saved before passes existed still estimate as one pass each
+node splitId agrees with vendorOf on every shape
+node splitting a model spec and rejoining it settles on one spelling
+node the README still promises a single file that runs with nothing installed
+node the README's download table names assets the workflow builds
+node the advertised cap and the enforced cap are the same number
+node the clear handler disables its button and re-enables it on both outcomes
+node the clear handler shows a running status while the delete is in flight
+node the clearing flag is set before the clear and released on both outcomes
+node the confirmation dialog describes its message to assistive tech
+node the documentation does not point at files that no longer exist
+node the frontend actually calls into Rust, so this test is not vacuous
+node the precise scan sees each of the three ways a class is set
+node the proof cap is the same number in the window, the markup and Rust
+node the quit guard consults the clearing state, like the tray does
+node the real frontend parses, so the checks built on this are not vacuous
+node the real frontend parses, so the checks built on this are not vacuous
+node the real frontend parses, so the checks built on this are not vacuous
+node the real frontend parses, so the checks built on this are not vacuous
+node the real frontend parses, so the checks built on this are not vacuous
+node the real frontend parses, so the checks built on this are not vacuous
+node the real frontend parses, so the checks built on this are not vacuous
+node the real frontend parses, so the checks built on this are not vacuous
+node the scans find things at all, so a passing run means something
+node the settings the window writes are the settings Rust reads
+node the two calls this rule was wrong about are classified correctly
+node the two themes are actually different
+node the updater is blocked while a review or an apply is in flight
+node the window never leaves a release armed while pushing is off
+node toggling a lane leaves other models untouched
+node toggling a lane off removes exactly it, and twice on is idempotent
+node turning pushing off redraws the tag control before the settings are saved
+node two models on one lane is two sweeps, because that is the point
+node unknown lane names are ignored rather than counted
+node vendor parsing matches the engine, including bare and colon-containing names
 rust agreement_counts_distinct_vendors
 rust anchor::tests::a_directory_link_out_of_the_repository_is_refused
 rust anchor::tests::a_snippet_occurring_twice_anchors_to_the_occurrence_nearest_the_claim
@@ -29,8 +173,17 @@ rust apply::push::tests::a_rejected_push_is_reported_rather_than_forced
 rust apply::push::tests::an_apply_that_committed_nothing_has_nothing_to_publish
 rust apply::push::tests::only_the_branch_that_was_applied_to_is_published
 rust apply::push::tests::the_commits_actually_reach_the_remote
+rust apply::tag::tests::a_branch_with_no_release_tag_has_no_scheme_to_follow
+rust apply::tag::tests::a_rejected_tag_push_leaves_nothing_behind_locally
+rust apply::tag::tests::a_tag_on_another_branch_is_never_moved
+rust apply::tag::tests::a_version_scheme_this_does_not_understand_is_declined_rather_than_guessed
+rust apply::tag::tests::nothing_is_tagged_when_the_commits_were_never_published
+rust apply::tag::tests::only_the_release_tag_is_published
+rust apply::tag::tests::the_patch_number_is_the_one_that_moves
+rust apply::tag::tests::the_tag_reaches_the_remote_and_points_at_the_fixes
 rust apply::tests::a_failed_apply_still_says_what_it_had_already_changed
 rust apply::tests::a_repository_without_git_is_refused_before_anything_is_spent
+rust apply::tests::only_a_push_that_succeeded_can_lead_to_a_tag
 rust atomic::tests::a_failed_write_destroys_nothing_and_leaves_no_debris
 rust atomic::tests::a_file_is_replaced_whole
 rust atomic::tests::a_path_that_names_no_file_is_an_error_rather_than_a_panic
@@ -115,12 +268,15 @@ rust codex::tests::the_configuration_and_rules_of_the_host_and_the_repo_are_both
 rust codex::tests::the_prompt_comes_from_stdin_so_a_long_brief_cannot_overflow_the_command_line
 rust codex::tests::the_schema_and_answer_paths_are_passed_as_files_not_inline_json
 rust codex::tests::the_signin_probe_and_a_sweep_share_one_flag_list
-rust commands::apply::tests::a_commit_that_credits_the_tool_is_named_before_it_is_pushed
-rust commands::apply::tests::a_completed_push_names_where_it_went_and_that_it_is_permanent
-rust commands::apply::tests::a_model_that_changed_nothing_cannot_report_success_unchallenged
-rust commands::apply::tests::a_push_that_did_not_happen_says_so_rather_than_staying_silent
-rust commands::apply::tests::the_push_outcome_reaches_the_text_the_window_shows
-rust commands::apply::tests::what_changed_is_listed_before_what_was_claimed
+rust commands::apply::report::tests::a_commit_that_credits_the_tool_is_named_before_it_is_pushed
+rust commands::apply::report::tests::a_completed_push_names_where_it_went_and_that_it_is_permanent
+rust commands::apply::report::tests::a_model_that_changed_nothing_cannot_report_success_unchallenged
+rust commands::apply::report::tests::a_push_that_did_not_happen_says_so_rather_than_staying_silent
+rust commands::apply::report::tests::a_release_that_was_not_tagged_says_so_rather_than_staying_silent
+rust commands::apply::report::tests::a_tagged_release_names_it_and_does_not_claim_the_build_passed
+rust commands::apply::report::tests::committed_work_is_reported_as_changed_rather_than_as_nothing
+rust commands::apply::report::tests::the_push_outcome_reaches_the_text_the_window_shows
+rust commands::apply::report::tests::uncommitted_work_says_so_because_the_reader_has_to_go_and_look
 rust commands::run::control::tests::finishing_clears_only_its_own_state
 rust commands::run::control::tests::run_control_clear_and_run_cannot_both_start
 rust commands::run::control::tests::run_control_only_one_of_two_runs_can_start
@@ -400,136 +556,3 @@ rust worktree::tests::committed_content_under_the_worktree_container_is_never_de
 rust worktree::tests::creating_a_worktree_outside_a_git_repository_is_refused
 rust worktree::tests::dropping_a_worktree_deletes_it_even_with_deeply_nested_build_output
 rust worktree::tests::worktree_creation_refuses_a_linked_container_without_deleting_its_target
-node a bare Claude model never gains a redundant prefix
-node a bare voided call is not handled
-node a bare voided call is not handled
-node a bare voided call is not handled
-node a bare voided call is not handled
-node a bare voided call is not handled
-node a bare voided call is not handled
-node a bare voided call is not handled
-node a blank row makes the configuration unrunnable, exactly like the engine
-node a chain ending in .catch is handled, however many statements are inside it
-node a chain ending in .catch is handled, however many statements are inside it
-node a chain ending in .catch is handled, however many statements are inside it
-node a chain ending in .catch is handled, however many statements are inside it
-node a chain ending in .catch is handled, however many statements are inside it
-node a chain ending in .catch is handled, however many statements are inside it
-node a chain ending in .catch is handled, however many statements are inside it
-node a class built from a prefix counts as used, not as dead style
-node a failed catalogue load is told to the user rather than swallowed
-node a lane is spelled the same way in the window as in the engine
-node a model listed twice with different passes counts like the engine: max, not sum
-node a model with no id contributes nothing
-node a name that does not exist is undefined rather than empty
-node a name that does not exist is undefined rather than empty
-node a name that does not exist is undefined rather than empty
-node a name that does not exist is undefined rather than empty
-node a name that does not exist is undefined rather than empty
-node a name that does not exist is undefined rather than empty
-node a name that does not exist is undefined rather than empty
-node a passes count above the backend cap is not runnable and is clamped in the picker
-node a progress event carries the fields the window renders from
-node a proof count is always an integer the backend can deserialize
-node a proof count is clamped to the cap the field advertises
-node a repeated pass is a whole extra sweep, and an extra round
-node a reused sweep says it was reused rather than pretending to be fresh
-node a round names what is about to run and where it sits in the sequence
-node a run needs both a repository and at least one sweep
-node a single finding is not reported as '1 findings'
-node a stored pass count outside the picker presets remains visible
-node a sweep that found nothing is not confusable with one that never ran
-node an apply that changed nothing does not claim to have applied anything
-node an awaited call in a catch or finally is not covered by that try
-node an awaited call in a catch or finally is not covered by that try
-node an awaited call in a catch or finally is not covered by that try
-node an awaited call in a catch or finally is not covered by that try
-node an awaited call in a catch or finally is not covered by that try
-node an awaited call in a catch or finally is not covered by that try
-node an awaited call in a catch or finally is not covered by that try
-node an awaited call in a discarded callback is not handled
-node an awaited call in a discarded callback is not handled
-node an awaited call in a discarded callback is not handled
-node an awaited call in a discarded callback is not handled
-node an awaited call in a discarded callback is not handled
-node an awaited call in a discarded callback is not handled
-node an awaited call in a discarded callback is not handled
-node an awaited call inside its own try is handled
-node an awaited call inside its own try is handled
-node an awaited call inside its own try is handled
-node an awaited call inside its own try is handled
-node an awaited call inside its own try is handled
-node an awaited call inside its own try is handled
-node an awaited call inside its own try is handled
-node an empty configuration needs no rounds
-node an identical duplicate row adds nothing, exactly like the engine
-node an uncovered lane is reported
-node an unknown prefix is treated as a Claude model, colon and all
-node both sides are actually being read
-node both themes define the same set of colours
-node dark theme meets WCAG AA everywhere the UI uses it
-node every arm of a union is read, not just the first
-node every arm of a union is read, not just the first
-node every arm of a union is read, not just the first
-node every arm of a union is read, not just the first
-node every arm of a union is read, not just the first
-node every arm of a union is read, not just the first
-node every arm of a union is read, not just the first
-node every command the page calls exists in Rust and is exposed
-node every control the matrix rebuilds can be found again afterwards
-node every element the code looks up exists in the markup
-node every event has both an emitter and a listener
-node every platform the release builds for is offered in the README
-node every quit into Rust reports its failure rather than looking broken
-node every shipped preset covers every lane
-node every silent-failure opt-out gives a reason
-node interface fields come back without comments or nesting confusing them
-node interface fields come back without comments or nesting confusing them
-node interface fields come back without comments or nesting confusing them
-node interface fields come back without comments or nesting confusing them
-node interface fields come back without comments or nesting confusing them
-node interface fields come back without comments or nesting confusing them
-node interface fields come back without comments or nesting confusing them
-node lane titles match the engine's own names, including UX
-node light theme meets WCAG AA everywhere the UI uses it
-node names are joined the way English does
-node no call into Rust can fail without the user being told
-node no command is exposed to the page that the page never calls
-node no CSS rule styles a class nothing uses
-node no element asks for a class the stylesheet does not define
-node one vendor doing everything is one round per lane
-node removing a configured model row is guarded by a confirmation
-node render redirects focus when the focused row was just removed
-node rounds are driven by the busiest vendor, not the total
-node settings saved before passes existed still estimate as one pass each
-node splitId agrees with vendorOf on every shape
-node splitting a model spec and rejoining it settles on one spelling
-node the advertised cap and the enforced cap are the same number
-node the clear handler disables its button and re-enables it on both outcomes
-node the clear handler shows a running status while the delete is in flight
-node the clearing flag is set before the clear and released on both outcomes
-node the confirmation dialog describes its message to assistive tech
-node the documentation does not point at files that no longer exist
-node the frontend actually calls into Rust, so this test is not vacuous
-node the precise scan sees each of the three ways a class is set
-node the proof cap is the same number in the window, the markup and Rust
-node the quit guard consults the clearing state, like the tray does
-node the README still promises a single file that runs with nothing installed
-node the README's download table names assets the workflow builds
-node the real frontend parses, so the checks built on this are not vacuous
-node the real frontend parses, so the checks built on this are not vacuous
-node the real frontend parses, so the checks built on this are not vacuous
-node the real frontend parses, so the checks built on this are not vacuous
-node the real frontend parses, so the checks built on this are not vacuous
-node the real frontend parses, so the checks built on this are not vacuous
-node the real frontend parses, so the checks built on this are not vacuous
-node the scans find things at all, so a passing run means something
-node the settings the window writes are the settings Rust reads
-node the two calls this rule was wrong about are classified correctly
-node the two themes are actually different
-node the updater is blocked while a review or an apply is in flight
-node toggling a lane leaves other models untouched
-node toggling a lane off removes exactly it, and twice on is idempotent
-node two models on one lane is two sweeps, because that is the point
-node unknown lane names are ignored rather than counted
-node vendor parsing matches the engine, including bare and colon-containing names

@@ -24,9 +24,11 @@ use crate::sweep::Vendor;
 mod attribution;
 mod observed;
 mod push;
+mod tag;
 use attribution::{attributed_since, strip_attribution};
 use observed::{changed_since, commits_since, dirty_files, git, summarise, theirs};
 pub use push::PushOutcome;
+pub use tag::TagOutcome;
 
 /// Where the repository stood before the model touched it.
 ///
@@ -63,6 +65,13 @@ pub struct ApplyRequest<'a> {
     /// asked for explicitly and refused in every case the answer is not
     /// obvious — see [`push`].
     pub push: bool,
+    /// After a successful push, tag the published commits so the repository's
+    /// own CI cuts a release from them.
+    ///
+    /// Only ever *after* a push, never instead of one: a tag whose commits are
+    /// not on the remote starts a build of a ref the runner cannot fetch. See
+    /// [`tag`].
+    pub tag: bool,
 }
 
 pub struct ApplyReport {
@@ -96,6 +105,8 @@ pub struct ApplyReport {
     /// A refusal here is not a failed apply — the fixes are committed either
     /// way — so it is carried in the report rather than raised as an error.
     pub push: PushOutcome,
+    /// What became of the request to tag the published commits for release.
+    pub tag: TagOutcome,
 }
 
 /// Run the fixes, then report what actually changed.
@@ -201,6 +212,12 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         PushOutcome::NotRequested
     };
 
+    let tagged = match to_tag(request.tag, &pushed) {
+        Some(upstream) => tag::tag(repo, true, upstream),
+        None if request.tag => tag::tag(repo, false, ""),
+        None => TagOutcome::NotRequested,
+    };
+
     Ok(ApplyReport {
         text,
         changed_files: changed_since(repo, &base),
@@ -208,7 +225,28 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         stripped,
         attributed,
         push: pushed,
+        tag: tagged,
     })
+}
+
+/// The upstream a tag may be published to, or `None` when this must not be
+/// tagged at all.
+///
+/// The ordering rule, on its own so it can be tested without a model, a
+/// repository or a remote — everything `apply` would otherwise need before this
+/// single decision could be exercised.
+///
+/// A tag is the trigger for someone else's release pipeline. Pushed ahead of its
+/// commits it starts a build of a ref the runner cannot fetch, so it is only
+/// ever reached through a push that actually succeeded — and the upstream comes
+/// from that push rather than being worked out a second time. Every other push
+/// outcome (a detached HEAD, no upstream, a rejected push, a commit still
+/// crediting a tool) is a reason not to release, not merely a reason not to push.
+fn to_tag(requested: bool, pushed: &PushOutcome) -> Option<&str> {
+    match (requested, pushed) {
+        (true, PushOutcome::Pushed { upstream, .. }) => Some(upstream),
+        _ => None,
+    }
 }
 
 /// Read where the repository stands before the apply.
@@ -277,6 +315,38 @@ mod tests {
         assert!(clean.contains("no files changed"), "{clean}");
     }
 
+    #[test]
+    fn only_a_push_that_succeeded_can_lead_to_a_tag() {
+        // The ordering rule, and the reason it is a function rather than a
+        // `match` inside `apply`: nothing else here can exercise it without a
+        // model CLI, so the rule that decides whether someone's release
+        // pipeline fires would otherwise be the one line no test ever reads.
+        let pushed = PushOutcome::Pushed {
+            branch: "main".into(),
+            upstream: "origin/main".into(),
+        };
+        assert_eq!(to_tag(true, &pushed), Some("origin/main"));
+
+        // Every other outcome means the commits are not on the remote, so a tag
+        // would start a build of a ref the runner cannot fetch.
+        for refusal in [
+            PushOutcome::NotRequested,
+            PushOutcome::NothingToPush,
+            PushOutcome::Refused("no upstream".into()),
+            PushOutcome::Failed("non-fast-forward".into()),
+        ] {
+            assert_eq!(
+                to_tag(true, &refusal),
+                None,
+                "a release was tagged after {refusal:?}"
+            );
+        }
+
+        // And the setting still governs: a successful push is not consent to
+        // publish a release on its own.
+        assert_eq!(to_tag(false, &pushed), None);
+    }
+
     #[tokio::test]
     async fn a_repository_without_git_is_refused_before_anything_is_spent() {
         let dir = std::env::temp_dir().join(format!("bugsleuth-apply-{}", std::process::id()));
@@ -289,6 +359,7 @@ mod tests {
             timeout: Duration::from_secs(1),
             max_turns: 1,
             push: false,
+            tag: false,
         })
         .await
         .err()
