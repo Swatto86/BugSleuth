@@ -46,7 +46,9 @@ export function confirmDialog(request: ConfirmRequest): Promise<boolean> {
     panel.setAttribute("aria-labelledby", heading.id);
 
     const body = document.createElement("p");
+    body.id = `dialog-message-${heading.id}`;
     body.textContent = request.message;
+    panel.setAttribute("aria-describedby", body.id);
 
     const buttons = document.createElement("div");
     buttons.className = "dialog-buttons";
