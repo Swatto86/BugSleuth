@@ -234,3 +234,23 @@ fn a_complete_sweep_is_not_called_recovered() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_multibyte_commit_truncation_does_not_panic() {
+    // `to_text` used to slice at byte 9, which panics when that index lands
+    // inside a multi-byte UTF-8 character. Char-safe truncation must not crash.
+    let merged = Merged {
+        ranked: vec![],
+        sources: vec![],
+        unswept: vec![],
+        commits: vec![
+            "aa\u{65e5}\u{672c}\u{8a9e}".to_string(),
+            "bbbbbbbbbb".to_string(),
+        ],
+    };
+    let text = merged.to_text();
+    assert!(
+        text.contains("different commits"),
+        "the warning should still be rendered: {text}"
+    );
+}
