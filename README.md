@@ -133,8 +133,14 @@ worktree, then judges the attempt by running the tests independently.
 
 ## What it will not do
 
-It does not apply patches, open pull requests, integrate with CI, or chat with
-your codebase. It produces a defect list. That is the whole scope, deliberately.
+It does not open pull requests, integrate with CI, or chat with your codebase.
+It produces a defect list. That is the whole scope, deliberately.
+
+It will hand that list to a model that edits your code, if you ask it to — the
+app's Apply panel, which runs the same prompt the Copy button gives you against
+a clean checkout and reports what git observed rather than what the model
+claimed. Optionally it will then push those commits to the branch's existing
+upstream. Both are off until you turn them on, and neither is part of a review.
 
 ## Safety properties
 
@@ -160,6 +166,12 @@ repository you care about:
 - **"Not attempted" is never reported as "not proven".** Defects below the
   `--prove-top` cut are labelled unattempted, because "we did not try" and "we
   tried and failed" are different facts and the second is much stronger.
+- **Publishing is opted into, narrow, and never forced.** Applying fixes can push
+  what it committed, but only with the box ticked, only the branch you are on,
+  only to the upstream that branch already has, and never with `--force`. A
+  rejected push is reported and left alone. It refuses outright if any commit
+  still credits a tool for the work — that is the one thing pushing makes
+  permanent.
 - **Severities are not compared across lanes.** A "high" from the security lane
   and a "high" from the correctness lane were assigned by models answering
   different questions, so a multi-lane report says so rather than implying a

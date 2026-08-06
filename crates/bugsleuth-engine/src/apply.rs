@@ -23,8 +23,10 @@ use crate::sweep::Vendor;
 
 mod attribution;
 mod observed;
+mod push;
 use attribution::{attributed_since, strip_attribution};
 use observed::{changed_since, commits_since, dirty_files, git, summarise, theirs};
+pub use push::PushOutcome;
 
 /// Where the repository stood before the model touched it.
 ///
@@ -54,6 +56,13 @@ pub struct ApplyRequest<'a> {
     pub timeout: Duration,
     /// Turn ceiling, for the vendor that has one.
     pub max_turns: u32,
+    /// Push what the model committed to the branch's existing upstream.
+    ///
+    /// Off unless the user turned it on. Everything else an apply does is
+    /// undoable with `git reset`; this is the one step that is not, so it is
+    /// asked for explicitly and refused in every case the answer is not
+    /// obvious — see [`push`].
+    pub push: bool,
 }
 
 pub struct ApplyReport {
@@ -82,6 +91,11 @@ pub struct ApplyReport {
     /// user can act, since the tool must not fork published history to fix its
     /// own mess.
     pub attributed: Vec<String>,
+    /// What became of the request to publish these commits.
+    ///
+    /// A refusal here is not a failed apply — the fixes are committed either
+    /// way — so it is carried in the report rather than raised as an error.
+    pub push: PushOutcome,
 }
 
 /// Run the fixes, then report what actually changed.
@@ -177,12 +191,23 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         Err(_) => (vec![], attributed_since(repo, &base)),
     };
 
+    // After stripping, deliberately: the trailers come off before anything is
+    // published, and `attributed` is what stripping could not reach — which is
+    // itself a reason to refuse the push rather than to publish and mention it.
+    let commits = commits_since(repo, &base);
+    let pushed = if request.push {
+        push::push(repo, commits, &attributed)
+    } else {
+        PushOutcome::NotRequested
+    };
+
     Ok(ApplyReport {
         text,
         changed_files: changed_since(repo, &base),
-        commits: commits_since(repo, &base),
+        commits,
         stripped,
         attributed,
+        push: pushed,
     })
 }
 
@@ -263,6 +288,7 @@ mod tests {
             prompt: "fix it",
             timeout: Duration::from_secs(1),
             max_turns: 1,
+            push: false,
         })
         .await
         .err()

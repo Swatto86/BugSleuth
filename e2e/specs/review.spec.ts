@@ -190,6 +190,14 @@ describe("BugSleuth desktop app", () => {
     await expect($("#apply-vendor")).toBeExisting();
     await expect($("#apply-model input")).toBeExisting();
     await expect($("#apply-effort select")).toBeExisting();
+    // The publish opt-in. It reaches a command that pushes to a remote, so its
+    // absence from the packaged window would mean the only control gating an
+    // irreversible action never shipped.
+    await expect($("#push-after-apply")).toBeExisting();
+    // Deliberately not asserted: whether it is ticked. That comes from this
+    // machine's stored settings, and a check that fails for a reason unrelated
+    // to the code is a check someone switches off. Off-by-default is covered
+    // where it is decided — the Rust and TypeScript defaults.
     // Deliberately not asserted: whether the button is enabled. That depends on
     // the model stored in this machine's settings, and a check that fails for a
     // reason unrelated to the code is a check someone switches off.

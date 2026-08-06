@@ -63,6 +63,7 @@ pub async fn apply_fixes(
             prompt: &prompt,
             timeout: APPLY_TIMEOUT,
             max_turns: APPLY_MAX_TURNS,
+            push: settings.push_after_apply,
         })
         .await;
 
@@ -164,16 +165,51 @@ The changes themselves are untouched — only the trailer lines are gone.
         );
     }
 
+    out.push_str(&describe_push(&report.push));
+
     out.push_str("The model's own account:\n\n");
     out.push_str(report.text.trim());
     out.push('\n');
     out
 }
 
+/// What became of publishing, in the same pane and by the same rule as the
+/// rest: say what happened, not what was intended.
+///
+/// A refusal is spelled out rather than left silent. "Push after applying" is a
+/// setting someone turns on and then stops thinking about, and a tool that
+/// quietly declines is indistinguishable from one that quietly succeeded —
+/// until the day they find the branch was never published.
+fn describe_push(outcome: &bugsleuth_engine::apply::PushOutcome) -> String {
+    use bugsleuth_engine::apply::PushOutcome as P;
+    match outcome {
+        // The setting is off. Saying so on every apply would be noise.
+        P::NotRequested => String::new(),
+        P::NothingToPush => {
+            "Nothing was pushed: the model committed nothing, so there is nothing to publish.\n\n"
+                .to_string()
+        }
+        P::Refused(reason) => format!("Not pushed. {reason}\n\n"),
+        P::Pushed { branch, upstream } => {
+            format!(
+                "Pushed {branch} to {upstream}. These commits are published now — a later \
+                     rewrite does not recall them, so read the diff there before anyone builds \
+                     on it.\n\n"
+            )
+        }
+        P::Failed(error) => format!(
+            "The push was rejected and nothing was published: {error}\n\nThe commits are safe in \
+             your repository. This is left for you on purpose — recovering from a rejected push \
+             means a fetch and a rebase, or a force, and neither is a choice a tool should make \
+             with your history.\n\n"
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bugsleuth_engine::apply::ApplyReport;
+    use bugsleuth_engine::apply::{ApplyReport, PushOutcome};
 
     #[test]
     fn a_model_that_changed_nothing_cannot_report_success_unchallenged() {
@@ -186,6 +222,7 @@ mod tests {
             commits: 0,
             stripped: vec![],
             attributed: vec![],
+            push: PushOutcome::NotRequested,
         });
         assert!(text.contains("no files changed"));
         assert!(text.contains("fixed all seven"));
@@ -199,6 +236,7 @@ mod tests {
             commits: 2,
             stripped: vec![],
             attributed: vec![],
+            push: PushOutcome::NotRequested,
         });
         assert!(text.contains("2 files changed, in 2 commits"), "{text}");
         assert!(text.contains("src/b.rs"));
@@ -216,6 +254,7 @@ mod tests {
             commits: 0,
             stripped: vec![],
             attributed: vec![],
+            push: PushOutcome::NotRequested,
         });
         assert!(
             uncommitted.contains("1 file changed, none of it committed"),
@@ -238,6 +277,7 @@ mod tests {
             commits: 1,
             stripped: vec![],
             attributed: vec!["fix(auth): stop demanding re-sign-in".into()],
+            push: PushOutcome::NotRequested,
         });
         assert!(text.contains("1 commit credits a tool"), "{text}");
         assert!(text.contains("fix(auth): stop demanding re-sign-in"));
@@ -252,6 +292,7 @@ mod tests {
             commits: 2,
             stripped: vec![],
             attributed: vec!["one".into(), "two".into()],
+            push: PushOutcome::NotRequested,
         });
         assert!(two.contains("2 commits credit a tool"), "{two}");
         let clean = describe(&ApplyReport {
@@ -260,7 +301,62 @@ mod tests {
             commits: 1,
             stripped: vec![],
             attributed: vec![],
+            push: PushOutcome::NotRequested,
         });
         assert!(!clean.contains("credit"), "{clean}");
+    }
+
+    #[test]
+    fn a_push_that_did_not_happen_says_so_rather_than_staying_silent() {
+        // The failure this exists to stop: "push after applying" is turned on
+        // once and then forgotten, so a refusal nobody is told about reads
+        // exactly like a success until someone notices the branch is behind.
+        let refused = describe_push(&PushOutcome::Refused(
+            "1 commit still credits a tool for the work".into(),
+        ));
+        assert!(refused.contains("Not pushed"), "{refused}");
+        assert!(refused.contains("credits a tool"), "{refused}");
+
+        let failed = describe_push(&PushOutcome::Failed("non-fast-forward".into()));
+        assert!(failed.contains("rejected"), "{failed}");
+        assert!(failed.contains("nothing was published"), "{failed}");
+        // And it must not imply the tool will sort it out on the next attempt.
+        assert!(failed.contains("safe in"), "{failed}");
+
+        let nothing = describe_push(&PushOutcome::NothingToPush);
+        assert!(nothing.contains("committed nothing"), "{nothing}");
+    }
+
+    #[test]
+    fn a_completed_push_names_where_it_went_and_that_it_is_permanent() {
+        let text = describe_push(&PushOutcome::Pushed {
+            branch: "master".into(),
+            upstream: "origin/master".into(),
+        });
+        assert!(text.contains("Pushed master to origin/master"), "{text}");
+        assert!(text.contains("published"), "{text}");
+
+        // Off is silent: a line on every apply about a setting nobody enabled
+        // is noise, and noise is what stops the lines above being read.
+        assert_eq!(describe_push(&PushOutcome::NotRequested), "");
+    }
+
+    #[test]
+    fn the_push_outcome_reaches_the_text_the_window_shows() {
+        // describe_push is only worth anything if describe actually calls it.
+        let text = describe(&ApplyReport {
+            text: "done".into(),
+            changed_files: vec!["src/a.rs".into()],
+            commits: 1,
+            stripped: vec![],
+            attributed: vec![],
+            push: PushOutcome::Pushed {
+                branch: "main".into(),
+                upstream: "origin/main".into(),
+            },
+        });
+        assert!(text.contains("Pushed main to origin/main"), "{text}");
+        // Before the model's account, like everything else git observed.
+        assert!(text.find("Pushed main") < text.find("The model's own account"));
     }
 }

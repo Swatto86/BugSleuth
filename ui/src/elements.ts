@@ -50,6 +50,7 @@ const ui = {
   applyModel: el<HTMLDivElement>("apply-model"),
   applyEffort: el<HTMLDivElement>("apply-effort"),
   applyFixes: el<HTMLButtonElement>("apply-fixes"),
+  pushAfterApply: el<HTMLInputElement>("push-after-apply"),
 };
 
 export { el, ui };

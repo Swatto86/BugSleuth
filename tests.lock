@@ -137,6 +137,14 @@ rust apply::observed::tests::a_dirty_tree_is_read_out_of_git_status_whatever_the
 rust apply::observed::tests::bugsleuths_own_leftovers_are_not_treated_as_the_users_uncommitted_work
 rust apply::observed::tests::the_refusal_names_a_few_files_rather_than_all_of_them
 rust apply::observed::tests::unborn_repository_reports_its_initial_commit_as_a_change
+rust apply::push::tests::a_branch_with_no_upstream_is_left_alone
+rust apply::push::tests::a_clean_apply_with_commits_is_publishable
+rust apply::push::tests::a_commit_that_credits_a_tool_is_never_published
+rust apply::push::tests::a_detached_head_is_refused_because_there_is_no_branch_to_push
+rust apply::push::tests::a_rejected_push_is_reported_rather_than_forced
+rust apply::push::tests::an_apply_that_committed_nothing_has_nothing_to_publish
+rust apply::push::tests::only_the_branch_that_was_applied_to_is_published
+rust apply::push::tests::the_commits_actually_reach_the_remote
 rust apply::tests::a_failed_apply_still_says_what_it_had_already_changed
 rust apply::tests::a_repository_without_git_is_refused_before_anything_is_spent
 rust atomic::tests::a_failed_write_destroys_nothing_and_leaves_no_debris
@@ -222,7 +230,10 @@ rust codex::tests::the_prompt_comes_from_stdin_so_a_long_brief_cannot_overflow_t
 rust codex::tests::the_schema_and_answer_paths_are_passed_as_files_not_inline_json
 rust codex::tests::the_signin_probe_and_a_sweep_share_one_flag_list
 rust commands::apply::tests::a_commit_that_credits_the_tool_is_named_before_it_is_pushed
+rust commands::apply::tests::a_completed_push_names_where_it_went_and_that_it_is_permanent
 rust commands::apply::tests::a_model_that_changed_nothing_cannot_report_success_unchallenged
+rust commands::apply::tests::a_push_that_did_not_happen_says_so_rather_than_staying_silent
+rust commands::apply::tests::the_push_outcome_reaches_the_text_the_window_shows
 rust commands::apply::tests::what_changed_is_listed_before_what_was_claimed
 rust commands::run::control::tests::finishing_clears_only_its_own_state
 rust commands::run::control::tests::run_control_clear_and_run_cannot_both_start

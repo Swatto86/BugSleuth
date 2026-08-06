@@ -231,6 +231,20 @@
                 Apply fixes
               </button>
             </div>
+            <div class="row" style="margin-top: 10px">
+              <label class="checkline">
+                <input id="push-after-apply" type="checkbox" />
+                <span>
+                  Push the commits to this branch's remote when the fixes are
+                  applied. Everything else an apply does is undone with
+                  <code>git reset</code>; this is the step that cannot be. It
+                  pushes the current branch where it already goes — never a
+                  force, never a remote it picked for you — and refuses if the
+                  branch has no upstream or any commit still credits a tool for
+                  the work.
+                </span>
+              </label>
+            </div>
           </div>
 
           <div id="findings"></div>

@@ -59,6 +59,15 @@ pub struct Settings {
     /// packing it into the string would send `opus:high` to a CLI as a model name.
     #[serde(default)]
     pub apply_effort: String,
+    /// Push what an apply committed to the branch's existing upstream.
+    ///
+    /// Off by default, and deliberately not remembered as a convenience: every
+    /// other thing an apply does is undone with `git reset`, and this is the
+    /// one that cannot be. It only ever pushes the current branch where it
+    /// already goes — never a force, never a guessed remote — and refuses
+    /// outright if any commit still credits a tool for the work.
+    #[serde(default)]
+    pub push_after_apply: bool,
 }
 
 /// Serde needs a function; a bare string default is not expressible.
@@ -131,6 +140,7 @@ impl Default for Settings {
             // checkout, and a model nobody chose is not something to default to.
             apply_model: String::new(),
             apply_effort: String::new(),
+            push_after_apply: false,
         }
     }
 }

@@ -129,6 +129,7 @@ test("a run needs both a repository and at least one sweep", () => {
     triage_model: "haiku",
     apply_model: "",
     apply_effort: "",
+    push_after_apply: false,
   } satisfies Omit<Settings, "repo" | "models">;
   assert.equal(
     canRun({ ...base, repo: "", models: preset("balanced") }),

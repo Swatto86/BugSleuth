@@ -732,3 +732,33 @@ What came out of it is still worth having: a failed save or load now says so in
 the status bar rather than being swallowed. That instrumentation is what
 finally settled the question — a failing save would announce itself, and it
 does not.
+
+### 4.9 Pushing what an apply committed
+
+The Apply panel can now push the commits it made. It is a checkbox, off by
+default, beside the Apply button.
+
+What was considered and rejected: pushing whenever a remote exists (nobody asked
+for that, and a private branch reaching a shared remote unbidden is the worst
+possible surprise from a tool that edits code); setting an upstream with
+`push -u` when the branch has none (that decides where your work gets published
+on your behalf); and retrying a rejected push with a force (a tool that resolves
+a non-fast-forward by discarding the other side is a tool that loses work).
+
+So it pushes exactly one thing: the current branch, to the upstream it already
+has. Every other case is refused with a reason in the output pane rather than
+silently skipped, because "push after applying" is a setting people turn on once
+and stop thinking about, and a silent decline looks exactly like a success.
+
+Two guards are worth naming. It refuses if any commit still carries a tool
+authorship trailer that could not be stripped — that trailer is precisely the
+thing pushing makes permanent. And it runs `git -c push.default=upstream push`
+rather than a bare `git push`: under the old `matching` default a bare push
+publishes *every* local branch whose name matches one on the remote, so fixing a
+defect on one branch would have published whatever else was lying around. That
+one is covered by a test that sets `push.default = matching`, creates a sibling
+branch, and asserts the sibling did not move.
+
+To reverse: untick the box. To remove entirely, delete `apply/push.rs`, the
+`push` fields on `ApplyRequest`/`ApplyReport`, and `push_after_apply` from
+settings; nothing else depends on it.

@@ -37,6 +37,8 @@ export interface ApplyDeps {
     /** Holds the effort control, rebuilt whenever the model changes. */
     effort: HTMLDivElement;
     button: HTMLButtonElement;
+    /** Opt-in to publishing what the apply commits. */
+    push: HTMLInputElement;
     output: HTMLPreElement;
   };
   settings: () => Settings;
@@ -93,6 +95,7 @@ export function bindApply(deps: ApplyDeps): () => void {
       }),
     );
     drawEffort();
+    ui.push.checked = deps.settings().push_after_apply;
     setButtonState();
   };
 
@@ -149,19 +152,39 @@ export function bindApply(deps: ApplyDeps): () => void {
     draw();
   });
 
+  ui.push.addEventListener("change", () => {
+    deps.settings().push_after_apply = ui.push.checked;
+    deps.refresh();
+  });
+
   ui.button.addEventListener("click", () => {
     // Checked here as well as inside `start`, so a second click cannot even
     // open a second dialog on top of the first.
     if (applying) return;
+    // The confirmation has to describe what is about to happen, not what
+    // usually happens. Publishing is the one part of an apply that no amount
+    // of reading the diff afterwards can undo, so when it is switched on the
+    // dialog says so and the button that confirms it says so too — a settings
+    // checkbox someone ticked days ago is not informed consent at the moment
+    // the commits leave the machine.
+    const publishing = deps.settings().push_after_apply;
     void confirmDialog({
-      title: "Apply these fixes to your code?",
+      title: publishing
+        ? "Apply these fixes and push them?"
+        : "Apply these fixes to your code?",
       message:
         "This runs the fix prompt against your repository with write access, " +
         "editing files in place and running your tests. It is refused unless " +
         "the working tree is clean, so everything it does will show up in " +
         "`git diff` and `git log` — but nothing it writes has been checked by " +
-        "anyone. Read the changes before you keep them.",
-      confirmLabel: "Apply the fixes",
+        "anyone. Read the changes before you keep them." +
+        (publishing
+          ? " Whatever it commits will then be pushed to this branch's " +
+            "upstream. That part cannot be undone: once the commits are on " +
+            "the remote, anyone watching it can fetch them, and a later " +
+            "rewrite does not recall them."
+          : ""),
+      confirmLabel: publishing ? "Apply and push" : "Apply the fixes",
       destructive: true,
     }).then((yes) => {
       if (!yes) return;

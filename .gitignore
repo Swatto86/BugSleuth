@@ -30,3 +30,8 @@ windows-rdp-keepalive/
 # the app actually compiles in; a second copy here would be a value with two
 # homes and no check that they agree.
 bugsleuth-updater.key*
+
+# Claude Code accumulates per-session permission grants here, including
+# scratch paths from whatever was being debugged. Not project configuration.
+.claude/settings.json
+.claude/settings.local.json

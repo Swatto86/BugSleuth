@@ -67,7 +67,11 @@ test("the README's download table names assets the workflow builds", () => {
   const yaml = workflow();
 
   // Only the table, so a stem mentioned in passing elsewhere does not count.
-  const table = /\| You want \| Download \|([\s\S]*?)\n\n/.exec(text);
+  // Padding is tolerated: a markdown formatter aligns table cells, and matching
+  // single spaces meant running one over the README turned this check from
+  // "the assets do not match" into "there is no table", which is the same
+  // vacuous pass the assertion below exists to prevent.
+  const table = /\|\s*You want\s*\|\s*Download\s*\|([\s\S]*?)\n\n/.exec(text);
   assert.ok(table, "no download table in the README; the scan is broken");
 
   const stems = [
