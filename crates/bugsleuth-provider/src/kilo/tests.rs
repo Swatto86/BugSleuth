@@ -3,6 +3,31 @@
 
 use super::*;
 
+fn spec<'a>(model: &'a str) -> KiloSweep<'a> {
+    KiloSweep {
+        effort: "",
+        worktree: Path::new("/tmp/wt"),
+        model,
+        brief: "",
+        timeout: Duration::from_secs(60),
+        binary: None,
+    }
+}
+
+/// A scratch directory that is empty at the start of every run.
+///
+/// Cleared rather than merely created: a process id is reused eventually, and a
+/// stale `kilo.jsonc` from an earlier run would be read as this run's fixture —
+/// the test would then be asserting against a config it did not write.
+fn scratch(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir()
+        .join("bugsleuth-kilo-tests")
+        .join(format!("{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch directory");
+    dir
+}
+
 #[test]
 fn the_preflight_checks_the_agent_the_sweep_actually_runs_as() {
     // Not a comparison of two constants — since both sides read
@@ -20,10 +45,7 @@ fn the_preflight_checks_the_agent_the_sweep_actually_runs_as() {
         .clone();
 
     let denied = r#"{"webfetch":"deny","websearch":"deny"}"#;
-    let dir = std::env::temp_dir()
-        .join("bugsleuth-agent-agreement")
-        .join(std::process::id().to_string());
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = scratch("agent-agreement");
 
     let matching = dir.join("kilo.jsonc");
     std::fs::write(
@@ -37,27 +59,22 @@ fn the_preflight_checks_the_agent_the_sweep_actually_runs_as() {
         "hardening the agent the sweep runs as should satisfy the preflight"
     );
 
+    // The same config with only the agent name changed. `is_some()` alone would
+    // also pass for an unwritten, unreadable, or unparseable file — every one of
+    // which is the wrong reason — so the gap has to name the agent it looked for
+    // and say it was the permission block that was missing.
     let other = dir.join("other.jsonc");
     std::fs::write(
         &other,
         format!(r#"{{"agent":{{"not-{agent}":{{"permission":{denied}}}}}}}"#),
     )
     .expect("write config");
+    let gap = preflight::gap_in(&[other])
+        .expect("hardening a different agent must not satisfy the preflight");
     assert!(
-        preflight::gap_in(&[other]).is_some(),
-        "hardening a different agent must not satisfy the preflight"
+        gap.contains(&agent) && gap.contains("permission"),
+        "the refusal must be about the sweep's own agent, not an unreadable file: {gap}"
     );
-}
-
-fn spec<'a>(model: &'a str) -> KiloSweep<'a> {
-    KiloSweep {
-        effort: "",
-        worktree: Path::new("/tmp/wt"),
-        model,
-        brief: "",
-        timeout: Duration::from_secs(60),
-        binary: None,
-    }
 }
 
 #[test]
