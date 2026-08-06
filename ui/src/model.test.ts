@@ -142,6 +142,38 @@ test("a run needs both a repository and at least one sweep", () => {
   );
 });
 
+test("a blank row makes the configuration unrunnable, exactly like the engine", () => {
+  const base = {
+    scope: "",
+    theme: "system" as const,
+    prove_top: 0,
+    test_command: "",
+    reuse_completed: true,
+    triage_model: "haiku",
+    apply_model: "",
+    apply_effort: "",
+    push_after_apply: false,
+  } satisfies Omit<Settings, "repo" | "models">;
+  assert.equal(
+    canRun({
+      ...base,
+      repo: "C:/x",
+      models: [row("sonnet", ["correctness"]), row("  ", [])],
+    }),
+    false,
+    "Run must not be enabled with a half-typed row",
+  );
+  assert.equal(
+    canRun({
+      ...base,
+      repo: "C:/x",
+      models: [row("sonnet", ["correctness", "nonsense"])],
+    }),
+    false,
+    "an unknown lane must not be silently ignored",
+  );
+});
+
 test("toggling a lane leaves other models untouched", () => {
   const models = [row("a", ["correctness"]), row("b", ["correctness"])];
   const next = toggleLane(models, 0, "security", true);
