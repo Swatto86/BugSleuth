@@ -20,6 +20,7 @@ import {
   type Settings,
   LANES,
   LANE_TITLES,
+  MAX_PASSES,
   MAX_PROVE_TOP,
   applyStatus,
   batchCount,
@@ -370,9 +371,9 @@ test("an apply that changed nothing does not claim to have applied anything", ()
 });
 
 test("a stored pass count outside the picker presets remains visible", () => {
-  // Rust runs `passes.max(1)` of an unrestricted usize, so a stored 5 is a
-  // valid backend instruction. The selector must offer it rather than silently
-  // showing 1 while Run still sends 5.
+  // Rust caps `passes` at MAX_PASSES (25) and refuses the run above it, so a
+  // stored value within the cap is a valid backend instruction. The selector
+  // must offer it rather than silently showing 1 while Run still sends 5.
   assert.deepEqual(passChoices(5), [1, 2, 3, 5]);
   assert.ok(passChoices(5).includes(5));
   // Pre-passes settings (no field) and Rust's max(1) both normalise to one.
@@ -380,4 +381,31 @@ test("a stored pass count outside the picker presets remains visible", () => {
   assert.deepEqual(passChoices(0), [1, 2, 3]);
   // The usual values are unchanged and not duplicated.
   assert.deepEqual(passChoices(2), [1, 2, 3]);
+});
+
+test("a passes count above the backend cap is not runnable and is clamped in the picker", () => {
+  const base = {
+    scope: "",
+    theme: "system" as const,
+    prove_top: 0,
+    test_command: "",
+    reuse_completed: true,
+    triage_model: "haiku",
+    apply_model: "",
+    apply_effort: "",
+    push_after_apply: false,
+  } satisfies Omit<Settings, "repo" | "models">;
+  assert.equal(
+    canRun({
+      ...base,
+      repo: "C:/x",
+      models: [{ id: "sonnet", lanes: ["correctness"], effort: "", passes: 26 }],
+    }),
+    false,
+    "Run must be disabled for a config the backend would refuse",
+  );
+  assert.ok(
+    !passChoices(40).some((n) => n > MAX_PASSES),
+    "the picker must not advertise a pass count above the backend cap",
+  );
 });
