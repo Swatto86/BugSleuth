@@ -544,6 +544,12 @@ rust triage::tests::the_prompt_says_what_each_defect_was_already_graded
 rust triage::tests::the_rubric_the_sweep_is_given_is_the_rubric_triage_applies
 rust unrelated_defects_in_the_same_real_crate_stay_separate
 rust update::tests::the_updater_is_configured_against_this_repository_and_a_real_key
+rust worktree::orphans::tests::a_branch_left_by_a_killed_run_is_swept_up_by_the_next_one
+rust worktree::orphans::tests::a_listing_with_no_worktrees_yields_no_live_branches
+rust worktree::orphans::tests::every_checked_out_branch_is_read_out_of_the_listing
+rust worktree::orphans::tests::only_a_real_branch_line_counts_as_one
+rust worktree::orphans::tests::only_branches_this_tool_generated_are_ever_swept
+rust worktree::orphans::tests::the_sweep_matches_the_shape_of_a_real_throwaway_branch
 rust worktree::tests::a_git_argument_never_carries_the_extended_length_prefix
 rust worktree::tests::a_label_cannot_smuggle_path_or_flag_characters_into_a_branch_name
 rust worktree::tests::a_long_absolute_path_gets_the_extended_length_prefix_on_windows

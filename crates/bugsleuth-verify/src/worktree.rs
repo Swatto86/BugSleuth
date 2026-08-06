@@ -10,6 +10,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+mod orphans;
+use orphans::{PREFIX, remove_orphan_branches};
+
 #[derive(Debug, thiserror::Error)]
 pub enum WorktreeError {
     #[error("`{0}` is not inside a git repository, so an isolated worktree cannot be created")]
@@ -79,7 +82,7 @@ impl Worktree {
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         );
-        let branch = format!("bugsleuth/{slug}");
+        let branch = format!("{PREFIX}{slug}");
         let path = root.join(&slug);
 
         // Only this run's own path, which no other process can now be using.
@@ -91,6 +94,10 @@ impl Worktree {
         // the authority on which of them are still worktrees: anything under
         // our directory that it no longer lists is wreckage.
         remove_orphans(&repo);
+        // The refs beside them. Cleaning the directories alone left the branch
+        // of every killed run in the user's repository for good, accumulating
+        // one per kill with nothing to ever collect them.
+        remove_orphan_branches(&repo);
 
         git(
             &repo,
