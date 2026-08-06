@@ -4,6 +4,7 @@
 # Frontend build output and dependencies.
 /node_modules
 /ui/dist
+tsconfig.tsbuildinfo
 
 # Tauri's generated schemas and per-build artifacts.
 /src-tauri/gen

@@ -81,7 +81,8 @@ test("the clear handler disables its button and re-enables it on both outcomes",
     /ui\.clearSaved\.disabled = true/,
     "clear_saved does not disable its button, so it can be triggered again",
   );
-  const reEnableMatches = handler.match(/ui\.clearSaved\.disabled = false/g) ?? [];
+  const reEnableMatches =
+    handler.match(/ui\.clearSaved\.disabled = false/g) ?? [];
   assert.ok(
     reEnableMatches.length >= 2,
     `the button is re-enabled on ${reEnableMatches.length} path(s); it must be ` +
