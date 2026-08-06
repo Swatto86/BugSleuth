@@ -264,10 +264,7 @@ fn remove_orphans(repo: &Path) {
         let Ok(metadata) = std::fs::symlink_metadata(&path) else {
             continue;
         };
-        if !metadata.is_dir()
-            || metadata.file_type().is_symlink()
-            || is_reparse_point(&metadata)
-        {
+        if !metadata.is_dir() || metadata.file_type().is_symlink() || is_reparse_point(&metadata) {
             continue;
         }
         // A deregistered worktree of ours, or repository-controlled content?

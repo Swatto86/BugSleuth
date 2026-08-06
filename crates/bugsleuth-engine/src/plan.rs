@@ -283,7 +283,10 @@ mod tests {
         // was enumerated into millions of units and the run never started.
         let mut config = config(&[("sonnet", &["correctness"])]);
         config.models[0].passes = 26; // one over the cap, so the test runs instantly
-        assert!(plan(&config).is_err(), "a pass count above the cap must be refused");
+        assert!(
+            plan(&config).is_err(),
+            "a pass count above the cap must be refused"
+        );
     }
 
     #[test]
