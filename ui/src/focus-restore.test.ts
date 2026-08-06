@@ -44,3 +44,23 @@ test("render redirects focus when the focused row was just removed", () => {
     "render has no Add model focus fallback for an emptied matrix",
   );
 });
+
+test("a failed catalogue load is told to the user rather than swallowed", () => {
+  const main = frontendFiles().find((file) => file.fileName === "main.ts");
+  assert.ok(main, "main.ts is no longer a shipped frontend module");
+  const load = functionText(main, "loadCatalogue");
+  assert.ok(load, "loadCatalogue is gone from main.ts");
+  assert.match(load, /catch/, "loadCatalogue has no catch");
+  assert.match(
+    load,
+    /return/,
+    "loadCatalogue swallows the failure instead of handing it back",
+  );
+  const boot = functionText(main, "boot");
+  assert.ok(boot, "boot is gone from main.ts");
+  assert.match(
+    boot,
+    /catalogueError/,
+    "boot never reads the catalogue failure, so the preflight 'Ready' overwrites it",
+  );
+});

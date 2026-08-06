@@ -289,7 +289,7 @@ function bind(): void {
 }
 
 /** Fill the model and effort menus, then redraw the table with them. */
-async function loadCatalogue(): Promise<void> {
+async function loadCatalogue(): Promise<string> {
   try {
     const vendors = await invoke<VendorModels[]>("available_models");
     catalogue = Object.fromEntries(vendors.map((v) => [v.vendor, v]));
@@ -297,9 +297,12 @@ async function loadCatalogue(): Promise<void> {
     // The apply panel has its own model box, outside the table, so a redraw of
     // the table alone would leave it offering no suggestions for the session.
     redrawApply();
-  } catch {
-    // The table already works with typed model ids, so a catalogue that cannot
-    // be fetched costs convenience rather than capability.
+    return "";
+  } catch (error) {
+    // Not swallowed: when the catalogue cannot load, every effort select stays
+    // disabled and the model menus stay empty for the whole session with no
+    // retry, so the user has to be told. The table still works with typed ids.
+    return `Could not load the model lists: ${String(error)}`;
   }
 }
 
@@ -346,18 +349,23 @@ async function boot(): Promise<void> {
 
   await listenForRunEvents(runDeps());
 
-  // After the reveal on purpose: filling the menus asks Kilo for its catalogue,
-  // and the window must not wait on a CLI to appear.
-  void loadCatalogue();
-
+  // Filled before the status settles, so a failure here is part of what
+  // "Ready" means: the effort controls stay disabled and the model menus stay
+  // empty for the whole session if the catalogue cannot load. The window is
+  // already revealed by this point, so awaiting costs no visible delay.
   setStatus("Checking providers…", "running");
+  const catalogueError = await loadCatalogue();
   try {
     ui.vendors.replaceChildren(
       ...vendorPills(await invoke<VendorStatus[]>("preflight")),
     );
     setStatus(
-      loadFailed ? `Saved settings could not be read: ${loadFailed}` : "Ready",
-      loadFailed ? "error" : "",
+      catalogueError
+        ? catalogueError
+        : loadFailed
+          ? `Saved settings could not be read: ${loadFailed}`
+          : "Ready",
+      catalogueError ? "error" : loadFailed ? "error" : "",
     );
   } catch (error) {
     setStatus(String(error), "error");
