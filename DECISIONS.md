@@ -364,7 +364,9 @@ made to guarantee. Codex takes `--sandbox read-only`, where the operating system
 refuses the write. Claude takes a tool allowlist, so the write tools are simply
 absent. **Kilo has neither.** Its permissions come from the user's own global
 config, and on this machine both candidate agents were configured to allow
-everything, with no per-invocation override.
+everything, with no per-invocation override. (The agent config was later
+hardened and the permission behaviour measured properly — see 4.10, which
+narrows what this decision assumed. The worktree stays either way.)
 
 So the only way to guarantee a Kilo review cannot modify the code it is
 reviewing is to hand it a copy. The adapter enforces this rather than trusting
@@ -762,3 +764,45 @@ branch, and asserts the sibling did not move.
 To reverse: untick the box. To remove entirely, delete `apply/push.rs`, the
 `push` fields on `ApplyRequest`/`ApplyReport`, and `push_after_apply` from
 settings; nothing else depends on it.
+
+### 4.10 The blanket Kilo refusal was measured, and most of it was wrong
+
+Kilo sweeps had been refused outright, on the reasoning that Kilo "cannot
+enforce per-invocation filesystem, subprocess, and network restrictions". Every
+lane reported `NOT SWEPT`, so a configured vendor was contributing nothing.
+
+The reasoning was checked against the CLI rather than the help text, and three
+of its four claims did not hold:
+
+- **`--auto` does not override `deny`.** Its help says it auto-approves *all*
+  permissions, which is what the refusal assumed. What it actually overrides is
+  `ask`. Under the sweep's own flags, an edit was refused, `bash` was refused,
+  and a read outside `--dir` was refused by the `external_directory` rule.
+- **`webfetch` was not refused.** That one was real, and it is the gap the
+  check now refuses on — narrowly, with the reason naming the open tool.
+
+So the restrictions exist; what differs from Claude and Codex is *where they
+live*. Their flags are passed by BugSleuth and hold on any machine. Kilo's come
+from the user's config, so the guarantee is only as good as that file — which
+is why the preflight verifies it rather than trusting it, and demands an
+explicit `deny`. An absent rule, an unreadable config, or a hardened *other*
+agent all fail closed. `kilo agent list` was rejected as the source precisely
+because it prints no `webfetch` entry either way: a scan of it cannot tell
+"denied" from "never mentioned", and the empty answer reads as safe.
+
+**Two real defects the fix surfaced**, both invisible from reading:
+
+- **A reviewed repository could grant itself permissions.** A `.kilo/agent/ask.md`
+  in the tree under review *redefines the agent the sweep runs as*. The same
+  `echo pwned` the global config denies ran to completion once that file
+  existed. `strip_agent_instructions` removed `.kilocode` but not `.kilo` — the
+  directory that actually carries permissions. This is 4.2's attack with teeth:
+  not just briefing its reviewer, but re-permissioning it.
+- **No Kilo sweep could have run anyway.** `canonicalize` returns a `\?\`
+  path on Windows and git rejects it, so `git worktree add` failed with
+  "could not create leading directories … Invalid argument" for every sweep.
+  The existing worktree tests `return` early when creation fails, so they
+  passed throughout — a skip is not a pass, and the replacement test fails loudly.
+
+**Reverse:** if Kilo gains a network flag, the preflight becomes unnecessary and
+the check can go. If it gains a read-only mode, 2.18's worktree can go too.

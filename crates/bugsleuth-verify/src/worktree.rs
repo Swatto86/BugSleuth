@@ -100,7 +100,7 @@ impl Worktree {
                 "--force",
                 "-b",
                 &branch,
-                &path.to_string_lossy(),
+                &git_arg(&path),
                 commit,
             ],
         )?;
@@ -133,7 +133,7 @@ impl Worktree {
     /// Apply a patch file. Used by the eval to put the real bug fix back and
     /// re-run the model's test against fixed code.
     pub fn apply_patch(&self, patch: &Path) -> Result<(), WorktreeError> {
-        git(&self.path, &["apply", &patch.to_string_lossy()])?;
+        git(&self.path, &["apply", &git_arg(patch)])?;
         Ok(())
     }
 }
@@ -158,10 +158,7 @@ impl Drop for Worktree {
 /// So: ask git first, then delete whatever survives ourselves, using the
 /// extended-length path form that lifts the limit, and prune git's registry.
 fn remove(repo: &Path, path: &Path) {
-    let _ = git(
-        repo,
-        &["worktree", "remove", "--force", &path.to_string_lossy()],
-    );
+    let _ = git(repo, &["worktree", "remove", "--force", &git_arg(path)]);
     if path.exists() {
         let _ = std::fs::remove_dir_all(long_path(path));
     }
@@ -283,6 +280,36 @@ fn long_path(path: &Path) -> PathBuf {
         return path.to_path_buf();
     }
     PathBuf::from(format!(r"\\?\{}", text.replace('/', "\\")))
+}
+
+/// Windows' verbatim path prefix, which lifts the 260-character limit for
+/// Rust's filesystem calls and which git refuses. Named once so the code that
+/// adds it, the code that strips it, and the test agree on the same string —
+/// it is easy to mistype by a backslash, and a wrong literal would silently
+/// match nothing.
+const VERBATIM: &str = r"\\?\";
+const VERBATIM_UNC: &str = r"\\?\UNC\";
+
+/// A path as an argument for `git`, which cannot take the extended-length form.
+///
+/// The inverse of [`long_path`], and needed for the opposite reason. Rust's own
+/// filesystem calls want `\\?\` so they are not bound by `MAX_PATH`; git rejects
+/// it outright. Every path here comes from `canonicalize`, which on Windows
+/// always produces that prefix, so without this every `git worktree add` fails
+/// with `could not create leading directories … Invalid argument` — the path is
+/// reported back verbatim as `//?/C:/…`, which reads like a malformed URL rather
+/// than the deliberate prefix it is.
+fn git_arg(path: &Path) -> String {
+    let text = path.to_string_lossy().into_owned();
+    if !cfg!(windows) {
+        return text;
+    }
+    // `\\?\UNC\server\share` is a real network path: dropping only the verbatim
+    // prefix would leave `UNC\server\share`, which resolves nowhere.
+    if let Some(rest) = text.strip_prefix(VERBATIM_UNC) {
+        return format!(r"\\{rest}");
+    }
+    text.strip_prefix(VERBATIM).unwrap_or(&text).to_string()
 }
 
 fn git(cwd: &Path, args: &[&str]) -> Result<String, WorktreeError> {

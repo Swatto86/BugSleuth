@@ -8,11 +8,16 @@
 //! in the prompt and the reply validated afterwards, which is strictly weaker —
 //! expect a higher rate of malformed replies from this vendor than the others.
 //!
-//! **No read-only mode.** Codex has `--sandbox read-only` and Claude has a tool
-//! allowlist. Kilo's permissions come from the *user's own global config*, and
-//! on the machine this was written against both candidate agents (`ask` and
-//! `plan`) were configured to allow everything. There is no per-invocation flag
-//! that overrides it.
+//! **No read-only flag.** Codex has `--sandbox read-only` and Claude has a tool
+//! allowlist, both passed per invocation. Kilo's permissions come from the
+//! *user's own global config*, and no flag overrides it — `--auto` and
+//! `--dangerously-skip-permissions` only loosen.
+//!
+//! That is a difference in *where* the limit lives, not whether one exists.
+//! Measured against the CLI: `--auto` overrides `ask` but never `deny`, so the
+//! `ask` agent's rules do hold during a sweep. What no config can supply is the
+//! network, so [`preflight`] refuses a sweep unless one is configured to deny
+//! it, and the check demands an explicit `deny` — an absent rule fails closed.
 //!
 //! So a Kilo sweep is never pointed at the repository under review. It is given
 //! a throwaway git worktree, which the caller deletes afterwards. That is
@@ -31,6 +36,7 @@ use crate::process::{self, Invocation, preview};
 mod apply;
 mod discover;
 mod events;
+pub mod preflight;
 mod repair;
 
 pub use apply::apply;

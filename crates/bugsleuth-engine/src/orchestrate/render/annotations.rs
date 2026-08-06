@@ -236,7 +236,12 @@ fn a_run_that_used_an_unsandboxable_vendor_says_so_in_the_report() {
     };
     let text = with_kilo.to_text();
     assert!(text.contains("Caution:"), "{text}");
-    assert!(text.contains("nothing else"), "{text}");
+    // The whole warning, not a truncation of it: the part a reader needs is
+    // that the limits are their own config's, and can be widened silently.
+    assert!(
+        text.contains(bugsleuth_domain::UNSANDBOXED_VENDOR_WARNING),
+        "{text}"
+    );
 
     // And a run of only sandboxable vendors says nothing, or the caution
     // becomes background noise nobody reads.

@@ -42,21 +42,25 @@ pub const REVIEW_LIMITS: [&str; 5] = [
      defects, which is encouraging and is not a guarantee about yours.",
 ];
 
-/// What cannot be promised about a vendor that has no per-invocation sandbox.
+/// What cannot be promised about a vendor whose limits live in a config file.
 ///
 /// Claude takes a tool allowlist and Codex takes `--sandbox read-only`, so
-/// neither can write or reach the network during a sweep. Kilo has no
-/// equivalent: its permissions come from the user's own global configuration,
-/// and BugSleuth cannot narrow them for one invocation. The throwaway worktree
-/// stops it modifying the repository under review — that is all it stops.
+/// their guarantees hold whatever the machine looks like — BugSleuth passes the
+/// flag itself. Kilo's come from the user's own configuration instead, and that
+/// is the whole difference: the restrictions are real, but they are the user's
+/// to keep. Measured against the CLI rather than assumed: under the sweep's
+/// flags a `deny` rule holds even with `--auto`, which overrides `ask` and not
+/// `deny`, so an edit, a `bash` call, and a read outside the worktree were all
+/// refused. A sweep is refused outright unless the config also denies the
+/// network, since that is the one restriction no flag can impose.
 ///
-/// This matters because the reviewed repository is untrusted input by design.
-/// Text in it can address the agent directly, and an agent whose global
-/// configuration permits file access and network can be told to read something
-/// outside the repository and send it somewhere. Found by BugSleuth reviewing
-/// itself, and stated rather than quietly accepted: the user chooses which
-/// vendors run, so the user is owed the difference between them.
-pub const UNSANDBOXED_VENDOR_WARNING: &str = "This run includes Kilo, which cannot be restricted for a single invocation the way the other vendors can — it runs with whatever permissions your own Kilo configuration grants it. The throwaway checkout stops it modifying the code under review and nothing else. Since the repository being reviewed is untrusted, text inside it can address the agent directly, so only point a Kilo sweep at code you are willing to have an agent with your permissions read.";
+/// What remains is that the guarantee is only as current as that file. Nothing
+/// stops the configuration being widened between runs, and the reviewed
+/// repository is untrusted input by design — text in it can address the agent
+/// directly. Found by BugSleuth reviewing itself, and stated rather than
+/// quietly accepted: the user chooses which vendors run, so the user is owed
+/// the difference between them.
+pub const UNSANDBOXED_VENDOR_WARNING: &str = "This run includes Kilo, whose limits come from your own Kilo configuration rather than from a flag BugSleuth passes. The sweep is refused unless that configuration denies the network, and its `ask` agent is what stops the review writing files or running commands — but widening that configuration widens what a sweep can do, with no warning here. Since the repository being reviewed is untrusted, text inside it can address the agent directly.";
 
 /// What proving does to the machine it runs on, said before it is too late.
 ///
@@ -132,10 +136,14 @@ mod tests {
 
     #[test]
     fn the_unsandboxed_warning_says_what_is_and_is_not_contained() {
-        // The worktree is real containment and easy to over-read. The warning
-        // has to say what it does stop and what it does not.
-        assert!(UNSANDBOXED_VENDOR_WARNING.contains("throwaway checkout"));
-        assert!(UNSANDBOXED_VENDOR_WARNING.contains("nothing else"));
+        // The restrictions are real but they live in the user's own config, so
+        // the warning has to name where they come from, what keeps them honest,
+        // and the fact that widening that config widens the sweep silently.
+        // Naming the source is the point: a reader who thinks BugSleuth imposes
+        // these limits will not think to check whether they still hold.
+        assert!(UNSANDBOXED_VENDOR_WARNING.contains("your own Kilo configuration"));
+        assert!(UNSANDBOXED_VENDOR_WARNING.contains("denies the network"));
+        assert!(UNSANDBOXED_VENDOR_WARNING.contains("no warning here"));
         assert!(UNSANDBOXED_VENDOR_WARNING.contains("untrusted"));
     }
 

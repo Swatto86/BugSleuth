@@ -116,22 +116,30 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         rejected: vec![],
     };
 
-    // Kilo has no per-invocation permission restriction: its file, subprocess,
-    // and network access come from the user's global config. A throwaway
-    // worktree keeps a sweep from writing the reviewed checkout, but it does
-    // nothing to stop an auto-approved Kilo process reading credentials
-    // elsewhere or reaching the network — and repository text is attacker
-    // input to the reviewing agent. Fail closed until a Kilo sweep can be run
-    // inside an OS sandbox whose writable filesystem is limited to `reviewed`
-    // and whose network is disabled. Removing `--auto` is not enough on its
-    // own, because Kilo still inherits the globally granted permissions.
-    if vendor == Vendor::Kilo {
-        return not_swept(
-            "Kilo sweeps are disabled because Kilo cannot enforce per-invocation filesystem, \
-             subprocess, and network restrictions; a throwaway worktree protects the checkout \
-             but not the rest of the account"
-                .to_string(),
-        );
+    // Kilo's sweep runs under the globally configured `ask` agent, whose
+    // `deny` rules the CLI honours even under `--auto` — measured against the
+    // real binary with the flags in `kilo::BASE_FLAGS`, not inferred from the
+    // help text, which describes `--auto` as approving everything. What it
+    // actually overrides is `ask`, never `deny`. Under those flags an edit was
+    // refused, `bash` was refused, and a read outside `--dir` was refused by
+    // the `external_directory` rule.
+    //
+    // `webfetch` was **not** refused, so a Kilo sweep can still reach the
+    // network while holding the reviewed repository's text — which is attacker
+    // input. That is the one restriction Kilo cannot be made to enforce here,
+    // so it is the one this check still refuses on, rather than the blanket
+    // refusal that predated the measurement.
+    //
+    // The gate is the user's own config, so verify it rather than trust it: a
+    // machine whose `ask` agent permits the network must not sweep silently.
+    if vendor == Vendor::Kilo
+        && let Some(gap) = kilo::preflight::network_gap()
+    {
+        return not_swept(format!(
+            "Kilo sweeps need the network denied, because a sweep holds the reviewed \
+             repository's text and could send it out: {gap}. Add \"webfetch\": \"deny\" and \
+             \"websearch\": \"deny\" to that agent's permission block."
+        ));
     }
 
     // A vendor that cannot be run read-only gets a throwaway checkout instead.
@@ -321,77 +329,4 @@ pub async fn preflight() -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_bare_model_name_means_claude_so_the_common_case_stays_short() {
-        assert_eq!(Vendor::parse("sonnet"), (Vendor::Claude, "sonnet"));
-    }
-
-    #[test]
-    fn a_vendor_prefix_selects_that_vendor() {
-        assert_eq!(
-            Vendor::parse("codex:gpt-5.6-codex"),
-            (Vendor::Codex, "gpt-5.6-codex")
-        );
-        assert_eq!(Vendor::parse("claude:opus"), (Vendor::Claude, "opus"));
-    }
-
-    #[test]
-    fn kilo_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode() {
-        assert_eq!(
-            Vendor::parse("kilo:anthropic/claude-sonnet-4-5"),
-            (Vendor::Kilo, "anthropic/claude-sonnet-4-5")
-        );
-        assert!(Vendor::Kilo.needs_isolation());
-        assert!(!Vendor::Claude.needs_isolation());
-        assert!(!Vendor::Codex.needs_isolation());
-    }
-
-    #[test]
-    fn only_kilo_needs_the_schema_spelled_out_in_its_prompt() {
-        assert!(!Vendor::Kilo.enforces_schema());
-        assert!(Vendor::Claude.enforces_schema());
-        assert!(Vendor::Codex.enforces_schema());
-    }
-
-    #[tokio::test]
-    async fn kilo_sweeps_are_refused_without_an_enforced_sandbox() {
-        // A Kilo sweep must fail closed before it ever discovers a provider or
-        // builds a worktree: Kilo cannot be confined per-invocation, so running
-        // it against attacker-controlled repository text is unsafe. No Kilo
-        // binary is required for this test — the refusal happens first.
-        let report = run(Request {
-            repo: Path::new("."),
-            lane: Lane::Security,
-            model: "kilo:some/model",
-            scope: None,
-            effort: "",
-            max_turns: 1,
-            timeout: Duration::from_secs(1),
-            api_key: None,
-        })
-        .await;
-
-        match report.status {
-            Status::NotSwept { reason } => {
-                assert!(
-                    reason.contains("cannot enforce per-invocation"),
-                    "unexpected refusal reason: {reason}"
-                );
-            }
-            other => panic!("expected a security refusal, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped() {
-        // Model ids legitimately contain colons, so an unrecognised prefix must
-        // not be swallowed as a vendor.
-        assert_eq!(
-            Vendor::parse("anthropic:claude-opus-5"),
-            (Vendor::Claude, "anthropic:claude-opus-5")
-        );
-    }
-}
+mod tests;
