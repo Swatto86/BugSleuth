@@ -6,6 +6,7 @@ node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
+node a blank row makes the configuration unrunnable, exactly like the engine
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
@@ -13,6 +14,7 @@ node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a class built from a prefix counts as used, not as dead style
+node a failed catalogue load is told to the user rather than swallowed
 node a lane is spelled the same way in the window as in the engine
 node a model listed twice with different passes counts like the engine: max, not sum
 node a model with no id contributes nothing
@@ -95,10 +97,12 @@ node splitting a model spec and rejoining it settles on one spelling
 node the README still promises a single file that runs with nothing installed
 node the README's download table names assets the workflow builds
 node the advertised cap and the enforced cap are the same number
+node the clearing flag is set before the clear and released on both outcomes
 node the documentation does not point at files that no longer exist
 node the frontend actually calls into Rust, so this test is not vacuous
 node the precise scan sees each of the three ways a class is set
 node the proof cap is the same number in the window, the markup and Rust
+node the quit guard consults the clearing state, like the tray does
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
@@ -409,6 +413,7 @@ rust plan::effort_gate_tests::the_sweep_command_checks_effort_the_same_way_run_d
 rust plan::tests::a_bare_model_name_is_treated_as_the_claude_vendor_for_batching
 rust plan::tests::a_configuration_that_would_run_nothing_is_an_error_not_an_empty_report
 rust plan::tests::a_fully_covered_run_reports_no_gaps
+rust plan::tests::a_huge_pass_count_is_refused_rather_than_enumerated_forever
 rust plan::tests::a_lane_with_no_model_is_reported_rather_than_quietly_omitted
 rust plan::tests::a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed
 rust plan::tests::an_effort_the_vendor_does_not_accept_is_refused_before_anything_is_paid_for
@@ -506,6 +511,8 @@ rust worktree::tests::a_long_label_is_truncated_rather_than_producing_an_unusabl
 rust worktree::tests::a_path_that_already_has_the_prefix_is_not_given_a_second_one
 rust worktree::tests::a_second_worktree_for_one_label_does_not_destroy_the_first
 rust worktree::tests::a_worktree_of_this_repository_is_actually_created
+rust worktree::tests::changed_files_reports_the_new_name_of_a_rename_not_the_arrow_string
+rust worktree::tests::committed_content_under_the_worktree_container_is_never_deleted
 rust worktree::tests::creating_a_worktree_outside_a_git_repository_is_refused
 rust worktree::tests::dropping_a_worktree_deletes_it_even_with_deeply_nested_build_output
 rust worktree::tests::worktree_creation_refuses_a_linked_container_without_deleting_its_target
