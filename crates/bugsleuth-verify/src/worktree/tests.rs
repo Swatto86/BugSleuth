@@ -196,6 +196,39 @@ fn committed_content_under_the_worktree_container_is_never_deleted() {
     let _ = std::fs::remove_dir_all(long_path(&repo));
 }
 
+/// A renamed file must be reported as the name that exists, not as the raw
+/// porcelain `old -> new` string, which is not a path and locates nothing.
+#[test]
+fn changed_files_reports_the_new_name_of_a_rename_not_the_arrow_string() {
+    let Some(repo) = temp_repo("rename") else {
+        // No usable git here; the pure-logic tests still cover the rest.
+        return;
+    };
+    let Ok(worktree) = Worktree::create(&repo, "HEAD", "correctness") else {
+        let _ = std::fs::remove_dir_all(long_path(&repo));
+        return;
+    };
+    // a.txt is committed by temp_repo, so a rename shows as `R  a.txt -> b.txt`.
+    if git(worktree.path(), &["mv", "a.txt", "b.txt"]).is_err() {
+        let _ = std::fs::remove_dir_all(long_path(&repo));
+        return;
+    }
+
+    let changed = worktree.changed_files().unwrap_or_default();
+    assert_eq!(
+        changed,
+        ["b.txt"],
+        "a rename was not decoded to the name that exists",
+    );
+    assert!(
+        !changed.iter().any(|name| name.contains(" -> ")),
+        "the raw porcelain arrow string leaked into the changed-file list: {changed:?}",
+    );
+
+    drop(worktree);
+    let _ = std::fs::remove_dir_all(long_path(&repo));
+}
+
 #[test]
 fn creating_a_worktree_outside_a_git_repository_is_refused() {
     let not_a_repo = std::env::temp_dir().join("bugsleuth-not-a-repo");

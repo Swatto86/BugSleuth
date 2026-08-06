@@ -118,7 +118,13 @@ impl Worktree {
         Ok(out
             .lines()
             .filter_map(|line| line.get(3..))
-            .map(|name| name.trim().replace('\\', "/"))
+            .map(|name| {
+                // A rename is reported as `old -> new`; the new name is the one
+                // that exists. Same decoding as `dirty_files` in
+                // crates/bugsleuth-engine/src/apply/observed.rs.
+                let name = name.rsplit(" -> ").next().unwrap_or(name);
+                name.trim().trim_matches('"').replace('\\', "/")
+            })
             .filter(|name| !name.is_empty())
             .collect())
     }
