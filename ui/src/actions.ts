@@ -43,6 +43,13 @@ export function bindGuardedActions(deps: ActionDeps): void {
     return found as T;
   };
 
+  // The frontend's own view of a clear_saved invoke in flight. The backend
+  // counts clearing as work that must not be killed silently (tray.rs), but the
+  // window had no matching state, so a quit during a delete — window Quit or the
+  // tray's, which routes through this window — exited mid-`remove_dir_all` with
+  // no warning, leaving the runs directory half-deleted.
+  let clearing = false;
+
   for (const name of ["cheap", "balanced", "deep"] as Preset[]) {
     el<HTMLButtonElement>(`preset-${name}`).addEventListener("click", () => {
       // A preset replaces the whole matrix. Sitting beside "Add model", it is
@@ -91,10 +98,15 @@ export function bindGuardedActions(deps: ActionDeps): void {
       destructive: true,
     }).then((yes) => {
       if (!yes) return;
+      // Flagged for the whole delete, so a quit while it runs is warned about
+      // rather than exiting mid-delete. Cleared on both outcomes below — a flag
+      // left set on either path would warn about a clear that had finished.
+      clearing = true;
       invoke<{ removed: number }>("clear_saved", {
         settings: deps.settings(),
       })
         .then((cleared) => {
+          clearing = false;
           // The prompt this panel would apply has just been deleted, so the
           // button would fail with "run a review first". Offering a control
           // that cannot work is the defect this app exists to find.
@@ -107,6 +119,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
           );
         })
         .catch((error: unknown) => {
+          clearing = false;
           // Silence here would read as "cleared", and the next run would then
           // quietly reuse everything this was meant to remove.
           deps.setStatus(
@@ -177,24 +190,34 @@ export function bindGuardedActions(deps: ActionDeps): void {
   }
 
   function askBeforeQuitting(): void {
-    if (!isRunning() && !isApplying()) {
+    if (!isRunning() && !isApplying() && !clearing) {
       requestQuit();
       return;
     }
-    // Applying is the worse of the two to kill and used to go unwarned: a run
-    // loses sweeps that can be paid for again, while an apply is killed
-    // part-way through editing the repository, and nobody is left to say which
-    // files it had already changed.
+    // Applying is the worse of the three to kill and used to go unwarned: a run
+    // loses sweeps that can be paid for again, an apply is killed part-way
+    // through editing the repository with nobody left to say which files it had
+    // already changed, and a clear is killed part-way through deleting the saved
+    // sweeps, leaving some removed and some not.
     const applying = isApplying();
+    const running = isRunning();
     void confirmDialog({
-      title: applying ? "Fixes are being applied" : "A review is running",
+      title: applying
+        ? "Fixes are being applied"
+        : running
+          ? "A review is running"
+          : "Saved sweeps are being cleared",
       message: applying
         ? "Quitting kills the model part-way through editing this repository. " +
           "Some files may already have changed and nothing will be left to say " +
           "which — check `git status` afterwards."
-        : "Quitting abandons it. Every sweep not yet written to disk is lost, " +
-          "along with the subscription quota it cost. Stop the review instead " +
-          "if you want to keep what has finished.",
+        : running
+          ? "Quitting abandons it. Every sweep not yet written to disk is lost, " +
+            "along with the subscription quota it cost. Stop the review instead " +
+            "if you want to keep what has finished."
+          : "Quitting part-way through deleting the saved sweeps would leave " +
+            "some removed and some not, and it cannot be undone. Let it finish " +
+            "first.",
       confirmLabel: "Quit anyway",
       destructive: true,
     }).then((yes) => {
