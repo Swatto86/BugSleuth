@@ -93,6 +93,10 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
         binary: invocation.binary.to_string(),
         source,
     })?;
+    // Declared *after* `child`, so it runs first when this function unwinds: a
+    // tree can only be walked from a process that is still alive, and dropping
+    // `child` kills the one at the top of it.
+    let mut tree = KillTree(child.id());
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -130,6 +134,9 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
                 what: invocation.what.to_string(),
                 source,
             })?;
+            // Reaped, so the pid is finished with. Anything still answering to
+            // it belongs to whoever the OS gave it to next.
+            tree.disarm();
             // A prompt that never arrived is not a sweep. Reported as a failed
             // invocation, which the caller already renders as NOT SWEPT with a
             // reason, rather than as an answer to a question never asked.
@@ -144,6 +151,9 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
             })
         }
         Err(_) => {
+            // The tree first, then the process at the top of it: `start_kill`
+            // on its own leaves the CLI and everything the CLI started running.
+            tree.fire();
             let _ = child.start_kill();
             Err(ProcessError::Timeout {
                 what: invocation.what.to_string(),
@@ -153,6 +163,81 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
     }
 }
 
+/// Kills a spawned process *and everything it started*, however this function
+/// leaves — timeout, cancellation, or an error on the way out.
+///
+/// `Child::kill` and `kill_on_drop` reach only the process we spawned, which on
+/// Windows is the `cmd.exe` running an npm shim: the CLI doing the work is two
+/// levels below it. Measured on 2026-08-06 — a sweep killed at its 45s timeout
+/// left `kilo.exe` and two language servers running seven minutes later, holding
+/// open the throwaway worktree the caller then tries to delete.
+///
+/// Armed only while the child might still be running. A pid the OS has already
+/// reaped can have been handed to somebody else by the time this fires, and
+/// killing a stranger's process tree is a worse bug than the one being fixed.
+struct KillTree(Option<u32>);
+
+impl KillTree {
+    /// Kill now, and not again.
+    fn fire(&mut self) {
+        if let Some(pid) = self.0.take() {
+            kill_tree(pid);
+        }
+    }
+
+    /// The child has been reaped; its pid is no longer ours to signal.
+    fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for KillTree {
+    fn drop(&mut self) {
+        self.fire();
+    }
+}
+
+/// `taskkill /T` walks the process tree downwards from `pid`, so `pid` has to be
+/// alive when it runs — killing the direct child first orphans the rest and
+/// leaves nothing to walk from.
+///
+/// The platform's own tool rather than a job object because this workspace
+/// forbids `unsafe`, and a job object cannot be created without FFI.
+///
+/// **Waited on, not spawned.** Fire-and-forget loses the race it exists to win:
+/// the caller kills the child immediately afterwards, `taskkill` then finds
+/// nothing at that pid, and the tree below it survives — which is what the test
+/// for this caught. A blocking wait of a few tens of milliseconds is the price,
+/// paid only when something is being killed. `std` rather than `tokio` because
+/// this is called from `Drop` too, where there is nothing to await with.
+#[cfg(windows)]
+fn kill_tree(pid: u32) {
+    use std::os::windows::process::CommandExt;
+
+    let _ = std::process::Command::new("taskkill")
+        .args(["/T", "/F", "/PID", &pid.to_string()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .status();
+}
+
+/// Nothing to do: every other platform is handed the CLI's own executable to
+/// spawn, so the direct kill already reaches it — there is no shell shim in
+/// between. ponytail: a CLI that spawns helpers of its own can still leak them
+/// here; the fix is a process group per child, which costs Ctrl-C reaching the
+/// child from a terminal.
+#[cfg(not(windows))]
+fn kill_tree(_pid: u32) {}
+
+/// Windows' "start this console program without a console window".
+///
+/// Named rather than written as a bare hex literal because `0x0800_0000` at a
+/// call site means nothing to the next reader.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Keep a console CLI from opening a window of its own.
 ///
 /// Every provider here is a console program, and Windows gives a console program
@@ -160,14 +245,10 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
 /// black window on the user's desktop. A run is a dozen sweeps, so without this
 /// the desktop app flashes a dozen console windows over whatever the user is
 /// doing. Observed during a real run: a `conhost.exe` sitting under the CLI child.
-///
-/// `CREATE_NO_WINDOW`. Named rather than written as a bare hex literal because
-/// `0x0800_0000` at a call site means nothing to the next reader.
 #[cfg(windows)]
 fn no_console_window(command: &mut Command) {
     // `tokio::process::Command` carries `creation_flags` itself on Windows, so
     // unlike the `std` variant in `bugsleuth-verify` this needs no extension trait.
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     command.creation_flags(CREATE_NO_WINDOW);
 }
 
@@ -204,117 +285,4 @@ pub fn preview(s: &str, max_chars: usize) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn shell() -> (&'static str, Vec<String>) {
-        if cfg!(windows) {
-            ("cmd.exe", vec!["/C".into()])
-        } else {
-            ("/bin/sh", vec!["-c".into()])
-        }
-    }
-
-    #[tokio::test]
-    async fn captures_stdout_and_a_zero_exit_code() {
-        let (binary, mut args) = shell();
-        args.push("echo hello".into());
-        let output = run(Invocation {
-            binary,
-            args: &args,
-            cwd: Path::new("."),
-            stdin: None,
-            env: &[],
-            timeout: Duration::from_secs(30),
-            what: "test",
-        })
-        .await;
-        let output = output.unwrap_or_else(|e| panic!("spawn failed: {e}"));
-        assert!(output.succeeded(), "expected success, got {output:?}");
-        assert!(
-            output.stdout.contains("hello"),
-            "stdout was {:?}",
-            output.stdout
-        );
-    }
-
-    #[tokio::test]
-    async fn reports_a_nonzero_exit_code_rather_than_erroring() {
-        let (binary, mut args) = shell();
-        args.push("exit 3".into());
-        let output = run(Invocation {
-            binary,
-            args: &args,
-            cwd: Path::new("."),
-            stdin: None,
-            env: &[],
-            timeout: Duration::from_secs(30),
-            what: "test",
-        })
-        .await;
-        let output = output.unwrap_or_else(|e| panic!("spawn failed: {e}"));
-        assert_eq!(output.code, Some(3));
-        assert!(!output.succeeded());
-    }
-
-    #[tokio::test]
-    async fn kills_a_child_that_outlives_its_timeout() {
-        let (binary, mut args) = shell();
-        // Both shells understand a long-running ping loopback wait on Windows;
-        // sleep elsewhere.
-        args.push(if cfg!(windows) {
-            "ping -n 30 127.0.0.1 >NUL".into()
-        } else {
-            "sleep 30".to_string()
-        });
-        let result = run(Invocation {
-            binary,
-            args: &args,
-            cwd: Path::new("."),
-            stdin: None,
-            env: &[],
-            timeout: Duration::from_millis(400),
-            what: "slow test",
-        })
-        .await;
-        assert!(
-            matches!(result, Err(ProcessError::Timeout { .. })),
-            "expected a timeout, got {result:?}"
-        );
-    }
-}
-
-#[cfg(test)]
-mod prompt_delivery_tests {
-    /// A prompt that never reached the child must not be reported as a sweep.
-    ///
-    /// The defect: `let _ = stdin.write_all(&bytes).await`. A failed write was
-    /// discarded, so a truncated or empty prompt looked exactly like a normal
-    /// run — the model answered whatever it had received, possibly nothing, and
-    /// that was presented as a review of the code.
-    ///
-    /// **Structural, and honest about it.** The behavioural version needs a
-    /// child that closes stdin mid-write, which is a race rather than a test.
-    /// What can be checked deterministically is that the result is still
-    /// consumed: the fix was shipped claiming a test it did not have, which an
-    /// independent audit found by reverting it and watching every existing test
-    /// pass. This is the assertion that would have failed.
-    #[test]
-    fn the_result_of_writing_the_prompt_is_still_consumed() {
-        let source = include_str!("process.rs");
-        let code = source
-            .split_once("#[cfg(test)]")
-            .map_or(source, |(before, _)| before);
-
-        assert!(
-            !code.contains("let _ = stdin.write_all"),
-            "the prompt write is discarded again, so a prompt that never arrived \
-             would be reported as a completed sweep"
-        );
-        assert!(
-            code.contains("fed.map_err"),
-            "nothing consumes the outcome of writing the prompt, so a failed \
-             write cannot become a failed invocation"
-        );
-    }
-}
+mod tests;

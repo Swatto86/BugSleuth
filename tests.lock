@@ -462,10 +462,12 @@ rust plan::tests::every_effort_the_vendor_documents_is_accepted
 rust plan::tests::no_two_sweeps_of_the_same_vendor_share_a_batch
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
-rust process::prompt_delivery_tests::the_result_of_writing_the_prompt_is_still_consumed
+rust process::tests::a_timeout_kills_what_the_child_started_and_not_only_the_child
+rust process::tests::abandoning_the_call_kills_the_tree_rather_than_just_the_child
 rust process::tests::captures_stdout_and_a_zero_exit_code
 rust process::tests::kills_a_child_that_outlives_its_timeout
 rust process::tests::reports_a_nonzero_exit_code_rather_than_erroring
+rust process::tests::the_result_of_writing_the_prompt_is_still_consumed
 rust proof::tests::only_a_clean_proof_counts_as_proof
 rust proof::tests::the_schema_required_set_builds_a_claim
 rust prove::judge::tests::a_broken_build_is_not_a_demonstrated_defect
