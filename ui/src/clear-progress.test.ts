@@ -45,17 +45,17 @@ function clearHandlerText(source: ts.SourceFile): string | undefined {
       ts.isIdentifier(node.expression) &&
       node.expression.text === "ui" &&
       ts.isIdentifier(node.name) &&
-      node.name.text === "clearSaved" &&
-      node.parent &&
-      ts.isPropertyAccessExpression(node.parent) &&
-      ts.isIdentifier(node.parent.name) &&
-      node.parent.name.text === "addEventListener" &&
-      node.parent.parent &&
-      ts.isCallExpression(node.parent.parent) &&
-      node.parent.parent.arguments.length >= 2 &&
-      ts.isArrowFunction(node.parent.parent.arguments[1])
+      node.name.text === "clearSaved"
     ) {
-      found = node.parent.parent.arguments[1].getText();
+      const parent = node.parent;
+      if (!parent || !ts.isPropertyAccessExpression(parent)) return;
+      const grandparent = parent.parent;
+      if (grandparent && ts.isCallExpression(grandparent)) {
+        const handler = grandparent.arguments[1];
+        if (handler && ts.isArrowFunction(handler)) {
+          found = handler.getText();
+        }
+      }
     }
     node.forEachChild(walk);
   };

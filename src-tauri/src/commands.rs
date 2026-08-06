@@ -134,7 +134,8 @@ mod tests {
     fn a_real_directory_resolves_without_the_extended_length_prefix() {
         // git rejects the \\?\ form that canonicalize produces on Windows, and
         // every worktree operation would fail on it.
-        let resolved = checked_repo(".").expect("checked_repo should resolve the current directory");
+        let resolved =
+            checked_repo(".").expect("checked_repo should resolve the current directory");
         assert!(!resolved.to_string_lossy().starts_with(r"\\?\"));
     }
 

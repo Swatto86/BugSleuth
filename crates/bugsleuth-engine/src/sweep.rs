@@ -95,11 +95,63 @@ pub struct Request<'a> {
     pub api_key: Option<&'a str>,
 }
 
+/// Run the vendor sweep against the already-isolated directory.
+async fn invoke_vendor(
+    vendor: Vendor,
+    reviewed: &Path,
+    request: &Request<'_>,
+    brief: &str,
+) -> Result<(Vec<RawFinding>, Option<u32>, bool, Option<String>), bugsleuth_provider::ProviderError>
+{
+    match vendor {
+        Vendor::Claude => claude::sweep(ClaudeSweep {
+            repo: reviewed,
+            lane: request.lane,
+            model: request.model,
+            effort: request.effort,
+            brief,
+            timeout: request.timeout,
+            max_turns: request.max_turns,
+            binary: None,
+            api_key: request.api_key,
+        })
+        .await
+        .map(|r| {
+            (
+                r.findings.findings,
+                r.turns,
+                r.salvaged,
+                r.usage.map(|u| u.to_text()),
+            )
+        }),
+        Vendor::Codex => codex::sweep(CodexSweep {
+            repo: reviewed,
+            model: request.model,
+            effort: request.effort,
+            brief,
+            timeout: request.timeout,
+            binary: None,
+        })
+        .await
+        .map(|r| (r.findings.findings, None, false, None)),
+        Vendor::Kilo => kilo::sweep(KiloSweep {
+            worktree: reviewed,
+            model: request.model,
+            effort: request.effort,
+            brief,
+            timeout: request.timeout,
+            binary: None,
+        })
+        .await
+        .map(|r| (r.findings.findings, None, false, None)),
+    }
+}
+
 /// Run the sweep. Never returns an error for a failed sweep — a failure is a
 /// *reported state*, because the one outcome this tool must never produce is a
 /// lane that quietly looks clean when it never ran.
 pub async fn run(request: Request<'_>) -> LaneReport {
-    let (vendor, model) = Vendor::parse(request.model);
+    let vendor = Vendor::parse(request.model).0;
     let model_label = resolved_label(request.model);
     let brief = brief::build(request.lane, request.scope, vendor.enforces_schema());
     // Recorded before anything runs, so even a failed sweep says what tree it
@@ -114,6 +166,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         status: Status::NotSwept { reason },
         findings: vec![],
         rejected: vec![],
+        usage: None,
     };
 
     // Kilo's sweep runs under the globally configured `ask` agent, whose
@@ -172,43 +225,9 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         .as_ref()
         .map_or(request.repo, |worktree| worktree.path());
 
-    let outcome = match vendor {
-        Vendor::Claude => claude::sweep(ClaudeSweep {
-            repo: reviewed,
-            lane: request.lane,
-            model,
-            effort: request.effort,
-            brief: &brief,
-            timeout: request.timeout,
-            max_turns: request.max_turns,
-            binary: None,
-            api_key: request.api_key,
-        })
-        .await
-        .map(|r| (r.findings.findings, r.turns, r.salvaged)),
-        Vendor::Codex => codex::sweep(CodexSweep {
-            repo: reviewed,
-            model,
-            effort: request.effort,
-            brief: &brief,
-            timeout: request.timeout,
-            binary: None,
-        })
-        .await
-        .map(|r| (r.findings.findings, None, false)),
-        Vendor::Kilo => kilo::sweep(KiloSweep {
-            worktree: reviewed,
-            model,
-            effort: request.effort,
-            brief: &brief,
-            timeout: request.timeout,
-            binary: None,
-        })
-        .await
-        .map(|r| (r.findings.findings, None, false)),
-    };
+    let outcome = invoke_vendor(vendor, reviewed, &request, &brief).await;
 
-    let (raw, turns, salvaged) = match outcome {
+    let (raw, turns, salvaged, usage) = match outcome {
         Ok(outcome) => outcome,
         Err(error) => return not_swept(error.to_string()),
     };
@@ -223,6 +242,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         status: Status::Swept { turns, salvaged },
         findings,
         rejected,
+        usage,
     }
 }
 

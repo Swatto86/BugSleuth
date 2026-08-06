@@ -149,7 +149,11 @@ impl Merged {
         // against a different checkout and condemned as fabricated, because
         // nothing said which tree they described.
         if self.commits.len() > 1 {
-            let short: Vec<String> = self.commits.iter().map(|c| c.chars().take(9).collect()).collect();
+            let short: Vec<String> = self
+                .commits
+                .iter()
+                .map(|c| c.chars().take(9).collect())
+                .collect();
             out.push_str(&format!(
                 "\n  WARNING: these sweeps reviewed {} different commits ({}). The merged\n  \
                  list spans two versions of the code; a finding may cite code that only\n  \

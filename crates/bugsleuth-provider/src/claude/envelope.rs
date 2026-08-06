@@ -27,6 +27,18 @@ pub struct Usage {
     pub cache_read_input_tokens: u64,
 }
 
+impl Usage {
+    pub fn to_text(&self) -> String {
+        format!(
+            "input_tokens={}, output_tokens={}, cache_creation_input_tokens={}, cache_read_input_tokens={}",
+            self.input_tokens,
+            self.output_tokens,
+            self.cache_creation_input_tokens,
+            self.cache_read_input_tokens
+        )
+    }
+}
+
 /// Whatever the CLI said about a failure, from its own envelope on stdout.
 ///
 /// Used only when the process exited non-zero and said nothing on stderr. The
@@ -157,5 +169,20 @@ mod tests {
     fn any_other_envelope_error_is_still_an_ordinary_failure() {
         let stdout = r#"{"is_error":true,"subtype":"error_during_execution","result":"boom"}"#;
         assert!(matches!(parse(stdout), Err(ProviderError::Failed { .. })));
+    }
+
+    #[test]
+    fn usage_token_counts_are_surfaced_as_text() {
+        let usage = Usage {
+            input_tokens: 50_000,
+            output_tokens: 5_000,
+            cache_creation_input_tokens: 1_000,
+            cache_read_input_tokens: 2_000,
+        };
+        let text = usage.to_text();
+        assert!(text.contains("input_tokens=50000"), "{text}");
+        assert!(text.contains("output_tokens=5000"), "{text}");
+        assert!(text.contains("cache_creation_input_tokens=1000"), "{text}");
+        assert!(text.contains("cache_read_input_tokens=2000"), "{text}");
     }
 }

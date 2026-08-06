@@ -40,6 +40,11 @@ pub struct LaneReport {
     /// reason. Kept rather than dropped silently: the rate is the headline
     /// measure of whether a model can be trusted.
     pub rejected: Vec<Rejected>,
+    /// Token accounting from the provider, when it reports it. Surfaced in the
+    /// report so a sweep that cost real quota cannot be read as having spent
+    /// nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -92,6 +97,9 @@ impl LaneReport {
                     self.rejected.len(),
                     crate::caveats::salvaged(*salvaged)
                 ));
+                if let Some(usage) = &self.usage {
+                    out.push_str(&format!("  usage: {usage}\n"));
+                }
             }
         }
 
@@ -193,6 +201,7 @@ mod tests {
             },
             findings: vec![],
             rejected: vec![],
+            usage: None,
         };
         let text = report.to_text();
         assert!(text.contains("NOT SWEPT"));
@@ -212,8 +221,29 @@ mod tests {
             },
             findings: vec![],
             rejected: vec![],
+            usage: None,
         };
         assert!(report.to_text().contains("No verified findings"));
+    }
+
+    #[test]
+    fn a_swept_lane_reports_usage_when_it_is_known() {
+        let report = LaneReport {
+            lane: "Security".into(),
+            model: "claude:sonnet".into(),
+            commit: None,
+            scope: None,
+            status: Status::Swept {
+                turns: Some(4),
+                salvaged: false,
+            },
+            findings: vec![],
+            rejected: vec![],
+            usage: Some("input_tokens=50000, output_tokens=5000, cache_creation_input_tokens=1000, cache_read_input_tokens=2000".into()),
+        };
+        let text = report.to_text();
+        assert!(text.contains("usage:"), "{text}");
+        assert!(text.contains("input_tokens=50000"), "{text}");
     }
 
     #[test]
@@ -248,6 +278,7 @@ mod salvaged_tests {
             },
             findings: vec![],
             rejected: vec![],
+            usage: None,
         }
     }
 

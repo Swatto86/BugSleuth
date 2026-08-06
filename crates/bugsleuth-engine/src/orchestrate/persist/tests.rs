@@ -85,6 +85,7 @@ fn every_sweep_writes_to_its_own_file() {
         },
         findings: vec![],
         rejected: vec![],
+        usage: None,
     };
     let dir = std::env::temp_dir()
         .join("bugsleuth-orchestrate-tests")
@@ -135,6 +136,7 @@ fn lane_report(status: Status) -> LaneReport {
         status,
         findings: vec![],
         rejected: vec![],
+        usage: None,
     }
 }
 
