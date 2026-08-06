@@ -20,6 +20,16 @@ fn repo(name: &str, files: &[(&str, usize)]) -> std::path::PathBuf {
     dir
 }
 
+#[cfg(unix)]
+fn symlink_file(original: &std::path::Path, link: &std::path::Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(original, link)
+}
+
+#[cfg(windows)]
+fn symlink_file(original: &std::path::Path, link: &std::path::Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_file(original, link)
+}
+
 #[test]
 fn a_documentation_file_larger_than_the_code_is_named() {
     // OnTop, in miniature: a teaching book beside a small crate.
@@ -157,5 +167,32 @@ fn a_lockfile_is_not_named() {
         bulk.other,
         108 * 1024,
         "the lockfile was counted in the total"
+    );
+}
+
+#[test]
+fn a_symlink_to_a_file_outside_the_repository_is_not_counted() {
+    // A reviewed repository can contain a symlink that points outside the tree.
+    // `walk` must not follow it or its target's size would inflate the report.
+    let dir = repo("symlink", &[("src/lib.rs", 10_000)]);
+    let outside = dir.with_extension("outside-file");
+    std::fs::write(&outside, "x".repeat(100_000)).expect("write outside target");
+
+    let link = dir.join("link.md");
+    if let Err(e) = symlink_file(&outside, &link) {
+        eprintln!("skipping symlink test: {e}");
+        return;
+    }
+
+    let bulk = measure(&dir);
+
+    assert_eq!(
+        bulk.other, 0,
+        "the symlinked file outside the repo must not be counted: other={}",
+        bulk.other
+    );
+    assert!(
+        !link.exists() || !bulk.heavy.iter().any(|(p, _)| p == "link.md"),
+        "the symlinked path must not be named in the warning"
     );
 }

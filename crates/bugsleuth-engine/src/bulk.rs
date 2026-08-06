@@ -93,11 +93,17 @@ fn walk(root: &Path, dir: &Path, bulk: &mut Bulk) {
         return;
     };
     for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
         let path = entry.path();
         let name = entry.file_name();
         let name = name.to_string_lossy();
 
-        if path.is_dir() {
+        if file_type.is_dir() {
             if !SKIP.contains(&name.as_ref()) && !name.starts_with('.') {
                 walk(root, &path, bulk);
             }
@@ -108,24 +114,25 @@ fn walk(root: &Path, dir: &Path, bulk: &mut Bulk) {
             continue;
         }
 
-        let Ok(meta) = entry.metadata() else { continue };
-        let size = meta.len();
-        let extension = path
-            .extension()
-            .map(|e| e.to_string_lossy().to_lowercase())
-            .unwrap_or_default();
+        if let Ok(meta) = std::fs::symlink_metadata(&path) {
+            let size = meta.len();
+            let extension = path
+                .extension()
+                .map(|e| e.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
 
-        if CODE.contains(&extension.as_str()) {
-            bulk.code += size;
-        } else {
-            bulk.other += size;
-            if size >= NOTABLE {
-                let shown = path
-                    .strip_prefix(root)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                bulk.heavy.push((shown, size));
+            if CODE.contains(&extension.as_str()) {
+                bulk.code += size;
+            } else {
+                bulk.other += size;
+                if size >= NOTABLE {
+                    let shown = path
+                        .strip_prefix(root)
+                        .unwrap_or(&path)
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    bulk.heavy.push((shown, size));
+                }
             }
         }
     }
