@@ -237,15 +237,6 @@ fn is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
 }
 
 fn remove_orphans(repo: &Path) {
-    let Ok(listing) = git(repo, &["worktree", "list", "--porcelain"]) else {
-        return;
-    };
-    let live: Vec<PathBuf> = listing
-        .lines()
-        .filter_map(|line| line.strip_prefix("worktree "))
-        .map(|path| PathBuf::from(path.trim()))
-        .collect();
-
     let ours = repo.join(".bugsleuth-worktrees");
     let Ok(entries) = std::fs::read_dir(&ours) else {
         return;
@@ -259,12 +250,24 @@ fn remove_orphans(repo: &Path) {
         // spelling of the drive, so a textual comparison would call every live
         // worktree an orphan and delete the lot.
         let canonical = path.canonicalize().ok();
-        let still_live = live.iter().any(|known| {
-            known
-                .canonicalize()
-                .ok()
-                .is_some_and(|k| Some(&k) == canonical.as_ref())
-        });
+        // Liveness is re-checked against a FRESH listing immediately before
+        // deletion. The old code snapshotted the list once up front, so a
+        // worktree another process registered after the snapshot was treated
+        // as wreckage and its live checkout deleted. A listing that cannot be
+        // obtained means "do not delete", not "delete everything".
+        let still_live = git(repo, &["worktree", "list", "--porcelain"])
+            .map(|listing| {
+                listing
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("worktree "))
+                    .any(|known| {
+                        PathBuf::from(known.trim())
+                            .canonicalize()
+                            .ok()
+                            .is_some_and(|k| Some(&k) == canonical.as_ref())
+                    })
+            })
+            .unwrap_or(true);
         if !still_live {
             remove(repo, &path);
         }
