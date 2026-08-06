@@ -93,11 +93,22 @@ pub struct Request<'a> {
     pub max_turns: u32,
     pub timeout: Duration,
     pub api_key: Option<&'a str>,
+    /// Explicit path to the vendor CLI, overriding discovery. `None` in every
+    /// real run; the adapters have always taken one, and without a way to set it
+    /// nothing could check what argv a sweep actually builds.
+    pub binary: Option<&'a str>,
 }
 
 /// Run the vendor sweep against the already-isolated directory.
+///
+/// `model` is the spec with its vendor prefix removed, and is a parameter rather
+/// than read back off `request` for the reason it shipped broken in 0.2.19:
+/// `request.model` is BugSleuth's own `vendor:model` notation, which no CLI
+/// knows. Every Kilo and Codex sweep of that release was refused with
+/// `Model not found: kilo:kilo/...` before it read a line of code.
 async fn invoke_vendor(
     vendor: Vendor,
+    model: &str,
     reviewed: &Path,
     request: &Request<'_>,
     brief: &str,
@@ -107,12 +118,12 @@ async fn invoke_vendor(
         Vendor::Claude => claude::sweep(ClaudeSweep {
             repo: reviewed,
             lane: request.lane,
-            model: request.model,
+            model,
             effort: request.effort,
             brief,
             timeout: request.timeout,
             max_turns: request.max_turns,
-            binary: None,
+            binary: request.binary,
             api_key: request.api_key,
         })
         .await
@@ -126,21 +137,21 @@ async fn invoke_vendor(
         }),
         Vendor::Codex => codex::sweep(CodexSweep {
             repo: reviewed,
-            model: request.model,
+            model,
             effort: request.effort,
             brief,
             timeout: request.timeout,
-            binary: None,
+            binary: request.binary,
         })
         .await
         .map(|r| (r.findings.findings, None, false, None)),
         Vendor::Kilo => kilo::sweep(KiloSweep {
             worktree: reviewed,
-            model: request.model,
+            model,
             effort: request.effort,
             brief,
             timeout: request.timeout,
-            binary: None,
+            binary: request.binary,
         })
         .await
         .map(|r| (r.findings.findings, None, false, None)),
@@ -151,7 +162,10 @@ async fn invoke_vendor(
 /// *reported state*, because the one outcome this tool must never produce is a
 /// lane that quietly looks clean when it never ran.
 pub async fn run(request: Request<'_>) -> LaneReport {
-    let vendor = Vendor::parse(request.model).0;
+    // Both halves are used: the vendor picks the adapter, and the model is what
+    // that adapter passes to its CLI. Taking only the vendor and handing the
+    // whole spec on is the 0.2.19 regression — see [`invoke_vendor`].
+    let (vendor, model) = Vendor::parse(request.model);
     let model_label = resolved_label(request.model);
     let brief = brief::build(request.lane, request.scope, vendor.enforces_schema());
     // Recorded before anything runs, so even a failed sweep says what tree it
@@ -225,7 +239,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         .as_ref()
         .map_or(request.repo, |worktree| worktree.path());
 
-    let outcome = invoke_vendor(vendor, reviewed, &request, &brief).await;
+    let outcome = invoke_vendor(vendor, model, reviewed, &request, &brief).await;
 
     let (raw, turns, salvaged, usage) = match outcome {
         Ok(outcome) => outcome,

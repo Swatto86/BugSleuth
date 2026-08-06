@@ -258,6 +258,7 @@ async fn run_sweep(args: SweepArgs) -> Result<()> {
         max_turns: args.max_turns,
         timeout: Duration::from_secs(args.timeout_secs),
         api_key: api_key.as_deref(),
+        binary: None,
     })
     .await;
 

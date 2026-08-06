@@ -41,6 +41,7 @@ pub(super) async fn run_batch(
                 max_turns,
                 timeout,
                 api_key: api_key.as_deref(),
+                binary: None,
             })
             .await;
 
