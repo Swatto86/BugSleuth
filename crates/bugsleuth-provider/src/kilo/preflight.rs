@@ -60,6 +60,80 @@ pub fn network_gap() -> Option<String> {
     gap_in(&config_paths())
 }
 
+/// JSONC with its comments blanked out, so `serde_json` can parse it.
+///
+/// The file is named `.jsonc` and Kilo accepts comments in it, but
+/// `serde_json` rejects them — so a perfectly valid config that denies the
+/// network would be skipped, and the sweep refused with "no readable Kilo
+/// config". Found by BugSleuth reviewing this very function.
+///
+/// Must be string-aware rather than a plain `//` search: a config with
+/// `"http://localhost:11434/api"` in it — as this machine's does — would
+/// otherwise have the rest of that line eaten and the whole file fail to parse,
+/// turning a working setup into a refusal. Escapes are tracked for the same
+/// reason, so a `\"` inside a string does not appear to end it.
+///
+/// Comments are replaced by spaces rather than removed so byte offsets in any
+/// parse error still line up with the original file. Trailing commas are *not*
+/// handled: they are rarer than comments, and the failure mode is the safe one.
+fn strip_jsonc(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    let mut in_string = false;
+    let mut escaped = false;
+
+    while let Some(c) = chars.next() {
+        if in_string {
+            out.push(c);
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => {
+                in_string = true;
+                out.push(c);
+            }
+            '/' if chars.peek() == Some(&'/') => {
+                // Line comment: blank to the newline, which is kept so line
+                // numbers survive.
+                out.push(' ');
+                out.push(' ');
+                chars.next();
+                for c in chars.by_ref() {
+                    if c == '\n' {
+                        out.push('\n');
+                        break;
+                    }
+                    out.push(' ');
+                }
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                out.push(' ');
+                out.push(' ');
+                chars.next();
+                let mut prev = '\0';
+                for c in chars.by_ref() {
+                    // Newlines inside a block comment are kept, for the same
+                    // reason as above.
+                    out.push(if c == '\n' { '\n' } else { ' ' });
+                    if prev == '*' && c == '/' {
+                        break;
+                    }
+                    prev = c;
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// The check itself, over an explicit candidate list.
 ///
 /// Split out so the tests can supply a config rather than mutating the
@@ -68,7 +142,7 @@ pub fn network_gap() -> Option<String> {
 pub(crate) fn gap_in(candidates: &[PathBuf]) -> Option<String> {
     let Some((path, config)) = candidates.iter().find_map(|path| {
         let text = std::fs::read_to_string(path).ok()?;
-        let value: Value = serde_json::from_str(&text).ok()?;
+        let value: Value = serde_json::from_str(&strip_jsonc(&text)).ok()?;
         Some((path, value))
     }) else {
         return Some(
@@ -167,6 +241,73 @@ mod tests {
         let path = dir.join("kilo.jsonc");
         std::fs::write(&path, body).expect("write config");
         path
+    }
+
+    #[test]
+    fn a_commented_config_is_read_rather_than_skipped() {
+        // The file is `.jsonc` and Kilo allows comments, so a config that does
+        // deny the network must not be reported as unreadable.
+        let path = config(
+            "commented",
+            "{\n  // the sweep agent\n  \"agent\": {\n    /* block */\n    \"ask\": {\n      \
+             \"permission\": {\"webfetch\": \"deny\", \"websearch\": \"deny\"}\n    }\n  }\n}",
+        );
+        assert_eq!(gap_in(&[path]), None);
+    }
+
+    #[test]
+    fn a_url_inside_a_string_is_not_mistaken_for_a_comment() {
+        // This machine's own config contains "http://localhost:11434/api". A
+        // naive `//` strip eats the rest of that line, the file stops parsing,
+        // and a working setup is refused as unreadable.
+        let stripped = strip_jsonc(r#"{"baseURL": "http://localhost:11434/api", "x": 1}"#);
+        assert!(
+            stripped.contains("http://localhost:11434/api"),
+            "{stripped}"
+        );
+        let parsed: Value = serde_json::from_str(&stripped).expect("should still parse");
+        assert_eq!(parsed["baseURL"], "http://localhost:11434/api");
+        assert_eq!(parsed["x"], 1);
+    }
+
+    #[test]
+    fn an_escaped_quote_does_not_end_a_string_early() {
+        // Without escape tracking, the `\"` closes the string, the `//` that
+        // follows looks like code rather than text, and the line is eaten.
+        let stripped = strip_jsonc(r#"{"a": "say \" then // not a comment", "b": 2}"#);
+        let parsed: Value = serde_json::from_str(&stripped).expect("should still parse");
+        assert_eq!(parsed["a"], r#"say " then // not a comment"#);
+        assert_eq!(parsed["b"], 2);
+    }
+
+    #[test]
+    fn comments_are_actually_removed() {
+        // The guard against the opposite failure: a strip that did nothing
+        // would still pass the tests above, since they only check what survives.
+        let stripped = strip_jsonc("{\n  // gone\n  \"a\": 1 /* also gone */\n}");
+        assert!(!stripped.contains("gone"), "{stripped}");
+        assert_eq!(
+            serde_json::from_str::<Value>(&stripped).expect("parses")["a"],
+            1
+        );
+    }
+
+    #[test]
+    fn the_real_machine_config_is_readable_when_present() {
+        // The end-to-end case the unit tests cannot cover: whatever is actually
+        // at ~/.config/kilo, this must reach a verdict about the sweep agent
+        // rather than failing to parse. A "no readable config" answer here on a
+        // machine that has one is the bug this function was written for.
+        let candidates = config_paths();
+        if !candidates.iter().any(|p| p.exists()) {
+            return;
+        }
+        if let Some(gap) = gap_in(&candidates) {
+            assert!(
+                !gap.contains("no readable Kilo config"),
+                "a config exists but could not be parsed: {gap}"
+            );
+        }
     }
 
     #[test]

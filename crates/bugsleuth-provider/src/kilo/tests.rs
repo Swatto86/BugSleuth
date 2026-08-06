@@ -1,0 +1,111 @@
+//! Tests for the Kilo adapter, in their own file only because the module
+//! plus its tests crossed the hard line cap.
+
+use super::*;
+
+#[test]
+fn the_preflight_checks_the_agent_the_sweep_actually_runs_as() {
+    // Not a comparison of two constants — since both sides read
+    // `SWEEP_AGENT`, that would agree by construction and could never fail.
+    // What must hold is that the preflight's *verdict* is about the agent
+    // in the argv: a config hardening only that agent has to pass, and one
+    // hardening only a different agent has to fail. Otherwise the check
+    // could clear `ask` while the sweep ran as something unverified.
+    let args = build_args(&spec("kilo/openai/gpt-5.6-sol"));
+    let agent = args
+        .iter()
+        .position(|a| a == "--agent")
+        .and_then(|i| args.get(i + 1))
+        .expect("a sweep must name an agent")
+        .clone();
+
+    let denied = r#"{"webfetch":"deny","websearch":"deny"}"#;
+    let dir = std::env::temp_dir()
+        .join("bugsleuth-agent-agreement")
+        .join(std::process::id().to_string());
+    let _ = std::fs::create_dir_all(&dir);
+
+    let matching = dir.join("kilo.jsonc");
+    std::fs::write(
+        &matching,
+        format!(r#"{{"agent":{{"{agent}":{{"permission":{denied}}}}}}}"#),
+    )
+    .expect("write config");
+    assert_eq!(
+        preflight::gap_in(&[matching]),
+        None,
+        "hardening the agent the sweep runs as should satisfy the preflight"
+    );
+
+    let other = dir.join("other.jsonc");
+    std::fs::write(
+        &other,
+        format!(r#"{{"agent":{{"not-{agent}":{{"permission":{denied}}}}}}}"#),
+    )
+    .expect("write config");
+    assert!(
+        preflight::gap_in(&[other]).is_some(),
+        "hardening a different agent must not satisfy the preflight"
+    );
+}
+
+fn spec<'a>(model: &'a str) -> KiloSweep<'a> {
+    KiloSweep {
+        effort: "",
+        worktree: Path::new("/tmp/wt"),
+        model,
+        brief: "",
+        timeout: Duration::from_secs(60),
+        binary: None,
+    }
+}
+
+#[test]
+fn the_model_id_says_which_account_a_sweep_will_spend_from() {
+    // The same model reached three ways bills to three different places.
+    assert_eq!(route_of("kilo/z-ai/glm-5"), Route::Gateway);
+    assert_eq!(route_of("openrouter/z-ai/glm-5"), Route::OpenRouter);
+    assert_eq!(route_of("openai/gpt-5"), Route::OpenAi);
+    assert_eq!(route_of("ollama/llama3"), Route::Ollama);
+}
+
+#[test]
+fn an_id_with_no_prefix_leaves_the_choice_to_kilo() {
+    assert_eq!(route_of(""), Route::Configured);
+    assert_eq!(route_of("  "), Route::Configured);
+    assert_eq!(route_of("some-model"), Route::Configured);
+}
+
+#[test]
+fn every_route_can_be_described_to_a_person() {
+    for route in [
+        Route::Gateway,
+        Route::OpenRouter,
+        Route::OpenAi,
+        Route::Ollama,
+        Route::Configured,
+    ] {
+        assert!(!route.describe().is_empty());
+    }
+}
+
+#[test]
+fn external_plugins_are_skipped_so_the_machine_cannot_change_the_review() {
+    assert!(build_args(&spec("")).iter().any(|a| a == "--pure"));
+}
+
+#[test]
+fn the_working_directory_is_pinned_explicitly() {
+    let args = build_args(&spec(""));
+    let dir = args
+        .iter()
+        .position(|a| a == "--dir")
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str);
+    assert_eq!(dir, Some("/tmp/wt"));
+}
+
+#[test]
+fn an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument() {
+    assert!(!build_args(&spec("   ")).iter().any(|a| a == "-m"));
+}

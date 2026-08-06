@@ -219,12 +219,16 @@ pub(crate) const BASE_FLAGS: [&str; 5] = ["run", "--auto", "--pure", "--format",
 
 /// Build the non-interactive argv for a sweep.
 ///
-/// `--agent ask` is the sweep's own addition: it is the read-oriented agent, and
-/// applying fixes deliberately does not pass it.
+/// The agent is the sweep's own addition: it is the read-oriented one, and
+/// applying fixes deliberately does not pass it. It comes from
+/// [`preflight::SWEEP_AGENT`] rather than being written here, because the
+/// preflight verifies *that named agent's* permissions — a literal here could
+/// be changed to another agent while the check kept clearing `ask`, which would
+/// pass while the sweep ran unverified.
 fn build_args(spec: &KiloSweep<'_>) -> Vec<String> {
     let mut args: Vec<String> = BASE_FLAGS
         .iter()
-        .chain(["--agent", "ask"].iter())
+        .chain(["--agent", preflight::SWEEP_AGENT].iter())
         .map(|s| (*s).to_string())
         .collect();
 
@@ -310,7 +314,15 @@ pub async fn signin() -> crate::signin::SignIn {
     // The same flags a sweep uses, so this checks what a sweep would do.
     let args: Vec<String> = BASE_FLAGS
         .iter()
-        .chain(["--agent", "ask", "--dir", &sandbox.to_string_lossy()].iter())
+        .chain(
+            [
+                "--agent",
+                preflight::SWEEP_AGENT,
+                "--dir",
+                &sandbox.to_string_lossy(),
+            ]
+            .iter(),
+        )
         .map(|a| (*a).to_string())
         .collect();
 
@@ -324,67 +336,4 @@ pub async fn signin() -> crate::signin::SignIn {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn spec<'a>(model: &'a str) -> KiloSweep<'a> {
-        KiloSweep {
-            effort: "",
-            worktree: Path::new("/tmp/wt"),
-            model,
-            brief: "",
-            timeout: Duration::from_secs(60),
-            binary: None,
-        }
-    }
-
-    #[test]
-    fn the_model_id_says_which_account_a_sweep_will_spend_from() {
-        // The same model reached three ways bills to three different places.
-        assert_eq!(route_of("kilo/z-ai/glm-5"), Route::Gateway);
-        assert_eq!(route_of("openrouter/z-ai/glm-5"), Route::OpenRouter);
-        assert_eq!(route_of("openai/gpt-5"), Route::OpenAi);
-        assert_eq!(route_of("ollama/llama3"), Route::Ollama);
-    }
-
-    #[test]
-    fn an_id_with_no_prefix_leaves_the_choice_to_kilo() {
-        assert_eq!(route_of(""), Route::Configured);
-        assert_eq!(route_of("  "), Route::Configured);
-        assert_eq!(route_of("some-model"), Route::Configured);
-    }
-
-    #[test]
-    fn every_route_can_be_described_to_a_person() {
-        for route in [
-            Route::Gateway,
-            Route::OpenRouter,
-            Route::OpenAi,
-            Route::Ollama,
-            Route::Configured,
-        ] {
-            assert!(!route.describe().is_empty());
-        }
-    }
-
-    #[test]
-    fn external_plugins_are_skipped_so_the_machine_cannot_change_the_review() {
-        assert!(build_args(&spec("")).iter().any(|a| a == "--pure"));
-    }
-
-    #[test]
-    fn the_working_directory_is_pinned_explicitly() {
-        let args = build_args(&spec(""));
-        let dir = args
-            .iter()
-            .position(|a| a == "--dir")
-            .and_then(|i| args.get(i + 1))
-            .map(String::as_str);
-        assert_eq!(dir, Some("/tmp/wt"));
-    }
-
-    #[test]
-    fn an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument() {
-        assert!(!build_args(&spec("   ")).iter().any(|a| a == "-m"));
-    }
-}
+mod tests;
