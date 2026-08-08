@@ -54,6 +54,12 @@ export async function startRun(deps: RunDeps): Promise<void> {
   // Re-enabled per run: it disables itself once pressed, so a second press
   // cannot arrive while the first is still killing processes.
   deps.stop.disabled = false;
+  // renderPlanSummary above disables the Run button, and in WebView2 disabling
+  // the focused element drops focus to <body> — stranding a keyboard or
+  // screen-reader user at the top of the page, unable to reach the live Stop
+  // control without tabbing through the whole form. Move focus to Stop, which
+  // has just become visible and enabled.
+  deps.stop.focus();
   try {
     await invoke("start_run", { settings: deps.settings() });
   } catch (error) {
