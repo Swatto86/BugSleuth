@@ -26,23 +26,24 @@ pub(super) fn changed_since(repo: &Path, base: &Baseline) -> anyhow::Result<Vec<
         // uncommitted changes to tracked files alike. A git failure here is not
         // "no changes" — a damaged `.git` must never read as a clean tree — so
         // it is propagated rather than swallowed to an empty list.
-        Baseline::Commit(base) => lines(&git(repo, &["diff", "--name-only", base])?),
+        Baseline::Commit(base) => nul_paths(&git(repo, &["diff", "--name-only", "-z", base])?),
         // Started from no commit at all. If the model committed, everything now
         // in HEAD is new against the empty tree the repository began at; if it
         // did not, HEAD is still unborn and only the working-tree scans apply.
         // `range_since` tells those two apart from a broken repository.
         Baseline::Unborn => match range_since(repo, base)? {
             Some(_) => {
-                let mut committed = lines(&git(repo, &["ls-tree", "-r", "--name-only", "HEAD"])?);
-                committed.extend(dirty_files(&git(repo, &["status", "--porcelain"])?));
+                let mut committed =
+                    nul_paths(&git(repo, &["ls-tree", "-r", "--name-only", "-z", "HEAD"])?);
+                committed.extend(dirty_files(&git(repo, &["status", "--porcelain", "-z"])?));
                 committed
             }
-            None => dirty_files(&git(repo, &["status", "--porcelain"])?),
+            None => dirty_files(&git(repo, &["status", "--porcelain", "-z"])?),
         },
     };
-    files.extend(lines(&git(
+    files.extend(nul_paths(&git(
         repo,
-        &["ls-files", "--others", "--exclude-standard"],
+        &["ls-files", "--others", "--exclude-standard", "-z"],
     )?));
     files.sort();
     files.dedup();
@@ -102,27 +103,46 @@ pub(super) fn theirs(files: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-/// The paths in `git status --porcelain` output.
+/// The paths in `git status --porcelain -z` output.
 ///
-/// The status letters occupy the first two columns and a space follows, so the
-/// name starts at column three. A rename is reported as `old -> new`; the new
-/// name is the one that exists, and it is what a reader needs.
+/// NUL-delimited machine format, not the human one: no C-quoting of unusual
+/// names, no backslash escaping, and no ` -> ` rename arrow to be mistaken for
+/// part of a filename. The status letters occupy the first two columns and a
+/// space follows, so the path starts at byte three. A rename or copy is two
+/// records — the new path here, then the old path in the very next record — and
+/// the new path is the one that exists, so the old record is consumed and
+/// dropped. git already writes repository-relative paths with `/`.
 pub(super) fn dirty_files(porcelain: &str) -> Vec<String> {
-    porcelain
-        .lines()
-        .filter_map(|line| line.get(3..))
-        .map(|name| {
-            let name = name.rsplit(" -> ").next().unwrap_or(name);
-            name.trim().trim_matches('"').replace('\\', "/")
-        })
-        .filter(|name| !name.is_empty())
-        .collect()
+    let mut out = Vec::new();
+    let mut records = porcelain.split('\0');
+    while let Some(record) = records.next() {
+        // A record too short to hold "XY path" — the trailing empty after the
+        // final NUL, or a clean tree — has no path.
+        let Some(path) = record.get(3..) else {
+            continue;
+        };
+        // A rename or copy carries its source path in the next record; skip it.
+        let status = &record[..2];
+        if status.contains('R') || status.contains('C') {
+            records.next();
+        }
+        if !path.is_empty() {
+            out.push(path.to_string());
+        }
+    }
+    out
 }
 
-pub(super) fn lines(out: &str) -> Vec<String> {
-    out.lines()
-        .map(|line| line.trim().replace('\\', "/"))
-        .filter(|line| !line.is_empty())
+/// The paths in a NUL-delimited git listing (`diff -z`, `ls-tree -z`,
+/// `ls-files -z`).
+///
+/// No trimming, quote stripping or backslash handling: `-z` output is the raw
+/// path, so a name with a leading space or a literal backslash survives, and git
+/// writes repository-relative paths with `/` already.
+pub(super) fn nul_paths(out: &str) -> Vec<String> {
+    out.split_terminator('\0')
+        .filter(|path| !path.is_empty())
+        .map(str::to_owned)
         .collect()
 }
 
@@ -178,21 +198,76 @@ mod tests {
 
     #[test]
     fn a_dirty_tree_is_read_out_of_git_status_whatever_the_status_letters_are() {
-        let porcelain = " M src/main.rs\n?? new.txt\nA  added.rs\nR  old.rs -> renamed.rs\n";
+        // `-z` records: NUL-terminated, and a rename is the new path then the
+        // old path as two separate records.
+        let porcelain = " M src/main.rs\0?? new.txt\0A  added.rs\0R  renamed.rs\0old.rs\0";
         let dirty = dirty_files(porcelain);
         assert_eq!(dirty, ["src/main.rs", "new.txt", "added.rs", "renamed.rs"]);
     }
 
     #[test]
+    fn git_paths_preserve_unicode_and_arrow() {
+        // The bug the `-z` format fixes: non-`-z` porcelain C-quotes `café.rs`
+        // as `"caf\303\251.rs"` and the old parser's backslash-to-slash turned
+        // it into `caf/303/251.rs`; a name containing ` -> ` was truncated as if
+        // it were rename syntax; a literal backslash became a slash. `-z` output
+        // is raw, so each survives intact.
+        let porcelain = concat!(
+            " M src/café.rs\0",     // raw UTF-8, not C-quoted
+            "?? a -> b.rs\0",       // the arrow is part of the name
+            "?? weird\\name.rs\0",  // a literal backslash is not a separator
+            "R  dst.rs\0src.rs\0",  // rename: new path, then old path
+        );
+        assert_eq!(
+            dirty_files(porcelain),
+            ["src/café.rs", "a -> b.rs", "weird\\name.rs", "dst.rs"]
+        );
+
+        // The plain-listing parser keeps the same names untrimmed and unescaped.
+        assert_eq!(
+            nul_paths("src/café.rs\0a -> b.rs\0weird\\name.rs\0"),
+            ["src/café.rs", "a -> b.rs", "weird\\name.rs"]
+        );
+
+        // And through real git with `-z`: a known ordinary file proves the scan
+        // ran, and the Unicode name proves the flag is actually passed.
+        let dir = std::env::temp_dir().join(format!("bugsleuth-gitpaths-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        let run = |args: &[&str]| {
+            Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        };
+        if run(&["init", "-q"]) {
+            let _ = std::fs::write(dir.join("plain.rs"), "x");
+            let _ = std::fs::write(dir.join("café.rs"), "y");
+            let changed = changed_since(&dir, &Baseline::Unborn).expect("changed");
+            assert!(
+                changed.contains(&"plain.rs".to_string()),
+                "the ordinary file was lost, so an empty scan could pass: {changed:?}"
+            );
+            assert!(
+                changed.contains(&"café.rs".to_string()),
+                "the unicode name did not survive real `-z` output: {changed:?}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn a_clean_tree_reads_as_clean_rather_than_as_one_empty_path() {
-        // The guard is `is_empty()`, so a blank line surviving the parse would
+        // The guard is `is_empty()`, so a blank record surviving the parse would
         // refuse to apply anything on a perfectly clean repository.
         assert!(dirty_files("").is_empty());
-        assert!(dirty_files("\n\n").is_empty());
-        // A status line with the letters and nothing after them. The name is
+        assert!(dirty_files("\0\0").is_empty());
+        // A status record with the letters and nothing after them. The path is
         // then the empty string, and one of those in the list is enough to
         // refuse to apply anything on a repository that is perfectly clean.
-        assert!(dirty_files("?? \n").is_empty());
+        assert!(dirty_files("?? \0").is_empty());
     }
 
     #[test]

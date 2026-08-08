@@ -197,6 +197,28 @@ fn committed_content_under_the_worktree_container_is_never_deleted() {
 }
 
 /// A renamed file must be reported as the name that exists, not as the raw
+#[test]
+fn git_paths_preserve_unicode_and_arrow() {
+    // `-z` output is raw: `café.rs` is not C-quoted to `"caf\303\251.rs"`, a
+    // name containing ` -> ` is not truncated as rename syntax, and a literal
+    // backslash is not turned into a slash. A rename is the new path then the
+    // old, as two records. The arrow case cannot be a real file on Windows
+    // (`>` is forbidden), so the parser is exercised directly.
+    let porcelain = concat!(
+        " M src/café.rs\0",
+        "?? a -> b.rs\0",
+        "?? weird\\name.rs\0",
+        "R  dst.rs\0src.rs\0",
+    );
+    assert_eq!(
+        porcelain_paths(porcelain),
+        ["src/café.rs", "a -> b.rs", "weird\\name.rs", "dst.rs"]
+    );
+    // A clean tree, and a status record with no path, read as empty.
+    assert!(porcelain_paths("").is_empty());
+    assert!(porcelain_paths("?? \0").is_empty());
+}
+
 /// porcelain `old -> new` string, which is not a path and locates nothing.
 #[test]
 fn changed_files_reports_the_new_name_of_a_rename_not_the_arrow_string() {
@@ -208,7 +230,8 @@ fn changed_files_reports_the_new_name_of_a_rename_not_the_arrow_string() {
         let _ = std::fs::remove_dir_all(long_path(&repo));
         return;
     };
-    // a.txt is committed by temp_repo, so a rename shows as `R  a.txt -> b.txt`.
+    // a.txt is committed by temp_repo, so a rename shows in `-z` output as the
+    // two records `R  b.txt\0a.txt\0`.
     if git(worktree.path(), &["mv", "a.txt", "b.txt"]).is_err() {
         let _ = std::fs::remove_dir_all(long_path(&repo));
         return;

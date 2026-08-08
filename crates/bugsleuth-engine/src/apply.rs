@@ -129,7 +129,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         );
     }
 
-    let dirty = theirs(dirty_files(&git(repo, &["status", "--porcelain"])?));
+    let dirty = theirs(dirty_files(&git(repo, &["status", "--porcelain", "-z"])?));
     if !dirty.is_empty() {
         anyhow::bail!(
             "the working tree has uncommitted changes, so applying fixes is refused: your work \

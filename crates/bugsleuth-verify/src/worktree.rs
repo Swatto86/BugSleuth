@@ -121,19 +121,8 @@ impl Worktree {
 
     /// Repo-relative paths the model changed, staged or not.
     pub fn changed_files(&self) -> Result<Vec<String>, WorktreeError> {
-        let out = git(&self.path, &["status", "--porcelain"])?;
-        Ok(out
-            .lines()
-            .filter_map(|line| line.get(3..))
-            .map(|name| {
-                // A rename is reported as `old -> new`; the new name is the one
-                // that exists. Same decoding as `dirty_files` in
-                // crates/bugsleuth-engine/src/apply/observed.rs.
-                let name = name.rsplit(" -> ").next().unwrap_or(name);
-                name.trim().trim_matches('"').replace('\\', "/")
-            })
-            .filter(|name| !name.is_empty())
-            .collect())
+        let out = git(&self.path, &["status", "--porcelain", "-z"])?;
+        Ok(porcelain_paths(&out))
     }
 
     /// Throw away every change the model made, back to the base commit.
@@ -342,6 +331,32 @@ const VERBATIM_UNC: &str = r"\\?\UNC\";
 /// with `could not create leading directories … Invalid argument` — the path is
 /// reported back verbatim as `//?/C:/…`, which reads like a malformed URL rather
 /// than the deliberate prefix it is.
+/// The paths in `git status --porcelain -z` output.
+///
+/// NUL-delimited machine format — no C-quoting of unusual names, no backslash
+/// escaping, and no ` -> ` rename arrow to be mistaken for part of a filename. A
+/// rename or copy is two records, the new path then the old; the new one is what
+/// exists, so the old record is consumed and dropped. The same decoding as
+/// `dirty_files` in crates/bugsleuth-engine/src/apply/observed.rs, kept in step
+/// by hand because the two crates do not share this parser.
+fn porcelain_paths(porcelain: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut records = porcelain.split('\0');
+    while let Some(record) = records.next() {
+        let Some(path) = record.get(3..) else {
+            continue;
+        };
+        let status = &record[..2];
+        if status.contains('R') || status.contains('C') {
+            records.next();
+        }
+        if !path.is_empty() {
+            out.push(path.to_string());
+        }
+    }
+    out
+}
+
 fn git_arg(path: &Path) -> String {
     let text = path.to_string_lossy().into_owned();
     if !cfg!(windows) {
