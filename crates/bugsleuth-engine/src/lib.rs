@@ -28,6 +28,11 @@ pub use bugsleuth_provider::models;
 /// crate itself.
 pub use bugsleuth_judge::{Cluster, Ranked};
 
+/// Re-exported for the same reason: the desktop shell canonicalizes a repository
+/// path through the engine's one dependency rather than taking on the verify
+/// crate directly, and the CLI shares the same single definition of the rule.
+pub use bugsleuth_verify::git_path;
+
 pub mod orchestrate;
 pub mod plan;
 pub mod report;

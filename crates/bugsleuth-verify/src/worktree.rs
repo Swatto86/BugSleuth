@@ -347,12 +347,34 @@ fn git_arg(path: &Path) -> String {
     if !cfg!(windows) {
         return text;
     }
+    strip_verbatim(&text)
+}
+
+/// Strip Windows' verbatim prefix from a path string, preserving a UNC network
+/// path.
+///
+/// The single definition of the rule. [`git_arg`] here and the path validators
+/// in the CLI and the desktop app all go through it, because a rule this easy to
+/// mistype — one backslash out and the literal silently matches nothing — must
+/// not be written three times to drift three ways.
+fn strip_verbatim(text: &str) -> String {
     // `\\?\UNC\server\share` is a real network path: dropping only the verbatim
     // prefix would leave `UNC\server\share`, which resolves nowhere.
     if let Some(rest) = text.strip_prefix(VERBATIM_UNC) {
         return format!(r"\\{rest}");
     }
-    text.strip_prefix(VERBATIM).unwrap_or(&text).to_string()
+    text.strip_prefix(VERBATIM).unwrap_or(text).to_string()
+}
+
+/// A canonicalized path in the form `git` accepts, as a `PathBuf`.
+///
+/// `canonicalize` returns Windows' extended-length `\\?\` form, which git
+/// rejects, and a `\\?\UNC\` network path must become `\\server\share` rather
+/// than the relative `UNC\server\share` that dropping only `\\?\` would leave.
+/// Shared by the CLI and desktop path validators so all three agree on it.
+#[must_use]
+pub fn git_path(path: &Path) -> PathBuf {
+    PathBuf::from(strip_verbatim(&path.to_string_lossy()))
 }
 
 fn git(cwd: &Path, args: &[&str]) -> Result<String, WorktreeError> {

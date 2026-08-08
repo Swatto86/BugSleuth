@@ -194,12 +194,10 @@ pub(super) fn checked_repo(raw: &str) -> CommandResult<PathBuf> {
     if !path.is_dir() {
         return Err(format!("{raw} is not a directory"));
     }
-    // `canonicalize` yields Windows' extended-length form, which git rejects.
-    let text = path.to_string_lossy();
-    Ok(match text.strip_prefix(r"\\?\") {
-        Some(stripped) => PathBuf::from(stripped),
-        None => path.clone(),
-    })
+    // `canonicalize` yields Windows' extended-length form, which git rejects;
+    // a UNC network path must keep its `\\server\share` form rather than be
+    // truncated to a relative `UNC\server\share`. One shared conversion.
+    Ok(bugsleuth_engine::git_path(&path))
 }
 
 /// A stable 64-bit hash of a path (FNV-1a over its bytes).
@@ -270,6 +268,29 @@ pub(super) fn non_empty(value: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unc_verbatim_path() {
+        // The shared conversion `checked_repo` uses: a UNC network path must
+        // survive as `\\server\share`, not the relative `UNC\server\share` that
+        // dropping only `\\?\` leaves. Pure string work, so run everywhere.
+        assert_eq!(
+            bugsleuth_engine::git_path(std::path::Path::new(r"\\?\UNC\server\share\repo"))
+                .to_string_lossy(),
+            r"\\server\share\repo"
+        );
+        // End-to-end on this platform: checked_repo must never hand back a path
+        // still wearing the extended-length prefix git rejects.
+        #[cfg(windows)]
+        {
+            let resolved = checked_repo(".").expect("the working directory is a directory");
+            assert!(
+                !resolved.to_string_lossy().starts_with(r"\\?\"),
+                "checked_repo returned an extended-length path: {}",
+                resolved.display()
+            );
+        }
+    }
 
     #[test]
     fn the_stable_hash_is_a_fixed_contract_that_a_toolchain_bump_cannot_move() {

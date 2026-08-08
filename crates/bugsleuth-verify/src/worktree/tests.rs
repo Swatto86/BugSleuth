@@ -281,6 +281,28 @@ fn a_second_worktree_for_one_label_does_not_destroy_the_first() {
 }
 
 #[test]
+fn unc_verbatim_path() {
+    // The bug: `canonicalize` renders a network path as `\\?\UNC\server\share`,
+    // and dropping only the `\\?\` prefix leaves the relative `UNC\server\share`
+    // — git then runs against the current directory, not the network path. The
+    // conversion is pure string work, so it is exercised on every platform.
+    assert_eq!(
+        git_path(Path::new(r"\\?\UNC\server\share\repo")).to_string_lossy(),
+        r"\\server\share\repo"
+    );
+    // An ordinary verbatim drive path loses only the prefix.
+    assert_eq!(
+        git_path(Path::new(r"\\?\C:\repo")).to_string_lossy(),
+        r"C:\repo"
+    );
+    // A path with neither prefix is passed through untouched.
+    assert_eq!(
+        git_path(Path::new(r"C:\plain\path")).to_string_lossy(),
+        r"C:\plain\path"
+    );
+}
+
+#[test]
 fn a_git_argument_never_carries_the_extended_length_prefix() {
     // `canonicalize` always produces `\?\` on Windows, and git rejects it:
     // `git worktree add` failed with "could not create leading directories …

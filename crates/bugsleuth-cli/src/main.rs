@@ -166,11 +166,9 @@ fn real_path(path: &Path) -> Result<PathBuf> {
     let canonical = path
         .canonicalize()
         .map_err(|e| anyhow::anyhow!("cannot read {}: {e}", path.display()))?;
-    let text = canonical.to_string_lossy();
-    Ok(match text.strip_prefix(r"\\?\") {
-        Some(stripped) => PathBuf::from(stripped),
-        None => canonical,
-    })
+    // A UNC network path must keep its `\\server\share` form rather than be
+    // truncated to a relative `UNC\server\share`; one shared conversion.
+    Ok(bugsleuth_engine::git_path(&canonical))
 }
 
 /// The key is only ever read from the environment. Passing it as an argument
@@ -229,4 +227,32 @@ async fn run_sweep(args: SweepArgs) -> Result<()> {
         std::process::exit(2);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unc_verbatim_path() {
+        // The shared conversion `real_path` uses: a UNC network path must
+        // survive as `\\server\share`, not the relative `UNC\server\share` that
+        // dropping only `\\?\` leaves. Pure string work, so run everywhere.
+        assert_eq!(
+            bugsleuth_engine::git_path(std::path::Path::new(r"\\?\UNC\server\share\repo"))
+                .to_string_lossy(),
+            r"\\server\share\repo"
+        );
+        // End-to-end on this platform: real_path must never hand back a path
+        // still wearing the extended-length prefix git rejects.
+        #[cfg(windows)]
+        {
+            let resolved = real_path(std::path::Path::new(".")).expect("the cwd resolves");
+            assert!(
+                !resolved.to_string_lossy().starts_with(r"\\?\"),
+                "real_path returned an extended-length path: {}",
+                resolved.display()
+            );
+        }
+    }
 }
