@@ -86,6 +86,17 @@ test("two models on one lane is two sweeps, because that is the point", () => {
   assert.equal(unitCount(models), 2);
 });
 
+test("a bare and a prefixed Claude model on one lane count as a single unit", () => {
+  // `sonnet` and `claude:sonnet` invoke the same model; counting them as two
+  // showed a sweep and a charge the run never makes, and the engine plans one.
+  const models = [
+    row("sonnet", ["correctness"]),
+    row("claude:sonnet", ["correctness"]),
+  ];
+  assert.equal(unitCount(models), 1);
+  assert.equal(batchCount(models), 1);
+});
+
 test("vendor parsing matches the engine, including bare and colon-containing names", () => {
   // If this drifts from the Rust side, the round estimate shown to the user is
   // simply wrong.

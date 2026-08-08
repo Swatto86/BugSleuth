@@ -214,10 +214,28 @@ export function passChoices(passes: number | undefined): number[] {
  * run the engine executes as 3 — the pre-run estimate is only worth showing if
  * it counts what will actually run.
  */
+/**
+ * The canonical spelling of a model id, so equivalent forms are one unit.
+ *
+ * `sonnet` and `claude:sonnet` are the same Claude model; counting them as two
+ * showed a sweep and a charge the run never makes. Mirrors `canonical_spec` in
+ * plan.rs. `claude:` alone is kept — it is the configured default, not a model.
+ */
+function canonicalUnitId(raw: string): string {
+  const id = raw.trim();
+  if (!id) return "";
+  const { vendor, model } = splitId(id);
+  const normalized = model.trim();
+  if (vendor === "claude") {
+    return normalized || (id.startsWith("claude:") ? "claude:" : "");
+  }
+  return `${vendor}:${normalized}`;
+}
+
 function unitKeys(models: ModelSetting[]): Set<string> {
   const keys = new Set<string>();
   for (const model of models) {
-    const id = model.id.trim();
+    const id = canonicalUnitId(model.id);
     if (!id) continue;
     for (const lane of model.lanes) {
       if (!(LANES as readonly string[]).includes(lane)) continue;

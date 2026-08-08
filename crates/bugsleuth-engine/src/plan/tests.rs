@@ -171,3 +171,27 @@ fn a_bare_model_name_is_treated_as_the_claude_vendor_for_batching() {
     // A model id that merely contains a colon is not a vendor prefix.
     assert_eq!(vendor_of("anthropic:claude-opus-5"), "claude");
 }
+
+#[test]
+fn equivalent_claude_spellings_collapse_to_one_unit() {
+    // `sonnet` and `claude:sonnet` invoke the same model; keying units on the
+    // raw string scheduled and charged them as two.
+    let plan = plan(&config(&[
+        ("sonnet", &["correctness"]),
+        ("claude:sonnet", &["correctness"]),
+    ]))
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(plan.units.len(), 1, "{:?}", plan.units);
+    assert_eq!(plan.units[0].model, "sonnet");
+}
+
+#[test]
+fn canonical_spec_collapses_claude_but_keeps_the_default_and_other_vendors() {
+    assert_eq!(canonical_spec("sonnet"), "sonnet");
+    assert_eq!(canonical_spec("claude:sonnet"), "sonnet");
+    assert_eq!(canonical_spec(" claude:sonnet "), "sonnet");
+    // The bare default is not a specific model, so it is kept as-is.
+    assert_eq!(canonical_spec("claude:"), "claude:");
+    assert_eq!(canonical_spec("codex:gpt-5.6"), "codex:gpt-5.6");
+    assert_eq!(canonical_spec("kilo:z-ai/glm"), "kilo:z-ai/glm");
+}

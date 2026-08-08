@@ -143,6 +143,26 @@ fn vendor_of(model: &str) -> String {
     }
 }
 
+/// The canonical form of a model spec, so equivalent spellings are one unit.
+///
+/// `sonnet` and `claude:sonnet` invoke the same Claude model, but keying units
+/// on the raw string scheduled and charged them as two — and their report
+/// filenames differed, so resume could not find the earlier sweep. Both collapse
+/// to the bare model here. `claude:` alone is kept, because it names Claude's
+/// configured default rather than a specific model.
+#[must_use]
+pub fn canonical_spec(spec: &str) -> String {
+    let spec = spec.trim();
+    match spec.split_once(':') {
+        Some(("claude", model)) if !model.trim().is_empty() => model.trim().to_string(),
+        Some(("claude", _)) => "claude:".to_string(),
+        Some((vendor, model)) if matches!(vendor, "codex" | "kilo") => {
+            format!("{vendor}:{}", model.trim())
+        }
+        _ => spec.to_string(),
+    }
+}
+
 /// Read a configuration file and enumerate the run.
 pub fn load(path: &std::path::Path) -> Result<Plan> {
     let text =
@@ -162,7 +182,10 @@ pub fn plan(config: &Config) -> Result<Plan> {
         if model.id.trim().is_empty() {
             anyhow::bail!("a configured model has an empty id");
         }
-        check_effort(&model.id, model.effort.trim())?;
+        // One canonical spelling before anything keys on it, so `sonnet` and
+        // `claude:sonnet` are one scheduled, charged, resumable unit.
+        let model_id = canonical_spec(&model.id);
+        check_effort(&model_id, model.effort.trim())?;
         // A config file is a file; the UI's picker is not the only way in.
         // Enumerating even a moderately large pass count hangs the run before
         // a single sweep is paid for, so refuse loudly (same class as
@@ -186,7 +209,7 @@ pub fn plan(config: &Config) -> Result<Plan> {
             // line out twice and hoping that means something.
             for pass in 1..=passes {
                 let unit = Unit {
-                    model: model.id.trim().to_string(),
+                    model: model_id.clone(),
                     lane,
                     effort: model.effort.trim().to_string(),
                     pass,
