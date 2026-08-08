@@ -231,7 +231,9 @@ async fn run_sweep(args: SweepArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // No `use super::*`: only the Windows-only block below reaches into `super`
+    // (for `real_path`), so importing it unconditionally is an unused import on
+    // other platforms — which fails a `-D warnings` build.
 
     #[test]
     fn unc_verbatim_path() {
@@ -247,7 +249,7 @@ mod tests {
         // still wearing the extended-length prefix git rejects.
         #[cfg(windows)]
         {
-            let resolved = real_path(std::path::Path::new(".")).expect("the cwd resolves");
+            let resolved = super::real_path(std::path::Path::new(".")).expect("the cwd resolves");
             assert!(
                 !resolved.to_string_lossy().starts_with(r"\\?\"),
                 "real_path returned an extended-length path: {}",
