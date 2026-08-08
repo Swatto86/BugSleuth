@@ -99,6 +99,92 @@ fn the_configuration_and_rules_of_the_host_and_the_repo_are_both_ignored() {
 }
 
 #[test]
+fn cleanup_guard_removes_the_directory_on_drop() {
+    // The scratch guard's whole job: whatever exit path invoke_text takes — a
+    // normal return, an early `?`, or a dropped (cancelled) future — the scratch
+    // directory goes with it. A plain drop is every one of those.
+    let dir = std::env::temp_dir().join(format!("bugsleuth-cleanup-guard-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create the directory");
+    std::fs::write(dir.join("schema.json"), "{}").expect("seed a file");
+    {
+        let _guard = Cleanup(dir.clone());
+        assert!(dir.exists(), "precondition: the directory should exist");
+    } // the guard drops here
+    assert!(
+        !dir.exists(),
+        "the guard did not remove the scratch directory when it dropped"
+    );
+}
+
+/// Cancelling a sweep drops invoke_text's future while it awaits the CLI; the
+/// scratch directory it created must not be left behind. Windows only, because
+/// it reuses the same blocking `.cmd` shim the process tests do.
+#[cfg(windows)]
+#[tokio::test]
+async fn cancelled_codex_invocation_removes_scratch() {
+    let dir = std::env::temp_dir().join(format!("bugsleuth-cancel-work-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create the working directory");
+    // A stub that blocks, so the future is still awaiting when it is dropped.
+    let stub = dir.join("stub.cmd");
+    std::fs::write(&stub, "@echo off\r\nping -n 30 127.0.0.1 > nul\r\n").expect("write the stub");
+    let stub = stub.to_string_lossy().into_owned();
+
+    let scratch_dirs = || -> Vec<PathBuf> {
+        std::fs::read_dir(std::env::temp_dir())
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("bugsleuth-codex-"))
+            })
+            .collect()
+    };
+    let before = scratch_dirs();
+
+    // The future is owned inside this block and dropped at its end — the
+    // cancellation. `tokio::pin!` rebinds the name to a `Pin<&mut _>`, so an
+    // explicit `drop` of that would free only the reference, not the future.
+    let created = {
+        let call = invoke_text(Invoke {
+            dir: &dir,
+            model: "",
+            effort: "",
+            brief: "hello",
+            timeout: Duration::from_secs(120),
+            binary: Some(&stub),
+            schema: serde_json::Value::Null,
+            sandbox: Sandbox::ReadOnly,
+        });
+        tokio::pin!(call);
+        let waited = tokio::time::timeout(Duration::from_secs(4), call.as_mut()).await;
+        assert!(waited.is_err(), "the blocking stub should still have been running");
+
+        // A scratch directory must actually have been created, or the test
+        // proves nothing by cleaning up nothing.
+        let created: Vec<_> = scratch_dirs()
+            .into_iter()
+            .filter(|d| !before.contains(d))
+            .collect();
+        assert!(!created.is_empty(), "no scratch directory was created");
+        created
+        // the future drops here, with the child still alive: the cancel path.
+    };
+    tokio::time::sleep(Duration::from_millis(300)).await;
+
+    assert!(
+        created.iter().all(|d| !d.exists()),
+        "a scratch directory survived cancellation: {:?}",
+        created.iter().filter(|d| d.exists()).collect::<Vec<_>>()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn an_invocation_with_no_schema_names_no_schema_file() {
     // No schema file is written when none was asked for, so naming one would
     // point the CLI at a path that does not exist and fail the whole run.

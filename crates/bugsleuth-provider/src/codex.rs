@@ -124,6 +124,14 @@ pub(crate) async fn invoke_text(spec: Invoke<'_>) -> Result<String, ProviderErro
     // never inside the repository under review — a review must not leave litter
     // in the thing it is reviewing.
     let scratch = scratch_dir()?;
+    // Cleaned on *every* exit from here on. The manual removal used to sit after
+    // the await, so it ran only on a normal return: cancelling a sweep drops
+    // this future at its await point and skipped it, and a failed initial write
+    // returned through `?` before reaching it — both leaving a
+    // `bugsleuth-codex-*` directory in the system temp area for good, one more
+    // per cancellation. A drop guard runs on cancel, early `?`, and normal
+    // return alike.
+    let _scratch = Cleanup(scratch.clone());
     let schema_path = scratch.join("schema.json");
     let answer_path = scratch.join("answer.json");
     if !spec.schema.is_null() {
@@ -142,9 +150,18 @@ pub(crate) async fn invoke_text(spec: Invoke<'_>) -> Result<String, ProviderErro
     })
     .await;
 
-    let result = finish(output, &answer_path);
-    let _ = std::fs::remove_dir_all(&scratch);
-    result
+    finish(output, &answer_path)
+}
+
+/// Removes a directory tree when dropped, so the Codex scratch area is cleaned
+/// on a cancelled future and an early `?` as well as on the normal return. A
+/// removal that fails is best-effort — it must not mask the provider's result.
+struct Cleanup(PathBuf);
+
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 fn finish(
