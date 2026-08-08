@@ -74,17 +74,29 @@ pub(crate) async fn grade(
             ..Outcome::default()
         };
     }
-    apply(
-        clusters,
-        Request {
-            repo: options.repo,
-            model: options.triage_model,
-            effort: "",
-            timeout: options.timeout,
-            api_key: options.api_key,
+
+    // Triage belongs to the same cancellation domain as the sweeps before it.
+    // Only `run_batch` observed the token, so stopping a run during the final
+    // sweep still let this pass start a fresh model process — and stopping while
+    // it was already running did nothing, leaving a "stopped" run billing a
+    // model for up to the whole timeout. The token is raced against the pass and
+    // biased, so an already-cancelled run wins before the provider future is
+    // ever polled — which is what stops the process from being spawned at all.
+    let request = Request {
+        repo: options.repo,
+        model: options.triage_model,
+        effort: "",
+        timeout: options.timeout,
+        api_key: options.api_key,
+    };
+    tokio::select! {
+        biased;
+        () = options.cancel.cancelled() => Outcome {
+            note: UNGRADED.to_string() + ": the run was cancelled before triage completed",
+            ..Outcome::default()
         },
-    )
-    .await
+        outcome = apply(clusters, request) => outcome,
+    }
 }
 
 /// Re-grade a merged report. Returns the clusters either way — a failed triage

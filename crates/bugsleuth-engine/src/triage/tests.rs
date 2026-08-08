@@ -86,6 +86,47 @@ async fn a_single_defect_is_not_paid_to_be_compared_with_nothing() {
     assert_eq!(clusters[0].triaged, None);
 }
 
+#[tokio::test]
+async fn cancelled_run_does_not_start_or_wait_for_triage() {
+    // Stopping a run must stop the triage pass too. With the token already
+    // stopped, grade returns immediately as ungraded — the biased race means the
+    // provider future is never polled, so no model process is started — and no
+    // cluster is graded.
+    let cancel = crate::cancel::Cancel::new();
+    cancel.stop();
+    let options = crate::orchestrate::RunOptions {
+        repo: Path::new("."),
+        scope: None,
+        max_turns: 1,
+        timeout: Duration::from_secs(1),
+        api_key: None,
+        out_dir: None,
+        resume: false,
+        progress: None,
+        cancel,
+        // Nonempty, so the "no triage model" guard does not short-circuit and
+        // hide the cancellation path being exercised.
+        triage_model: "claude:sonnet",
+        per_vendor_concurrency: 1,
+    };
+    let mut clusters = vec![
+        cluster_at(Severity::Low, "first"),
+        cluster_at(Severity::High, "second"),
+    ];
+
+    let outcome = grade(&mut clusters, &options).await;
+    assert!(
+        outcome.note.contains("cancelled"),
+        "a cancelled run did not report itself cancelled: {}",
+        outcome.note
+    );
+    assert_eq!(outcome.graded, 0, "a cancelled run graded a defect");
+    assert!(
+        clusters.iter().all(|cluster| cluster.triaged.is_none()),
+        "a cancelled run still triaged a cluster"
+    );
+}
+
 #[test]
 fn the_prompt_never_offers_tools_the_pass_does_not_have() {
     // It once did, for a whole afternoon of runs. Told to read files it had
