@@ -11,6 +11,8 @@
 use std::path::Path;
 use std::process::Command;
 
+use anyhow::Context;
+
 use super::Baseline;
 
 /// Repo-relative paths differing from `base`, committed or not.
@@ -18,37 +20,33 @@ use super::Baseline;
 /// Two questions, because one command answers neither on its own: `git diff`
 /// knows about tracked files only, and a new file the model created is exactly
 /// the kind of change most worth seeing.
-pub(super) fn changed_since(repo: &Path, base: &Baseline) -> Vec<String> {
+pub(super) fn changed_since(repo: &Path, base: &Baseline) -> anyhow::Result<Vec<String>> {
     let mut files: Vec<String> = match base {
         // A real starting commit: `diff` against it covers committed and
-        // uncommitted changes to tracked files alike.
-        Baseline::Commit(base) => git(repo, &["diff", "--name-only", base])
-            .map(|out| lines(&out))
-            .unwrap_or_default(),
-        // Started from no commit at all, so everything now in HEAD is new
-        // against the empty tree the repository began at. A HEAD that still does
-        // not resolve — the model changed files but committed nothing — lists
-        // nothing here, and the working-tree scans below catch what it left.
-        Baseline::Unborn => {
-            let mut committed = git(repo, &["ls-tree", "-r", "--name-only", "HEAD"])
-                .map(|out| lines(&out))
-                .unwrap_or_default();
-            committed.extend(
-                git(repo, &["status", "--porcelain"])
-                    .map(|out| dirty_files(&out))
-                    .unwrap_or_default(),
-            );
-            committed
-        }
+        // uncommitted changes to tracked files alike. A git failure here is not
+        // "no changes" — a damaged `.git` must never read as a clean tree — so
+        // it is propagated rather than swallowed to an empty list.
+        Baseline::Commit(base) => lines(&git(repo, &["diff", "--name-only", base])?),
+        // Started from no commit at all. If the model committed, everything now
+        // in HEAD is new against the empty tree the repository began at; if it
+        // did not, HEAD is still unborn and only the working-tree scans apply.
+        // `range_since` tells those two apart from a broken repository.
+        Baseline::Unborn => match range_since(repo, base)? {
+            Some(_) => {
+                let mut committed = lines(&git(repo, &["ls-tree", "-r", "--name-only", "HEAD"])?);
+                committed.extend(dirty_files(&git(repo, &["status", "--porcelain"])?));
+                committed
+            }
+            None => dirty_files(&git(repo, &["status", "--porcelain"])?),
+        },
     };
-    files.extend(
-        git(repo, &["ls-files", "--others", "--exclude-standard"])
-            .map(|out| lines(&out))
-            .unwrap_or_default(),
-    );
+    files.extend(lines(&git(
+        repo,
+        &["ls-files", "--others", "--exclude-standard"],
+    )?));
     files.sort();
     files.dedup();
-    theirs(files)
+    Ok(theirs(files))
 }
 
 /// The `base..HEAD` revision range, or `None` when an unborn baseline still has
@@ -73,18 +71,19 @@ pub(super) fn range_since(repo: &Path, base: &Baseline) -> anyhow::Result<Option
     }
 }
 
-pub(super) fn commits_since(repo: &Path, base: &Baseline) -> usize {
-    // Against a real commit, count the range past it. Against an unborn start,
-    // every commit is new, so the whole of HEAD is the count — or the command
-    // fails because HEAD is still unborn and there are none.
-    let range = match base {
-        Baseline::Commit(base) => format!("{base}..HEAD"),
-        Baseline::Unborn => "HEAD".to_string(),
+pub(super) fn commits_since(repo: &Path, base: &Baseline) -> anyhow::Result<usize> {
+    // Against a real commit, count the range past it. Against an unborn start
+    // that reached a commit, every commit is new, so the whole of HEAD is the
+    // count; an unborn start that committed nothing is a genuine zero. A git
+    // failure is none of those — it means the count is unknown, so it is an
+    // error rather than a silent zero that would read as "nothing to push".
+    let Some(range) = range_since(repo, base)? else {
+        return Ok(0);
     };
-    git(repo, &["rev-list", "--count", &range])
-        .ok()
-        .and_then(|out| out.trim().parse().ok())
-        .unwrap_or(0)
+    let out = git(repo, &["rev-list", "--count", &range])?;
+    out.trim()
+        .parse()
+        .with_context(|| format!("git returned an unparseable commit count: {out:?}"))
 }
 
 /// Where BugSleuth's own throwaway checkouts live inside a reviewed repository.
@@ -244,8 +243,73 @@ mod tests {
             return;
         }
 
-        assert_eq!(changed_since(&dir, &base), ["first.txt"]);
-        assert_eq!(commits_since(&dir, &base), 1);
+        assert_eq!(changed_since(&dir, &base).expect("changed"), ["first.txt"]);
+        assert_eq!(commits_since(&dir, &base).expect("commits"), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn git_observation_failure_is_not_clean() {
+        // A broken repository must not read as zero commits and no changed
+        // files. That is exactly the "absence read as a result" this project
+        // exists to stop: it would report a clean apply and, with push on,
+        // decide there was nothing to publish — on a repository it could not
+        // even open.
+        let dir =
+            std::env::temp_dir().join(format!("bugsleuth-obsfail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        let run = |args: &[&str]| {
+            Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        };
+        if !run(&["init", "-q"]) {
+            return; // no usable git here
+        }
+        let _ = run(&["config", "user.email", "t@example.com"]);
+        let _ = run(&["config", "user.name", "Tester"]);
+        let _ = std::fs::write(dir.join("a.txt"), "one");
+        let _ = run(&["add", "-A"]);
+        if !run(&["commit", "-qm", "base"]) {
+            return;
+        }
+        let base = Baseline::Commit(
+            git(&dir, &["rev-parse", "HEAD"])
+                .expect("head")
+                .trim()
+                .to_string(),
+        );
+
+        // A real change is really seen — so an empty scan cannot masquerade as a
+        // clean success and hide the fix below.
+        let _ = std::fs::write(dir.join("b.txt"), "two");
+        let _ = run(&["add", "-A"]);
+        if !run(&["commit", "-qm", "second"]) {
+            return;
+        }
+        assert!(
+            changed_since(&dir, &base)
+                .expect("changed")
+                .contains(&"b.txt".to_string()),
+            "a known changed file must be reported"
+        );
+        assert_eq!(commits_since(&dir, &base).expect("commits"), 1);
+
+        // Now take the repository away underneath them. Both must error rather
+        // than answer zero / empty.
+        std::fs::remove_dir_all(dir.join(".git")).expect("remove .git");
+        assert!(
+            changed_since(&dir, &base).is_err(),
+            "an unreadable repository must not read as 'no files changed'"
+        );
+        assert!(
+            commits_since(&dir, &base).is_err(),
+            "an unreadable repository must not read as 'zero commits'"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

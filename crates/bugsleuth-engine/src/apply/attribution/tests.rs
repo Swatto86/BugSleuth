@@ -69,7 +69,10 @@ fn the_format_string_is_the_one_git_actually_produces() {
         ["fix: something real"],
         "only the credited commit, with its subject intact"
     );
-    assert_eq!(commits_since(&dir, &Baseline::Commit(base.clone())), 2);
+    assert_eq!(
+        commits_since(&dir, &Baseline::Commit(base.clone())).expect("commits"),
+        2
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -136,7 +139,7 @@ fn stripping_removes_the_trailer_and_changes_nothing_else() {
         "the untouched commit survives: {log}"
     );
     assert_eq!(
-        commits_since(&dir, &Baseline::Commit(base.clone())),
+        commits_since(&dir, &Baseline::Commit(base.clone())).expect("commits"),
         2,
         "no commit was lost"
     );
@@ -217,7 +220,7 @@ fn an_unborn_repositorys_initial_commit_is_stripped_as_a_root() {
             .is_empty()
     );
     assert_eq!(
-        commits_since(&dir, &Baseline::Unborn),
+        commits_since(&dir, &Baseline::Unborn).expect("commits"),
         1,
         "the root commit must survive the rewrite"
     );

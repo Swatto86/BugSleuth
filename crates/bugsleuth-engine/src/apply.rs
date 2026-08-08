@@ -186,10 +186,13 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     // untouched. Whatever git can see is named in the error too.
     let text = match attempt {
         Ok(text) => text,
-        Err(error) => anyhow::bail!(failure_message(
-            &error.to_string(),
-            &changed_since(repo, &base)
-        )),
+        // A failure is not "nothing happened" — name whatever git can still see.
+        // If git itself cannot be read afterwards, say the state is unknown
+        // rather than claim nothing changed.
+        Err(error) => match changed_since(repo, &base) {
+            Ok(changed) => anyhow::bail!(failure_message(&error.to_string(), &changed)),
+            Err(_) => anyhow::bail!(failure_message_unknown(&error.to_string())),
+        },
     };
 
     // Attribution comes off before anything else is reported, so what the user
@@ -217,10 +220,22 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         }
     };
 
+    // Read what git actually shows, once, after the provider and the strip. A
+    // failure here is not an empty repository — it means the repository could
+    // not be inspected at all, so the report must not claim "nothing changed"
+    // and nothing may be published. The same values feed the report below.
+    let changed_files = changed_since(repo, &base).with_context(|| {
+        "the model finished, but BugSleuth could not determine what changed in your repository; \
+         inspect it manually — nothing was pushed or tagged"
+    })?;
+    let commits = commits_since(repo, &base).with_context(|| {
+        "the model finished, but BugSleuth could not count the commits it made; inspect the \
+         repository manually — nothing was pushed or tagged"
+    })?;
+
     // After stripping, deliberately: the trailers come off before anything is
     // published, and `attributed` is what stripping could not reach — which is
     // itself a reason to refuse the push rather than to publish and mention it.
-    let commits = commits_since(repo, &base);
     let pushed = if request.push {
         push::push(repo, &base, commits, &attributed)
     } else {
@@ -235,7 +250,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
 
     Ok(ApplyReport {
         text,
-        changed_files: changed_since(repo, &base),
+        changed_files,
         commits,
         stripped,
         attributed,
@@ -309,6 +324,19 @@ fn failure_message(error: &str, changed: &[String]) -> String {
     }
 }
 
+/// The failure message when git could not be read afterwards either.
+///
+/// The vendor failed *and* the repository could not be inspected, so there is no
+/// honest "what changed" list to give. It must not fall back to "no files
+/// changed" — that would claim the tree is clean when the truth is it is
+/// unknown, the exact false-clean this project exists to stop.
+fn failure_message_unknown(error: &str) -> String {
+    format!(
+        "{error} — and BugSleuth could not read the repository afterwards to see what changed. \
+         Check `git status` and `git diff` before running anything again."
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,6 +356,23 @@ mod tests {
         // "the run failed" alone leaves the reader guessing about their tree.
         let clean = failure_message("the kilo CLI exited with code 1", &[]);
         assert!(clean.contains("no files changed"), "{clean}");
+    }
+
+    #[test]
+    fn an_unreadable_repository_after_a_failure_is_not_reported_as_clean() {
+        // When the vendor failed and git could not be read afterwards, the
+        // message must not claim the tree is clean — "no files changed" there
+        // would be a false all-clear on a repository whose state is unknown.
+        let unknown = failure_message_unknown("the codex CLI timed out");
+        assert!(unknown.contains("timed out"));
+        assert!(
+            !unknown.contains("no files changed"),
+            "an unknown tree must not read as clean: {unknown}"
+        );
+        assert!(
+            unknown.contains("could not read the repository"),
+            "{unknown}"
+        );
     }
 
     #[test]
