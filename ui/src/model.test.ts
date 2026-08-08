@@ -23,6 +23,7 @@ import {
   applyStatus,
   batchCount,
   boundedProveTop,
+  isShippedConfiguration,
   joinId,
   preset,
   splitId,
@@ -95,6 +96,25 @@ test("a bare and a prefixed Claude model on one lane count as a single unit", ()
   ];
   assert.equal(unitCount(models), 1);
   assert.equal(batchCount(models), 1);
+});
+
+test("only a complete shipped preset bypasses replacement confirmation", () => {
+  // Per-row checking let a mixture or duplicate of shipped rows through, so a
+  // user-built matrix was replaced without a prompt. Only the whole preset,
+  // unchanged, may skip the confirmation.
+  assert.equal(isShippedConfiguration(preset("cheap")), true);
+  assert.equal(isShippedConfiguration(preset("balanced")), true);
+  assert.equal(isShippedConfiguration(preset("deep")), true);
+  // A mix of one row from each of two presets is nobody's shipped configuration.
+  assert.equal(
+    isShippedConfiguration([preset("cheap")[0]!, preset("deep")[0]!]),
+    false,
+  );
+  // Nor is a duplicated shipped row.
+  assert.equal(
+    isShippedConfiguration([preset("cheap")[0]!, preset("cheap")[0]!]),
+    false,
+  );
 });
 
 test("vendor parsing matches the engine, including bare and colon-containing names", () => {

@@ -31,8 +31,8 @@ export interface ActionDeps {
   render: () => void;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
   runDeps: () => RunDeps;
-  /** Whether a row is still exactly as some preset shipped it. */
-  isShipped: (model: Settings["models"][number]) => boolean;
+  /** Whether the whole matrix is exactly one shipped preset. */
+  isShippedConfiguration: (models: Settings["models"]) => boolean;
 }
 
 export function bindGuardedActions(deps: ActionDeps): void {
@@ -59,7 +59,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
       // Asked only when something would actually be lost: a confirmation that
       // appears when nothing is at stake is how people learn to click through
       // confirmations without reading them.
-      if (deps.settings().models.every(deps.isShipped)) {
+      if (deps.isShippedConfiguration(deps.settings().models)) {
         deps.setSettings(preset(name));
         deps.render();
         return;

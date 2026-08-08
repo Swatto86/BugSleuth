@@ -10,10 +10,10 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   LANE_TITLES,
   type Lane,
-  type Preset,
   type Settings,
   batchCount,
   canRun,
+  isShippedConfiguration,
   preset,
   uncoveredLanes,
   unitCount,
@@ -45,26 +45,6 @@ import {
  * summaries against each other, it does not review code again.
  */
 const TRIAGE_MODEL = "haiku";
-
-/**
- * Whether a row is still exactly as some preset shipped it.
- *
- * Used to decide whether replacing the matrix would destroy anything: asking
- * for confirmation when there is nothing to lose is how people learn to click
- * through confirmations without reading them.
- */
-function isShipped(model: Settings["models"][number]): boolean {
-  return (["cheap", "balanced", "deep"] as Preset[]).some((name) =>
-    preset(name).some(
-      (shipped) =>
-        shipped.id === model.id &&
-        shipped.effort === model.effort &&
-        (shipped.passes ?? 1) === (model.passes ?? 1) &&
-        shipped.lanes.length === model.lanes.length &&
-        shipped.lanes.every((lane) => model.lanes.includes(lane)),
-    ),
-  );
-}
 
 let settings: Settings = {
   repo: "",
@@ -301,7 +281,7 @@ function bind(): void {
     render,
     setStatus,
     runDeps,
-    isShipped,
+    isShippedConfiguration,
   });
 }
 

@@ -363,6 +363,35 @@ export function preset(name: Preset): ModelSetting[] {
   }
 }
 
+/**
+ * Whether the whole matrix equals one shipped preset, exactly.
+ *
+ * The confirmation before a preset replace is skipped only when nothing is at
+ * stake. Checking each row against "is a shipped row" let an arbitrary mixture,
+ * subset or duplicate of shipped rows through — a user-built matrix destroyed
+ * without a prompt. Equality is of the complete ordered configuration: row
+ * count, and each row's model, effort, passes and lanes.
+ */
+export function isShippedConfiguration(models: ModelSetting[]): boolean {
+  return (["cheap", "balanced", "deep"] as const).some((name) => {
+    const shipped = preset(name);
+    return (
+      shipped.length === models.length &&
+      shipped.every((expected, index) => {
+        const actual = models[index];
+        return (
+          actual !== undefined &&
+          actual.id === expected.id &&
+          actual.effort === expected.effort &&
+          (actual.passes ?? 1) === (expected.passes ?? 1) &&
+          actual.lanes.length === expected.lanes.length &&
+          expected.lanes.every((lane) => actual.lanes.includes(lane))
+        );
+      })
+    );
+  });
+}
+
 /** Toggle one lane for one model, returning a new list. */
 export function toggleLane(
   models: ModelSetting[],
