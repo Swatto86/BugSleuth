@@ -124,6 +124,10 @@ pub struct KiloSweep<'a> {
 #[derive(Debug, Clone)]
 pub struct KiloResult {
     pub findings: RawFindings,
+    /// True when these findings came from a repair pass, which can drop findings
+    /// it cannot reshape. The engine routes this through the same partial-result
+    /// caveat a salvaged sweep gets, rather than presenting it as complete.
+    pub salvaged: bool,
 }
 
 pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
@@ -147,7 +151,10 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
     let text = assistant_text_or_error(&output)?;
 
     match crate::json::structured(&Value::String(text.clone())) {
-        Ok(findings) => Ok(KiloResult { findings }),
+        Ok(findings) => Ok(KiloResult {
+            findings,
+            salvaged: false,
+        }),
         Err(schema_error) => {
             // The sweep already did the expensive part — it read the repository
             // and found the defects. Throwing that away over the shape of the
@@ -156,7 +163,10 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
             match repair::binary(spec.binary) {
                 Some(binary) => {
                     match repair::reshape(&text, &binary, spec.model, spec.timeout).await {
-                        Some(findings) => Ok(KiloResult { findings }),
+                        Some(findings) => Ok(KiloResult {
+                            findings,
+                            salvaged: true,
+                        }),
                         // Report the *first* error: it says what the model
                         // actually got wrong, which a second failure would bury.
                         None => Err(repair::original(schema_error)),

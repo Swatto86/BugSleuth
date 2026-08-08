@@ -154,7 +154,7 @@ async fn invoke_vendor(
             binary: request.binary,
         })
         .await
-        .map(|r| (r.findings.findings, None, false, None)),
+        .map(|r| (r.findings.findings, None, r.salvaged, None)),
     }
 }
 

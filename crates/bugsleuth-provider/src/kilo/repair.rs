@@ -73,8 +73,11 @@ pub(super) async fn reshape(
     let sandbox = empty_dir()?;
     let _guard = Cleanup(sandbox.clone());
 
+    // Oversized replies cannot be repaired from a truncated prefix without
+    // silently dropping whatever came after the cut, so those are not attempted
+    // at all — the caller reports the original schema error instead.
+    let brief = prompt(malformed)?;
     for _ in 0..ATTEMPTS {
-        let brief = prompt(malformed);
         let mut args: Vec<String> = [
             "run", "--auto", "--pure", "--format", "json", "--agent", "ask",
         ]
@@ -122,8 +125,18 @@ pub(super) async fn reshape(
     None
 }
 
-fn prompt(malformed: &str) -> String {
-    format!(
+/// The largest malformed reply a repair will accept whole. Beyond this the reply
+/// cannot be handed over without truncation, and a repair of a truncated prefix
+/// silently loses every finding past the cut — so oversized replies are refused
+/// rather than partially repaired.
+const MAX_REPAIR_CHARS: usize = 20_000;
+
+/// The repair prompt, or `None` when the reply is too large to repair whole.
+fn prompt(malformed: &str) -> Option<String> {
+    if malformed.chars().count() > MAX_REPAIR_CHARS {
+        return None;
+    }
+    Some(format!(
         "Your previous reply was rejected because it did not match the required \
          JSON structure. Reshape it. Do NOT review any code again, do NOT open \
          any files, and do NOT add, remove or embellish any finding.\n\n\
@@ -135,8 +148,8 @@ fn prompt(malformed: &str) -> String {
          fence. It must validate against this schema:\n\n{}\n\n\
          Here is what you wrote:\n\n{}\n",
         serde_json::to_string_pretty(&finding_schema()).unwrap_or_default(),
-        crate::process::preview(malformed, 20_000),
-    )
+        malformed,
+    ))
 }
 
 /// Locate the CLI for a repair attempt.
@@ -157,11 +170,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_reply_at_the_limit_is_repaired_whole_and_one_over_is_refused() {
+        // The truncation this replaces: an oversized reply was handed over as a
+        // 20k-char preview, so any finding past the cut was silently dropped and
+        // the repair looked complete. At the limit the whole reply must be in the
+        // prompt; one character over must refuse rather than repair a prefix.
+        let at_limit = "x".repeat(MAX_REPAIR_CHARS);
+        let brief = prompt(&at_limit).expect("a reply at the limit is repairable");
+        assert!(
+            brief.contains(&at_limit),
+            "the reply at the limit was not included whole"
+        );
+
+        let over_limit = "x".repeat(MAX_REPAIR_CHARS + 1);
+        assert!(
+            prompt(&over_limit).is_none(),
+            "an oversized reply was repaired from a truncated prefix"
+        );
+    }
+
+    #[test]
     fn the_repair_prompt_forbids_inventing_and_forbids_reviewing_again() {
         // Both matter. Re-reviewing turns a cheap reshape into a second sweep,
         // and inventing produces exactly the confident fiction this tool exists
         // to keep out of a report.
-        let text = prompt(r#"{"findings":[{"category":"correctness"}]}"#);
+        let text = prompt(r#"{"findings":[{"category":"correctness"}]}"#)
+            .expect("a short reply is repairable");
         assert!(text.contains("Do NOT review any code again"));
         assert!(text.contains("Invent nothing"));
         assert!(text.contains("drop that finding entirely"));
@@ -169,19 +203,6 @@ mod tests {
         assert!(text.contains("\"category\""));
         // And the schema, or the model is guessing at the target.
         assert!(text.contains("failure_scenario"));
-    }
-
-    #[test]
-    fn a_very_long_malformed_reply_is_truncated_rather_than_sent_whole() {
-        // A reply can be megabytes of streamed prose. Sending it back verbatim
-        // would cost more than the sweep it is trying to rescue.
-        let huge = "x".repeat(100_000);
-        let text = prompt(&huge);
-        assert!(
-            text.len() < 40_000,
-            "repair prompt was {} chars",
-            text.len()
-        );
     }
 
     #[test]
