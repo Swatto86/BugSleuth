@@ -152,6 +152,40 @@ fn the_bundle_is_replaced_whole_and_leaves_no_staging_file() {
 }
 
 #[test]
+fn a_per_defect_write_failure_is_returned_not_swallowed() {
+    // The swallowed failure: a per-defect write erroring was reduced to a
+    // boolean and dropped, so write_all reported success over a handoff missing
+    // files. A directory where the first per-defect file wants to go makes its
+    // write fail, and that failure must reach the caller.
+    let dir = std::env::temp_dir()
+        .join("bugsleuth-handoff-blocked")
+        .join(format!("{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::create_dir_all(dir.join("fix-prompt-01.md")).unwrap_or_else(|e| panic!("{e}"));
+
+    let written =
+        write_all(&dir, "C:/x", &[ranked_of(1)], &[], 1).unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        written.bundle.exists(),
+        "the bundle was lost to a per-defect failure"
+    );
+    assert_eq!(
+        written.per_defect_written, 0,
+        "a blocked per-defect file was counted as written"
+    );
+    assert!(
+        written
+            .warnings
+            .iter()
+            .any(|w| w.contains("fix-prompt-01.md")),
+        "the failure was not reported: {:?}",
+        written.warnings
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_prompt_tells_the_agent_not_to_sign_the_commits() {
     // Every CLI this drives adds an authorship trailer to a commit by default.
     // BugSleuth asks the agent to commit per defect, so without this line the

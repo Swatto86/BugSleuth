@@ -95,6 +95,7 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     text: string;
     prompt?: string;
     promptPath?: string | null;
+    saveError?: string;
     findings?: FindingCard[];
   }>("run-finished", (event) => {
     running = false;
@@ -102,10 +103,20 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // about unswept lanes and how severities were graded.
     deps.findings.replaceChildren(findingsList(event.payload.findings ?? []));
     deps.output.textContent = event.payload.text;
-    deps.setStatus(
-      event.payload.ok ? "Finished" : "Run failed",
-      event.payload.ok ? "" : "error",
-    );
+    // A finished run whose fix prompts did not fully save is not a plain
+    // "Finished": the detail is in the output text, but the status has to say
+    // the save was incomplete rather than letting the window read as all-clear.
+    if (event.payload.ok && event.payload.saveError) {
+      deps.setStatus(
+        "Finished, but the fix prompts were not completely saved",
+        "error",
+      );
+    } else {
+      deps.setStatus(
+        event.payload.ok ? "Finished" : "Run failed",
+        event.payload.ok ? "" : "error",
+      );
+    }
 
     // The prompt is the point of the run, so it is offered the moment there
     // is one — and its path is shown either way, because a window can be

@@ -116,15 +116,28 @@ fn write_prompts(
     skipped: &[String],
     sweeps: usize,
 ) -> Result<()> {
-    let bundle = bugsleuth_engine::handoff::write_all(dir, repo, ranked, skipped, sweeps)
+    let written = bugsleuth_engine::handoff::write_all(dir, repo, ranked, skipped, sweeps)
         .map_err(|e| anyhow::anyhow!("cannot write prompts to {}: {e}", dir.display()))?;
     eprintln!(
         "
 wrote {} and {} per-defect prompt{}",
-        bundle.display(),
-        ranked.len(),
-        if ranked.len() == 1 { "" } else { "s" }
+        written.bundle.display(),
+        written.per_defect_written,
+        if written.per_defect_written == 1 {
+            ""
+        } else {
+            "s"
+        }
     );
+    // A bundle with some per-defect files missing is an incomplete result, not a
+    // success: the exit code has to say so, or a script piping this reads a
+    // partial handoff as a whole one.
+    if !written.warnings.is_empty() {
+        anyhow::bail!(
+            "the prompt bundle was saved, but some per-defect prompts failed: {}",
+            written.warnings.join("; ")
+        );
+    }
     Ok(())
 }
 

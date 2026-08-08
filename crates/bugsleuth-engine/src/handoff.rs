@@ -123,17 +123,33 @@ pub fn single(repo: &str, entry: &Ranked, total: usize, sweeps: usize) -> String
     out
 }
 
+/// The outcome of writing a handoff: the bundle that was saved, how many
+/// per-defect files actually landed, and any that did not.
+///
+/// The per-defect count and warnings exist because failing to write one used to
+/// be swallowed — `write_all` returned only the bundle path, so a caller could
+/// not tell a complete handoff from one missing half its work orders and still
+/// reported it saved.
+#[derive(Debug)]
+pub struct WrittenPrompts {
+    pub bundle: std::path::PathBuf,
+    pub per_defect_written: usize,
+    pub warnings: Vec<String>,
+}
+
 /// Write the bundle and one file per defect into `dir`.
 ///
-/// Returns the bundle's path. Per-defect files are best-effort: failing to
-/// write one is not a reason to lose the bundle, which is what most people use.
+/// A failure to write the bundle is a hard error — it is what most people use.
+/// A per-defect file that cannot be written is not a reason to lose the bundle,
+/// but it is reported in `warnings` rather than silently dropped, so the caller
+/// can tell the user the handoff is incomplete.
 pub fn write_all(
     dir: &std::path::Path,
     repo: &str,
     ranked: &[Ranked],
     not_reviewed: &[String],
     sweeps: usize,
-) -> std::io::Result<std::path::PathBuf> {
+) -> std::io::Result<WrittenPrompts> {
     std::fs::create_dir_all(dir)?;
 
     // Written first, deleted after. This used to clear the previous run's
@@ -154,11 +170,13 @@ pub fn write_all(
     crate::atomic::write(&bundle, prompt(repo, ranked, not_reviewed, sweeps))?;
 
     let mut written: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
     for entry in ranked {
         let name = format!("fix-prompt-{:02}.md", entry.position);
         let body = single(repo, entry, ranked.len(), sweeps);
-        if crate::atomic::write(&dir.join(&name), body).is_ok() {
-            written.push(name.to_lowercase());
+        match crate::atomic::write(&dir.join(&name), body) {
+            Ok(()) => written.push(name.to_lowercase()),
+            Err(error) => warnings.push(format!("could not write {name}: {error}")),
         }
     }
 
@@ -177,7 +195,11 @@ pub fn write_all(
             }
         }
     }
-    Ok(bundle)
+    Ok(WrittenPrompts {
+        bundle,
+        per_defect_written: written.len(),
+        warnings,
+    })
 }
 
 /// The opening of the prompt, addressed to whoever is going to do the work.

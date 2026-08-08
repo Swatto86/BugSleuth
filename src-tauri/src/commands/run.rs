@@ -92,19 +92,43 @@ pub async fn start_run(
                 // minutes and the window can be closed; losing the output to a
                 // stray click would be the worst possible ending.
                 let prompt = fix_prompt(&repo, &report);
-                let saved = bugsleuth_engine::handoff::write_all(
+                // A save that half-failed used to be swallowed by `.ok()`, so the
+                // window said Finished over a handoff that was missing files. Both
+                // a hard failure and a partial one are surfaced now.
+                let (prompt_path, save_error) = match bugsleuth_engine::handoff::write_all(
                     &out_dir,
                     &repo.display().to_string(),
                     &report.ranked,
                     &gap_lines(&report),
                     report.swept.len(),
-                )
-                .ok();
+                ) {
+                    Ok(written) => {
+                        let warning = (!written.warnings.is_empty()).then(|| {
+                            format!(
+                                "The review finished, but some fix prompts were not saved: {}",
+                                written.warnings.join("; ")
+                            )
+                        });
+                        (Some(written.bundle.display().to_string()), warning)
+                    }
+                    Err(error) => (
+                        None,
+                        Some(format!(
+                            "The review finished, but its fix prompt could not be saved to {}: {error}",
+                            out_dir.display()
+                        )),
+                    ),
+                };
+                if let Some(warning) = &save_error {
+                    text.push_str("\n\n");
+                    text.push_str(warning);
+                }
                 serde_json::json!({
                     "ok": true,
                     "text": text,
                     "prompt": prompt,
-                    "promptPath": saved.map(|p| p.display().to_string()),
+                    "promptPath": prompt_path,
+                    "saveError": save_error,
                     "findings": crate::payload::findings(&repo.display().to_string(), &report),
                 })
             }
