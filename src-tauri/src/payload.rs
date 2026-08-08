@@ -16,12 +16,20 @@ use serde_json::{Value, json};
 /// window could only hand over all of them at once — and handing one defect at
 /// a time to a small local model is the workflow the handoff was built around.
 pub fn findings(repo: &str, report: &RunReport) -> Vec<Value> {
-    let total = report.ranked.len();
-    let sweeps = report.swept.len();
-    report
+    // Acknowledged findings are documented as deliberate decisions, not defects
+    // to fix. They must not become a card carrying a standalone fix prompt — the
+    // window would offer to have a model undo behaviour the code chose on
+    // purpose, the same way the engine handoff excludes them.
+    let actionable: Vec<&bugsleuth_engine::Ranked> = report
         .ranked
         .iter()
-        .map(|entry| {
+        .filter(|entry| entry.cluster.acknowledged.is_none())
+        .collect();
+    let total = actionable.len();
+    let sweeps = report.swept.len();
+    actionable
+        .iter()
+        .map(|&entry| {
             let cluster = &entry.cluster;
             let finding = cluster.representative();
             // The re-grade is sent as data, not prose: the card decides how to
@@ -118,6 +126,22 @@ mod tests {
         assert_eq!(cards[0]["severity"], "high");
         assert!(cards[0]["claimedSeverity"].is_null());
         assert!(cards[0]["triageReason"].is_null());
+    }
+
+    #[test]
+    fn acknowledged_findings_are_not_cards() {
+        // An acknowledged finding is a documented decision, not a defect to fix.
+        // It must not reach the window as a card carrying a standalone fix
+        // prompt, or the window would offer to have a model undo it.
+        let mut report = report(None, None);
+        let mut ack = report.ranked[0].clone();
+        ack.position = 2;
+        ack.cluster.acknowledged = Some("documented on purpose".into());
+        report.ranked.push(ack);
+
+        let cards = findings("C:/repo", &report);
+        assert_eq!(cards.len(), 1, "an acknowledged finding produced a card");
+        assert_eq!(cards[0]["position"], 1, "the wrong finding survived");
     }
 
     #[test]

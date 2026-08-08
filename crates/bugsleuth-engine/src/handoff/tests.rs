@@ -103,6 +103,52 @@ fn writing_prompts_clears_a_previous_runs_per_defect_files() {
     );
 }
 
+#[test]
+fn acknowledged_findings_are_not_fix_work() {
+    // A finding the triage pass acknowledged as a deliberate, documented
+    // decision belongs in the report's "already documented" section, not in a
+    // work order. Emitted as fix work, an applying model would undo the very
+    // thing the code chose on purpose.
+    let actionable = ranked_of(1);
+    let acknowledged = {
+        let mut entry = ranked_of(2);
+        entry.cluster.acknowledged = Some("the code documents this on purpose".into());
+        entry
+    };
+    let ranked = vec![actionable, acknowledged];
+
+    let bundle = prompt("C:/x", &ranked, &[], 3);
+    assert!(
+        bundle.contains("worst first (1)"),
+        "the count still includes the acknowledged finding: {bundle}"
+    );
+    assert!(bundle.contains("### 1."), "the actionable work order is missing");
+    assert!(
+        !bundle.contains("### 2."),
+        "the acknowledged finding became a work order"
+    );
+
+    // And through write_all: only the actionable per-defect prompt lands.
+    let dir = std::env::temp_dir()
+        .join("bugsleuth-ack-fixwork")
+        .join(format!("{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let written = write_all(&dir, "C:/x", &ranked, &[], 3).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        written.per_defect_written, 1,
+        "the acknowledged finding got a per-defect prompt"
+    );
+    assert!(
+        dir.join("fix-prompt-01.md").exists(),
+        "the actionable prompt is missing"
+    );
+    assert!(
+        !dir.join("fix-prompt-02.md").exists(),
+        "the acknowledged finding was written as fix work"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 fn ranked_of(position: usize) -> Ranked {
     Ranked {
         position,

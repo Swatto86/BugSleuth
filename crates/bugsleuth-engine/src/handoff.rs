@@ -15,6 +15,17 @@ use bugsleuth_judge::Ranked;
 mod work_order;
 pub use work_order::work_order;
 
+/// A ranked entry that is real fix work: a defect the code does not already
+/// document as a deliberate decision.
+///
+/// The report keeps acknowledged entries in its "already documented" section so
+/// a reader can disagree with the decision. The handoff must not turn them into
+/// a work order — that would hand an applying model an instruction to undo the
+/// very behaviour the code chose on purpose.
+fn is_actionable(entry: &&Ranked) -> bool {
+    entry.cluster.acknowledged.is_none()
+}
+
 /// Assemble the whole prompt: instructions, what was skipped, then the work.
 ///
 /// Takes the pieces rather than a report type, because two different reports
@@ -45,11 +56,15 @@ pub fn prompt(repo: &str, ranked: &[Ranked], not_reviewed: &[String], sweeps: us
     // the same wrong conclusion the human would.
     out.push_str(&crate::caveats::limits(""));
 
+    // Only findings the code does not already answer are fix work; acknowledged
+    // ones stay in the report but must never become a work order.
+    let actionable: Vec<&Ranked> = ranked.iter().filter(is_actionable).collect();
+
     out.push_str(&format!(
         "\n## The defects, worst first ({})\n",
-        ranked.len()
+        actionable.len()
     ));
-    for entry in ranked {
+    for entry in &actionable {
         out.push_str(&work_order(
             entry.position,
             entry.cluster.representative(),
@@ -64,7 +79,11 @@ pub fn prompt(repo: &str, ranked: &[Ranked], not_reviewed: &[String], sweeps: us
     }
 
     let mut full = preamble(repo);
-    full.push_str(&size_note(&out, ranked.len()));
+    // The truncation check must name the last heading that is actually present.
+    // Acknowledged entries are ranked too, so the surviving positions have gaps
+    // — the highest one, not the count, is the number the reader looks for.
+    let last = actionable.last().map_or(0, |entry| entry.position);
+    full.push_str(&size_note(&out, actionable.len(), last));
     full.push_str(&out);
     full
 }
@@ -81,16 +100,16 @@ pub fn prompt(repo: &str, ranked: &[Ranked], not_reviewed: &[String], sweeps: us
 ///
 /// Characters over four is the usual rough ratio. It is approximate and says
 /// so: an estimate that prompts someone to check beats no estimate at all.
-fn size_note(body: &str, defects: usize) -> String {
+fn size_note(body: &str, count: usize, last: usize) -> String {
     let tokens = body.chars().count() / 4;
     format!(
         "\n## Before you start: is this whole document in your context?\n\n\
-         This prompt describes **{defects} defects** and is roughly \
+         This prompt describes **{count} defects** and is roughly \
          **{tokens} tokens**.\n\n\
          If your context window cannot hold all of it, you will not be told — \
          you will simply receive the beginning and answer about that, which \
          looks identical to answering about everything. So check: if you cannot \
-         see a heading numbered `{defects}.` near the end of this document, you \
+         see a heading numbered `{last}.` near the end of this document, you \
          have been truncated. Say so and stop.\n\n\
          Each defect is also available as its own file, `fix-prompt-01.md` \
          onward, next to this one. Those are self-contained and small. Use them \
@@ -169,11 +188,14 @@ pub fn write_all(
     let bundle = dir.join("fix-prompt.md");
     crate::atomic::write(&bundle, prompt(repo, ranked, not_reviewed, sweeps))?;
 
+    // Acknowledged findings are not fix work, so they get no per-defect prompt —
+    // the same filter the bundle uses, applied here so the two never disagree.
+    let actionable: Vec<&Ranked> = ranked.iter().filter(is_actionable).collect();
     let mut written: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
-    for entry in ranked {
+    for entry in &actionable {
         let name = format!("fix-prompt-{:02}.md", entry.position);
-        let body = single(repo, entry, ranked.len(), sweeps);
+        let body = single(repo, entry, actionable.len(), sweeps);
         match crate::atomic::write(&dir.join(&name), body) {
             Ok(()) => written.push(name.to_lowercase()),
             Err(error) => warnings.push(format!("could not write {name}: {error}")),
