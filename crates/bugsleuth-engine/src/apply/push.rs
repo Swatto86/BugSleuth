@@ -18,7 +18,7 @@
 
 use std::path::Path;
 
-use super::observed::git;
+use super::{Baseline, observed::git};
 
 /// What became of the request to push. Every variant is a normal outcome of a
 /// successful apply — the fixes are already committed either way, so a refusal
@@ -70,7 +70,12 @@ fn blocked(commits: usize, attributed: &[String]) -> Option<PushOutcome> {
 }
 
 /// Push the branch the apply committed on, if it may be pushed.
-pub(super) fn push(repo: &Path, commits: usize, attributed: &[String]) -> PushOutcome {
+pub(super) fn push(
+    repo: &Path,
+    base: &Baseline,
+    commits: usize,
+    attributed: &[String],
+) -> PushOutcome {
     if let Some(stop) = blocked(commits, attributed) {
         return stop;
     }
@@ -102,6 +107,64 @@ pub(super) fn push(repo: &Path, commits: usize, attributed: &[String]) -> PushOu
             ));
         }
     };
+
+    let location = format!("refs/heads/{branch}");
+    let (remote, reference) = match git(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(upstream:remotename)%00%(upstream:remoteref)",
+            &location,
+        ],
+    )
+    .and_then(|value| {
+        let Some((remote, reference)) = value.trim().split_once('\0') else {
+            anyhow::bail!("git did not report the upstream remote and ref");
+        };
+        if remote.is_empty() || reference.is_empty() {
+            anyhow::bail!("git reported an incomplete upstream remote or ref");
+        }
+        Ok((remote.to_string(), reference.to_string()))
+    }) {
+        Ok(location) => location,
+        Err(error) => {
+            return PushOutcome::Refused(format!(
+                "could not establish the live location of {upstream}: {error}. Nothing was pushed."
+            ));
+        }
+    };
+
+    let live_upstream_tip = match git(repo, &["ls-remote", &remote, &reference]).and_then(|value| {
+        let mut ids = value
+            .lines()
+            .filter_map(|line| line.split_whitespace().next());
+        let Some(id) = ids.next().filter(|id| !id.is_empty()) else {
+            anyhow::bail!("the upstream ref does not exist");
+        };
+        if ids.next().is_some() {
+            anyhow::bail!("git reported more than one upstream object ID");
+        }
+        Ok(id.to_string())
+    }) {
+        Ok(tip) => tip,
+        Err(error) => {
+            return PushOutcome::Refused(format!(
+                "could not establish the live tip of {upstream}: {error}. Nothing was pushed."
+            ));
+        }
+    };
+
+    let Baseline::Commit(base) = base else {
+        return PushOutcome::Refused(
+            "the branch had no starting commit, so publication cannot be limited to this apply"
+                .to_string(),
+        );
+    };
+    if live_upstream_tip != *base {
+        return PushOutcome::Refused(format!(
+            "the branch was not synchronized with {upstream} when this apply began. Nothing was pushed, because doing so would also publish commits that predate this apply."
+        ));
+    }
 
     // `push.default=upstream` for this invocation only, which is what makes a
     // bare `git push` mean "this branch, to its upstream, and nothing else".

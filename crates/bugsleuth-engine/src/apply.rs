@@ -207,7 +207,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     // itself a reason to refuse the push rather than to publish and mention it.
     let commits = commits_since(repo, &base);
     let pushed = if request.push {
-        push::push(repo, commits, &attributed)
+        push::push(repo, &base, commits, &attributed)
     } else {
         PushOutcome::NotRequested
     };

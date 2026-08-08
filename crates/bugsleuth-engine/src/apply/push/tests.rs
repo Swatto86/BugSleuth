@@ -108,7 +108,7 @@ fn a_detached_head_is_refused_because_there_is_no_branch_to_push() {
     let head = git_ok(&repo, &["rev-parse", "HEAD"]);
     git_ok(&repo, &["checkout", "-q", "--detach", &head]);
 
-    let outcome = push(&repo, 1, &[]);
+    let outcome = push(&repo, &Baseline::Commit(head), 1, &[]);
     let PushOutcome::Refused(reason) = &outcome else {
         panic!("a detached HEAD was pushed: {outcome:?}");
     };
@@ -123,7 +123,12 @@ fn a_branch_with_no_upstream_is_left_alone() {
     // remote for the first time without anyone asking for it.
     let repo = repo_with_a_commit("no-upstream");
 
-    let outcome = push(&repo, 1, &[]);
+    let outcome = push(
+        &repo,
+        &Baseline::Commit(git_ok(&repo, &["rev-parse", "HEAD"])),
+        1,
+        &[],
+    );
     let PushOutcome::Refused(reason) = &outcome else {
         panic!("a branch with no upstream was pushed: {outcome:?}");
     };
@@ -148,7 +153,7 @@ fn the_commits_actually_reach_the_remote() {
     let local = git_ok(&repo, &["rev-parse", "HEAD"]);
     assert_ne!(local, before, "the test did not create a new commit");
 
-    let outcome = push(&repo, 1, &[]);
+    let outcome = push(&repo, &Baseline::Commit(before), 1, &[]);
     assert_eq!(
         outcome,
         PushOutcome::Pushed {
@@ -162,6 +167,32 @@ fn the_commits_actually_reach_the_remote() {
         local,
         "the push reported success but the remote did not move"
     );
+
+    let _ = std::fs::remove_dir_all(&repo);
+    let _ = std::fs::remove_dir_all(&remote);
+}
+
+#[test]
+fn commits_that_predate_the_apply_are_not_published() {
+    let repo = repo_with_a_commit("predates");
+    let remote = with_upstream(&repo, "predates-remote");
+    let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
+    let remote_before = remote_head(&remote, &branch);
+
+    std::fs::write(repo.join("unrelated.txt"), "not part of the apply\n").expect("write");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "unrelated unpublished work"]);
+    let base = git_ok(&repo, &["rev-parse", "HEAD"]);
+    std::fs::write(repo.join("fix.txt"), "the apply\n").expect("write");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "the fix"]);
+
+    let outcome = push(&repo, &Baseline::Commit(base), 1, &[]);
+    assert!(
+        matches!(outcome, PushOutcome::Refused(_)),
+        "the unrelated commit was publishable: {outcome:?}"
+    );
+    assert_eq!(remote_head(&remote, &branch), remote_before);
 
     let _ = std::fs::remove_dir_all(&repo);
     let _ = std::fs::remove_dir_all(&remote);
@@ -199,7 +230,8 @@ fn only_the_branch_that_was_applied_to_is_published() {
     git_ok(&repo, &["commit", "-qm", "the fix"]);
     let ours = git_ok(&repo, &["rev-parse", "HEAD"]);
 
-    let outcome = push(&repo, 1, &[]);
+    let base = git_ok(&repo, &["rev-parse", "HEAD~1"]);
+    let outcome = push(&repo, &Baseline::Commit(base), 1, &[]);
     assert!(
         matches!(outcome, PushOutcome::Pushed { .. }),
         "the push did not succeed: {outcome:?}"
@@ -254,9 +286,10 @@ fn a_rejected_push_is_reported_rather_than_forced() {
     git_ok(&repo, &["add", "-A"]);
     git_ok(&repo, &["commit", "-qm", "the fix"]);
 
-    let outcome = push(&repo, 1, &[]);
-    let PushOutcome::Failed(reason) = &outcome else {
-        panic!("a non-fast-forward push was not reported as failed: {outcome:?}");
+    let base = git_ok(&repo, &["rev-parse", "HEAD~1"]);
+    let outcome = push(&repo, &Baseline::Commit(base), 1, &[]);
+    let PushOutcome::Refused(reason) = &outcome else {
+        panic!("a branch whose upstream moved was not refused: {outcome:?}");
     };
     assert!(!reason.is_empty(), "the failure carried no explanation");
     assert_eq!(
