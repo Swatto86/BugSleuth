@@ -281,7 +281,6 @@ pub async fn run(request: Request<'_>) -> LaneReport {
     }
 }
 
-
 /// Split reported findings into those whose quoted code was located in the file
 /// they name, and those that were not.
 fn verify_all(

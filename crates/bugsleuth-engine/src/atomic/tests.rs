@@ -74,7 +74,7 @@ fn failed_stage_write_leaves_no_debris() {
 
     let result = write_with(&target, |staged| {
         std::fs::write(staged, b"partial").expect("partial stage write");
-        Err(io::Error::new(io::ErrorKind::Other, "disk full"))
+        Err(io::Error::other("disk full"))
     });
     assert!(result.is_err(), "the staging write should have failed");
     assert_eq!(

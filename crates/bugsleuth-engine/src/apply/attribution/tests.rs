@@ -279,7 +279,7 @@ fn attribution_read_errors_fail_closed() {
         "reading a missing commit message must error, not return an empty string"
     );
     assert!(
-        refuse_if_published(&dir, &[missing.clone()]).is_err(),
+        refuse_if_published(&dir, std::slice::from_ref(&missing)).is_err(),
         "a failed publication query must error, not read as 'not published'"
     );
     assert!(
@@ -289,7 +289,10 @@ fn attribution_read_errors_fail_closed() {
 
     // And through the front door: a base that cannot be resolved makes the whole
     // strip fail closed and leaves HEAD exactly where it was.
-    let head = git(&dir, &["rev-parse", "HEAD"]).expect("head").trim().to_string();
+    let head = git(&dir, &["rev-parse", "HEAD"])
+        .expect("head")
+        .trim()
+        .to_string();
     assert!(
         strip_attribution(&dir, &Baseline::Commit(missing.clone())).is_err(),
         "strip_attribution must fail rather than proceed on an unreadable history"

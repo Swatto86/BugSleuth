@@ -1,6 +1,7 @@
 //! Tests for throwaway worktrees, in their own file only because the
 //! module plus its tests crossed the hard line cap.
 
+use super::paths::VERBATIM;
 use super::*;
 
 #[test]

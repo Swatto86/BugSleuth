@@ -40,6 +40,12 @@ fn scratch(tag: &str) -> std::path::PathBuf {
 /// the push threads the real remote through rather than a `remote/branch`
 /// display string for `tag` to split.
 fn published(tag: &str) -> (std::path::PathBuf, std::path::PathBuf, String) {
+    published_on(tag, "origin")
+}
+
+/// Like [`published`], but with a remote whose name you choose — used to prove a
+/// slash in the remote name is not mistaken for the `remote/branch` separator.
+fn published_on(tag: &str, remote_name: &str) -> (std::path::PathBuf, std::path::PathBuf, String) {
     let repo = scratch(tag);
     git_ok(&repo, &["init", "-q"]);
     git_ok(&repo, &["config", "user.email", "t@example.com"]);
@@ -52,11 +58,11 @@ fn published(tag: &str) -> (std::path::PathBuf, std::path::PathBuf, String) {
     git_ok(&remote, &["init", "-q", "--bare"]);
     git_ok(
         &repo,
-        &["remote", "add", "origin", &remote.to_string_lossy()],
+        &["remote", "add", remote_name, &remote.to_string_lossy()],
     );
     let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
-    git_ok(&repo, &["push", "-q", "-u", "origin", &branch]);
-    (repo, remote, "origin".to_string())
+    git_ok(&repo, &["push", "-q", "-u", remote_name, &branch]);
+    (repo, remote, remote_name.to_string())
 }
 
 /// Every tag the remote actually has.
@@ -218,46 +224,26 @@ fn the_tag_reaches_the_remote_and_points_at_the_fixes() {
 
 #[test]
 fn slash_in_remote_name_does_not_redirect_release_tag() {
-    // Git allows a remote named `team/origin` (though not alongside a sibling
-    // `team` — it refuses that as a superset). The tag path used to split the
-    // upstream `team/origin/branch` on '/', deriving the wrong remote `team`, so
-    // `git push team <tag>` went to a remote that does not exist and the release
-    // never fired. The exact remote the push used must reach the tag instead.
-    let repo = scratch("slash-repo");
-    git_ok(&repo, &["init", "-q"]);
-    git_ok(&repo, &["config", "user.email", "t@example.com"]);
-    git_ok(&repo, &["config", "user.name", "Tester"]);
-    std::fs::write(repo.join("a.txt"), "one\n").expect("write");
-    git_ok(&repo, &["add", "-A"]);
-    git_ok(&repo, &["commit", "-qm", "first"]);
+    // Git allows a remote named `team/origin`. The tag path used to split the
+    // upstream `team/origin/branch` on '/' and derive the non-existent remote
+    // `team`, so the release never fired; the exact remote the push used must
+    // reach the tag instead.
+    let (repo, remote, remote_name) = published_on("slash", "team/origin");
     let base = git_ok(&repo, &["rev-parse", "HEAD"]);
-
-    let remote = scratch("slash-remote");
-    git_ok(&remote, &["init", "-q", "--bare"]);
-    git_ok(
-        &repo,
-        &["remote", "add", "team/origin", &remote.to_string_lossy()],
-    );
-    let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
-    git_ok(&repo, &["push", "-q", "-u", "team/origin", &branch]);
-    // A release scheme to follow, published on the same slash-named remote.
     git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
     git_ok(&repo, &["push", "-q", "team/origin", "v1.0.0"]);
-
-    // The fix, then the real push — which must report `team/origin` verbatim.
     std::fs::write(repo.join("b.txt"), "the fix\n").expect("write");
     git_ok(&repo, &["add", "-A"]);
     git_ok(&repo, &["commit", "-qm", "fix: the defect"]);
 
+    // The push must report the exact remote, and the tag must use it verbatim.
     let pushed = super::super::push::push(&repo, &super::super::Baseline::Commit(base), 1, &[]);
-    let super::super::PushOutcome::Pushed { remote: pushed_remote, .. } = &pushed else {
-        panic!("the fix was not pushed, so nothing proves the remote: {pushed:?}");
+    let super::super::PushOutcome::Pushed { remote: got, .. } = &pushed else {
+        panic!("the fix was not pushed: {pushed:?}");
     };
-    assert_eq!(pushed_remote, "team/origin", "the push lost the exact remote");
+    assert_eq!(got, &remote_name, "the push lost the exact remote");
 
-    // Tag with exactly what the push reported. A split would have sent it to
-    // `team`, which is not a remote here at all.
-    let outcome = tag(&repo, true, pushed_remote);
+    let outcome = tag(&repo, true, got);
     assert_eq!(
         outcome,
         TagOutcome::Tagged {
@@ -268,8 +254,7 @@ fn slash_in_remote_name_does_not_redirect_release_tag() {
     );
     assert!(
         remote_tags(&remote).contains(&"v1.0.1".to_string()),
-        "the release tag did not reach the slash-named remote: {:?}",
-        remote_tags(&remote)
+        "the release tag did not reach the slash-named remote"
     );
 
     for dir in [&repo, &remote] {

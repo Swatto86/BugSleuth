@@ -162,7 +162,10 @@ async fn cancelled_codex_invocation_removes_scratch() {
         });
         tokio::pin!(call);
         let waited = tokio::time::timeout(Duration::from_secs(4), call.as_mut()).await;
-        assert!(waited.is_err(), "the blocking stub should still have been running");
+        assert!(
+            waited.is_err(),
+            "the blocking stub should still have been running"
+        );
 
         // A scratch directory must actually have been created, or the test
         // proves nothing by cleaning up nothing.

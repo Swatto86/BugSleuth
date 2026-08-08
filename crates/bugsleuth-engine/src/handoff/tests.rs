@@ -122,7 +122,10 @@ fn acknowledged_findings_are_not_fix_work() {
         bundle.contains("worst first (1)"),
         "the count still includes the acknowledged finding: {bundle}"
     );
-    assert!(bundle.contains("### 1."), "the actionable work order is missing");
+    assert!(
+        bundle.contains("### 1."),
+        "the actionable work order is missing"
+    );
     assert!(
         !bundle.contains("### 2."),
         "the acknowledged finding became a work order"
@@ -253,7 +256,7 @@ fn failed_expected_prompt_is_preserved() {
             .map(|n| n.to_string_lossy() == "fix-prompt-01.md")
             .unwrap_or(false)
         {
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "disk full"))
+            Err(std::io::Error::other("disk full"))
         } else {
             crate::atomic::write(path, contents)
         }

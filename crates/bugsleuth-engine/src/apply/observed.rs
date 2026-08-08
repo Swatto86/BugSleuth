@@ -213,10 +213,10 @@ mod tests {
         // it were rename syntax; a literal backslash became a slash. `-z` output
         // is raw, so each survives intact.
         let porcelain = concat!(
-            " M src/café.rs\0",     // raw UTF-8, not C-quoted
-            "?? a -> b.rs\0",       // the arrow is part of the name
-            "?? weird\\name.rs\0",  // a literal backslash is not a separator
-            "R  dst.rs\0src.rs\0",  // rename: new path, then old path
+            " M src/café.rs\0",    // raw UTF-8, not C-quoted
+            "?? a -> b.rs\0",      // the arrow is part of the name
+            "?? weird\\name.rs\0", // a literal backslash is not a separator
+            "R  dst.rs\0src.rs\0", // rename: new path, then old path
         );
         assert_eq!(
             dirty_files(porcelain),
@@ -330,8 +330,7 @@ mod tests {
         // exists to stop: it would report a clean apply and, with push on,
         // decide there was nothing to publish — on a repository it could not
         // even open.
-        let dir =
-            std::env::temp_dir().join(format!("bugsleuth-obsfail-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("bugsleuth-obsfail-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         let run = |args: &[&str]| {
