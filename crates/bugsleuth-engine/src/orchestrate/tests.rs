@@ -27,34 +27,7 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
     // the run happens against a real clean checkout and every seeded sweep
     // records that revision. Without it, resume would sweep again — and there
     // is no model here to sweep with.
-    let repo = dir.join("repo");
-    std::fs::create_dir_all(&repo).expect("mkdir");
-    let git = |args: &[&str]| {
-        assert!(
-            std::process::Command::new("git")
-                .args(args)
-                .current_dir(&repo)
-                .output()
-                .expect("git runs")
-                .status
-                .success(),
-            "git {args:?} failed"
-        );
-    };
-    git(&["init", "-q"]);
-    git(&["config", "user.email", "t@example.com"]);
-    git(&["config", "user.name", "Test"]);
-    std::fs::write(repo.join("seed.txt"), "seed\n").expect("write");
-    git(&["add", "-A"]);
-    git(&["commit", "-qm", "seed"]);
-    let rev = {
-        let out = std::process::Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(&repo)
-            .output()
-            .expect("git runs");
-        String::from_utf8_lossy(&out.stdout).trim().to_string()
-    };
+    let (repo, rev) = clean_checkout(&dir);
 
     // Two vendors reporting the same defect in different words.
     let seed = |model: &str, title: &str, explanation: &str| {
@@ -66,8 +39,10 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
                       "explanation":"{explanation}","failure_scenario":"f"}}],
                     "rejected":[]}}"#
         );
+        // A real run writes each report under the canonical unit name the plan
+        // produces, so the seed must too — `claude:sonnet` is filed as `sonnet`.
         let unit = Unit {
-            model: model.to_string(),
+            model: crate::plan::canonical_spec(model),
             lane: Lane::Correctness,
             effort: String::new(),
             pass: 1,
@@ -283,4 +258,36 @@ fn finishing_one_pass_leaves_the_other_passes_outstanding() {
     strike_off(&mut other, Lane::Security, "claude:sonnet");
     strike_off(&mut other, Lane::Correctness, "codex:");
     assert_eq!(other.len(), 1, "an unrelated sweep struck off a unit");
+}
+
+/// A clean git checkout with one commit, and its HEAD — for resume tests that
+/// need a report's recorded revision to match the repository.
+fn clean_checkout(parent: &std::path::Path) -> (std::path::PathBuf, String) {
+    let repo = parent.join("repo");
+    std::fs::create_dir_all(&repo).expect("mkdir");
+    let git = |args: &[&str]| {
+        assert!(
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .output()
+                .expect("git runs")
+                .status
+                .success(),
+            "git {args:?} failed"
+        );
+    };
+    git(&["init", "-q"]);
+    git(&["config", "user.email", "t@example.com"]);
+    git(&["config", "user.name", "Test"]);
+    std::fs::write(repo.join("seed.txt"), "seed\n").expect("write");
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "seed"]);
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(&repo)
+        .output()
+        .expect("git runs");
+    let rev = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (repo, rev)
 }

@@ -127,13 +127,23 @@ test("release tag matches version embedded in the app", () => {
   // version. Without a check that they agree, a mistagged release advertises one
   // version and delivers another, and every client loops re-offering it.
   const yaml = workflow();
-  const step = /- name: Verify release tag matches app version[\s\S]*?(?=\n {6}- (?:name:|uses:))/.exec(
-    yaml,
+  const step =
+    /- name: Verify release tag matches app version[\s\S]*?(?=\n {6}- (?:name:|uses:))/.exec(
+      yaml,
+    );
+  assert.ok(
+    step,
+    "the workflow no longer verifies the tag against the app version",
   );
-  assert.ok(step, "the workflow no longer verifies the tag against the app version");
   const body = step[0]!;
-  assert.ok(body.includes("Cargo.toml"), "the check does not read the embedded version");
-  assert.ok(body.includes("GITHUB_REF_NAME"), "the check does not read the tag");
+  assert.ok(
+    body.includes("Cargo.toml"),
+    "the check does not read the embedded version",
+  );
+  assert.ok(
+    body.includes("GITHUB_REF_NAME"),
+    "the check does not read the tag",
+  );
   assert.ok(
     body.includes('[ "$tag_version" = "$app_version" ]'),
     "the check does not compare the tag against the app version",

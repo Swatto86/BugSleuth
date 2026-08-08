@@ -78,6 +78,65 @@ fn blocked(commits: usize, attributed: &[String]) -> Option<PushOutcome> {
     None
 }
 
+/// The remote and remote-ref an upstream branch tracks, or a refusal to push.
+fn upstream_remote_ref(
+    repo: &Path,
+    branch: &str,
+    upstream: &str,
+) -> Result<(String, String), PushOutcome> {
+    let location = format!("refs/heads/{branch}");
+    git(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(upstream:remotename)%00%(upstream:remoteref)",
+            &location,
+        ],
+    )
+    .and_then(|value| {
+        let Some((remote, reference)) = value.trim().split_once('\0') else {
+            anyhow::bail!("git did not report the upstream remote and ref");
+        };
+        if remote.is_empty() || reference.is_empty() {
+            anyhow::bail!("git reported an incomplete upstream remote or ref");
+        }
+        Ok((remote.to_string(), reference.to_string()))
+    })
+    .map_err(|error| {
+        PushOutcome::Refused(format!(
+            "could not establish the live location of {upstream}: {error}. Nothing was pushed."
+        ))
+    })
+}
+
+/// The single object ID the upstream ref currently points at on the remote, or
+/// a refusal when it cannot be read unambiguously.
+fn upstream_live_tip(
+    repo: &Path,
+    remote: &str,
+    reference: &str,
+    upstream: &str,
+) -> Result<String, PushOutcome> {
+    git(repo, &["ls-remote", remote, reference])
+        .and_then(|value| {
+            let mut ids = value
+                .lines()
+                .filter_map(|line| line.split_whitespace().next());
+            let Some(id) = ids.next().filter(|id| !id.is_empty()) else {
+                anyhow::bail!("the upstream ref does not exist");
+            };
+            if ids.next().is_some() {
+                anyhow::bail!("git reported more than one upstream object ID");
+            }
+            Ok(id.to_string())
+        })
+        .map_err(|error| {
+            PushOutcome::Refused(format!(
+                "could not establish the live tip of {upstream}: {error}. Nothing was pushed."
+            ))
+        })
+}
+
 /// Push the branch the apply committed on, if it may be pushed.
 pub(super) fn push(
     repo: &Path,
@@ -117,50 +176,13 @@ pub(super) fn push(
         }
     };
 
-    let location = format!("refs/heads/{branch}");
-    let (remote, reference) = match git(
-        repo,
-        &[
-            "for-each-ref",
-            "--format=%(upstream:remotename)%00%(upstream:remoteref)",
-            &location,
-        ],
-    )
-    .and_then(|value| {
-        let Some((remote, reference)) = value.trim().split_once('\0') else {
-            anyhow::bail!("git did not report the upstream remote and ref");
-        };
-        if remote.is_empty() || reference.is_empty() {
-            anyhow::bail!("git reported an incomplete upstream remote or ref");
-        }
-        Ok((remote.to_string(), reference.to_string()))
-    }) {
+    let (remote, reference) = match upstream_remote_ref(repo, &branch, &upstream) {
         Ok(location) => location,
-        Err(error) => {
-            return PushOutcome::Refused(format!(
-                "could not establish the live location of {upstream}: {error}. Nothing was pushed."
-            ));
-        }
+        Err(refusal) => return refusal,
     };
-
-    let live_upstream_tip = match git(repo, &["ls-remote", &remote, &reference]).and_then(|value| {
-        let mut ids = value
-            .lines()
-            .filter_map(|line| line.split_whitespace().next());
-        let Some(id) = ids.next().filter(|id| !id.is_empty()) else {
-            anyhow::bail!("the upstream ref does not exist");
-        };
-        if ids.next().is_some() {
-            anyhow::bail!("git reported more than one upstream object ID");
-        }
-        Ok(id.to_string())
-    }) {
+    let live_upstream_tip = match upstream_live_tip(repo, &remote, &reference, &upstream) {
         Ok(tip) => tip,
-        Err(error) => {
-            return PushOutcome::Refused(format!(
-                "could not establish the live tip of {upstream}: {error}. Nothing was pushed."
-            ));
-        }
+        Err(refusal) => return refusal,
     };
 
     let Baseline::Commit(base) = base else {
