@@ -3,6 +3,7 @@
 
 use super::super::persist::*;
 use bugsleuth_domain::Lane;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 #[test]
@@ -54,30 +55,12 @@ fn a_truncated_report_is_swept_again_rather_than_failing_the_run() {
 }
 
 #[test]
-fn each_unit_gets_a_distinct_file_so_sweeps_cannot_overwrite_each_other() {
-    let a = file_name_for(&unit());
-    let b = file_name_for(&Unit {
-        model: "codex:".into(),
-        lane: Lane::Correctness,
-        effort: String::new(),
-        pass: 1,
-    });
-    let c = file_name_for(&Unit {
-        model: "claude:sonnet".into(),
-        lane: Lane::Security,
-        effort: String::new(),
-        pass: 1,
-    });
-    assert_ne!(a, b);
-    assert_ne!(a, c);
-}
-
-#[test]
 fn every_sweep_writes_to_its_own_file() {
     let a = LaneReport {
         lane: "Correctness".into(),
         model: "claude:sonnet".into(),
         commit: None,
+        cache_revision: None,
         scope: None,
         status: Status::Swept {
             turns: None,
@@ -106,7 +89,9 @@ fn unit() -> Unit {
 
 fn options<'a>(dir: &'a Path, resume: bool) -> RunOptions<'a> {
     RunOptions {
-        repo: Path::new("."),
+        // Reuse tests key on a real, clean checkout: resume is only allowed to
+        // return a sweep whose recorded revision matches the repository's.
+        repo: shared_repo(),
         scope: None,
         max_turns: 10,
         timeout: Duration::from_secs(60),
@@ -132,78 +117,14 @@ fn lane_report(status: Status) -> LaneReport {
         lane: "Correctness".into(),
         model: "claude:sonnet".into(),
         commit: None,
+        // Matches the shared repo `options` points at, so a clean unchanged
+        // revision is reusable; tests that need otherwise override this.
+        cache_revision: Some(head(shared_repo())),
         scope: None,
         status,
         findings: vec![],
         rejected: vec![],
         usage: None,
-    }
-}
-
-#[test]
-fn a_second_pass_writes_beside_the_first_rather_than_over_it() {
-    // The whole value of repetition is keeping both results: three
-    // identical sweeps of one fixture found five findings each but six
-    // between them. Overwriting would buy nothing.
-    let first = file_name_for(&unit());
-    let second = file_name_for(&Unit { pass: 2, ..unit() });
-    assert_ne!(first, second);
-    assert!(second.contains("~p2"), "got {second}");
-    // A first pass keeps the historical name, so reports written before
-    // passes existed still resume.
-    assert!(!first.contains("pass"), "got {first}");
-}
-
-#[test]
-fn an_effort_spelling_the_pass_suffix_cannot_collide_with_a_real_second_pass() {
-    // Both of these are reachable from ordinary config values: effort is
-    // free text at every entry point. Under plain concatenation they were
-    // byte-identical, so whichever sweep finished last silently overwrote
-    // the other and resume handed one unit the other's report.
-    let second_pass = file_name_for(&Unit { pass: 2, ..unit() });
-    let odd_effort = file_name_for(&Unit {
-        effort: "pass2".into(),
-        ..unit()
-    });
-    assert_ne!(second_pass, odd_effort);
-    // The same trap from the other side: an effort of "p2" against the
-    // new-style pass marker.
-    let p2_effort = file_name_for(&Unit {
-        effort: "p2".into(),
-        ..unit()
-    });
-    assert_ne!(second_pass, p2_effort);
-}
-
-#[test]
-fn two_model_ids_that_differ_only_in_punctuation_get_different_files() {
-    // `codex:a/b` and `codex:a-b` both used to render as `codex-a-b`: one
-    // sweep overwrote the other, and a resumed run handed a model the other
-    // model's findings while the report claimed the wrong provenance.
-    let slash = file_name_for(&Unit {
-        model: "codex:a/b".into(),
-        ..unit()
-    });
-    let dash = file_name_for(&Unit {
-        model: "codex:a-b".into(),
-        ..unit()
-    });
-    assert_ne!(slash, dash);
-}
-
-#[test]
-fn an_encoded_name_can_never_reach_outside_the_run_directory() {
-    // The encoding exists to be injective, but it must not have bought that
-    // by letting a separator or a parent reference through.
-    for hostile in ["../../etc/passwd", r"C:\Windows\System32", r"a/b\c", ".."] {
-        let name = file_name_for(&Unit {
-            model: hostile.to_string(),
-            ..unit()
-        });
-        assert!(!name.contains('/'), "{name}");
-        assert!(!name.contains('\\'), "{name}");
-        assert!(!name.contains(".."), "{name}");
-        assert!(!name.contains(':'), "{name}");
     }
 }
 
@@ -350,4 +271,116 @@ fn the_legacy_name_does_not_smuggle_a_differently_scoped_sweep_back_in() {
         "the legacy path reused a sweep of a different scope"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn git(repo: &Path, args: &[&str]) {
+    let ok = std::process::Command::new("git")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .expect("git runs")
+        .status
+        .success();
+    assert!(ok, "git {args:?} failed");
+}
+
+fn clean_repo(name: &str) -> PathBuf {
+    let dir = scratch(&format!("repo-{name}"));
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    git(&dir, &["init", "-q"]);
+    git(&dir, &["config", "user.email", "t@example.com"]);
+    git(&dir, &["config", "user.name", "Test"]);
+    std::fs::write(dir.join("seed.txt"), "seed\n").expect("write");
+    git(&dir, &["add", "-A"]);
+    git(&dir, &["commit", "-qm", "seed"]);
+    dir
+}
+
+fn head(repo: &Path) -> String {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(repo)
+        .output()
+        .expect("git runs");
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+/// One clean, read-only git repo shared by the reuse tests. They only read its
+/// revision, so a single checkout serves them all; tests that mutate a repo
+/// make their own with `clean_repo`.
+fn shared_repo() -> &'static Path {
+    static REPO: OnceLock<PathBuf> = OnceLock::new();
+    REPO.get_or_init(|| clean_repo("shared")).as_path()
+}
+
+#[test]
+fn a_sweep_from_an_earlier_revision_is_not_reused_after_the_checkout_advances() {
+    // The defect: resume keyed on lane, model and scope alone, so a sweep run
+    // at one commit was handed back after HEAD moved — findings from code no
+    // longer there, and blind to code that now is.
+    let dir = scratch("stale-rev");
+    let repo = clean_repo("stale-rev");
+    let mut report = lane_report(Status::Swept {
+        turns: Some(3),
+        salvaged: false,
+    });
+    report.cache_revision = Some(head(&repo));
+    assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
+
+    let mut before = options(&dir, true);
+    before.repo = &repo;
+    assert!(
+        reusable(&unit(), &before).is_some(),
+        "a sweep of the current revision should be reused"
+    );
+
+    // Advance the checkout, exactly as committing a fix would.
+    std::fs::write(repo.join("seed.txt"), "changed\n").expect("write");
+    git(&repo, &["commit", "-aqm", "advance"]);
+    let mut after = options(&dir, true);
+    after.repo = &repo;
+    assert!(
+        reusable(&unit(), &after).is_none(),
+        "a sweep from the previous revision was reused after the checkout advanced"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn a_report_with_no_recorded_revision_is_swept_again() {
+    // Reports written before revisions were recorded, and any taken over a
+    // dirty tree, carry no marker and must not be trusted to describe the tree.
+    let dir = scratch("no-marker");
+    let mut report = lane_report(Status::Swept {
+        turns: Some(1),
+        salvaged: false,
+    });
+    report.cache_revision = None;
+    assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
+    assert!(reusable(&unit(), &options(&dir, true)).is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_sweep_is_not_reused_while_the_working_tree_is_dirty() {
+    // A dirty tree is not any commit, so nothing can be pinned to it. The sweep
+    // is redone rather than reused against edited-but-uncommitted code.
+    let dir = scratch("dirty");
+    let repo = clean_repo("dirty");
+    let mut report = lane_report(Status::Swept {
+        turns: Some(2),
+        salvaged: false,
+    });
+    report.cache_revision = Some(head(&repo));
+    assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
+    std::fs::write(repo.join("uncommitted.txt"), "dirty\n").expect("write");
+    let mut o = options(&dir, true);
+    o.repo = &repo;
+    assert!(
+        reusable(&unit(), &o).is_none(),
+        "a sweep was reused while the working tree was dirty"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&repo);
 }

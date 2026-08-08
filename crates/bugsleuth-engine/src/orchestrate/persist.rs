@@ -23,7 +23,7 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
     }
     let dir = options.out_dir?;
     read_swept(&dir.join(file_name_for(unit)))
-        .filter(|report| same_scope(report, options.scope))
+        .filter(|report| same_scope(report, options.scope) && same_revision(report, options))
         // Reports written before the encoding changed are still worth tens of
         // minutes each, so the old name is tried too — but only after the
         // current one, and only if the report says it is the right sweep. The
@@ -37,7 +37,8 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
             // the second" shape the correctness mandate hunts for.
             let same_sweep = legacy.lane == unit.lane.title()
                 && legacy.model.ends_with(model_of(&unit.model))
-                && same_scope(&legacy, options.scope);
+                && same_scope(&legacy, options.scope)
+                && same_revision(&legacy, options);
             same_sweep.then_some(legacy)
         })
 }
@@ -63,6 +64,20 @@ fn read_swept(path: &Path) -> Option<LaneReport> {
 /// reviewed code it never read.
 fn same_scope(report: &LaneReport, scope: Option<&str>) -> bool {
     report.scope.as_deref() == scope
+}
+
+/// Whether a stored report reviewed the exact source revision this run is at.
+///
+/// A report is only reusable when it recorded a clean revision that still
+/// matches the repository's current clean revision. Resume used to key on lane,
+/// model and scope alone, so a sweep run at one commit was handed back after the
+/// checkout advanced — findings from code that was no longer there, and blind to
+/// code that now was. A report with no recorded revision (written before this
+/// existed, or taken over a dirty tree) is never reused: swept once more is the
+/// safe direction to be wrong in.
+fn same_revision(report: &LaneReport, options: &RunOptions<'_>) -> bool {
+    let current = crate::sweep::clean_revision(options.repo);
+    report.cache_revision.is_some() && report.cache_revision == current
 }
 
 /// The model half of a `vendor:model` spec. A report records the resolved
@@ -172,3 +187,7 @@ pub(super) fn write_report(dir: &Path, name: &str, report: &LaneReport) -> Resul
 #[cfg(test)]
 #[path = "persist/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "persist/naming_tests.rs"]
+mod naming_tests;

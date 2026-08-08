@@ -171,11 +171,16 @@ pub async fn run(request: Request<'_>) -> LaneReport {
     // Recorded before anything runs, so even a failed sweep says what tree it
     // was pointed at.
     let commit = reviewed_commit(request.repo);
+    // The revision this sweep may later be reused for. Captured before anything
+    // runs and confirmed unchanged after, so a sweep that read a tree edited
+    // under it is never handed back as a review of the edited tree.
+    let cache_revision_before = clean_revision(request.repo);
 
     let not_swept = |reason: String| LaneReport {
         lane: request.lane.title().to_string(),
         model: model_label.clone(),
         commit: commit.clone(),
+        cache_revision: None,
         scope: request.scope.map(str::to_string),
         status: Status::NotSwept { reason },
         findings: vec![],
@@ -248,10 +253,17 @@ pub async fn run(request: Request<'_>) -> LaneReport {
 
     let (findings, rejected) = verify_all(reviewed, request.lane, &ModelId::new(&model_label), raw);
 
+    // Only reusable if the repository was clean at the start and is still at the
+    // same clean revision now: a HEAD that moved, or a working tree that was
+    // edited, means this sweep no longer describes the current tree.
+    let cache_revision = cache_revision_before
+        .filter(|before| clean_revision(request.repo).as_ref() == Some(before));
+
     LaneReport {
         lane: request.lane.title().to_string(),
         model: model_label,
         commit,
+        cache_revision,
         scope: request.scope.map(str::to_string),
         status: Status::Swept { turns, salvaged },
         findings,
@@ -274,6 +286,24 @@ fn reviewed_commit(repo: &Path) -> Option<String> {
     }
     let hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
     (!hash.is_empty()).then_some(hash)
+}
+
+/// The commit HEAD points at, but only when the working tree is clean.
+///
+/// A sweep is reusable only if it can be pinned to an exact source revision.
+/// A dirty tree cannot be — its content is not any commit — so this returns
+/// `None` for a dirty or non-git directory, and only a clean checkout yields a
+/// revision a later run can compare against.
+pub(crate) fn clean_revision(repo: &Path) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=all"])
+        .current_dir(repo)
+        .output()
+        .ok()?;
+    if !output.status.success() || !output.stdout.is_empty() {
+        return None;
+    }
+    reviewed_commit(repo)
 }
 
 /// Split reported findings into those whose quoted code was located in the file

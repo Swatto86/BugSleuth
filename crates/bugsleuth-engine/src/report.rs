@@ -23,6 +23,17 @@ pub struct LaneReport {
     /// every report written before this existed loadable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
+    /// The source revision this sweep may be reused for, set only when the
+    /// repository was clean and unchanged across the whole sweep.
+    ///
+    /// Resume reused a stored sweep by lane, model and scope alone, so a run at
+    /// a later commit was handed findings from an earlier one and presented them
+    /// as a review of the current tree — a report claiming to have read code it
+    /// never saw. A sweep that read a dirty tree, or whose HEAD moved under it,
+    /// leaves this `None` and is never reused. `#[serde(default)]` keeps reports
+    /// written before this existed loadable; they are simply swept again once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_revision: Option<String>,
     /// The path scope the sweep was pointed at, when one was given.
     ///
     /// Recorded because resume identified a reusable sweep by lane and model
@@ -195,6 +206,7 @@ mod tests {
             lane: "Security".into(),
             model: "claude:sonnet".into(),
             commit: None,
+            cache_revision: None,
             scope: None,
             status: Status::NotSwept {
                 reason: "no model assigned".into(),
@@ -214,6 +226,7 @@ mod tests {
             lane: "Security".into(),
             model: "claude:sonnet".into(),
             commit: None,
+            cache_revision: None,
             scope: None,
             status: Status::Swept {
                 turns: Some(4),
@@ -232,6 +245,7 @@ mod tests {
             lane: "Security".into(),
             model: "claude:sonnet".into(),
             commit: None,
+            cache_revision: None,
             scope: None,
             status: Status::Swept {
                 turns: Some(4),
@@ -271,6 +285,7 @@ mod salvaged_tests {
             lane: "Correctness".into(),
             model: "claude:sonnet".into(),
             commit: None,
+            cache_revision: None,
             scope: None,
             status: Status::Swept {
                 turns: Some(30),

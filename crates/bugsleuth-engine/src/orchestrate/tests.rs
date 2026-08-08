@@ -23,10 +23,43 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
         .join(format!("{}-resumed", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
 
+    // Resume now requires a report to name the clean revision it reviewed, so
+    // the run happens against a real clean checkout and every seeded sweep
+    // records that revision. Without it, resume would sweep again — and there
+    // is no model here to sweep with.
+    let repo = dir.join("repo");
+    std::fs::create_dir_all(&repo).expect("mkdir");
+    let git = |args: &[&str]| {
+        assert!(
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .output()
+                .expect("git runs")
+                .status
+                .success(),
+            "git {args:?} failed"
+        );
+    };
+    git(&["init", "-q"]);
+    git(&["config", "user.email", "t@example.com"]);
+    git(&["config", "user.name", "Test"]);
+    std::fs::write(repo.join("seed.txt"), "seed\n").expect("write");
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "seed"]);
+    let rev = {
+        let out = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&repo)
+            .output()
+            .expect("git runs");
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+
     // Two vendors reporting the same defect in different words.
     let seed = |model: &str, title: &str, explanation: &str| {
         let report = format!(
-            r#"{{"lane":"Correctness","model":"{model}","status":{{"state":"swept"}},
+            r#"{{"lane":"Correctness","model":"{model}","cache_revision":"{rev}","status":{{"state":"swept"}},
                     "findings":[{{"id":"x","lane":"correctness","model":"{model}",
                       "title":"{title}","severity":"high",
                       "anchor":{{"file":"src/a.rs","line":10,"claimed_line":10,"snippet":"code"}},
@@ -74,7 +107,7 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
     let report = run(
         &plan,
         RunOptions {
-            repo: Path::new("."),
+            repo: &repo,
             scope: None,
             triage_model: "",
             cancel: Default::default(),
