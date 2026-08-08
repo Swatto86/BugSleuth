@@ -252,27 +252,94 @@ fn only_the_release_tag_is_published() {
 }
 
 #[test]
-fn a_rejected_tag_push_leaves_nothing_behind_locally() {
-    // If the local tag survived a failed push, every retry would hit the
-    // "already exists" refusal and could never succeed — a dead end that reads
-    // as the feature being broken.
-    let (repo, remote, upstream) = published("rejected");
+fn an_unreadable_remote_after_a_failed_tag_push_is_unknown_and_keeps_the_tag() {
+    // A push error only means the client got no acknowledgement. If the remote
+    // then cannot be read, whether the tag — and the release — landed is
+    // genuinely unknown, so the local tag is kept rather than deleted and the
+    // outcome is never reported as a definite failure.
+    let (repo, remote, upstream) = published("unreadable");
     git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
     git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
 
-    // The remote goes away, so pushing the tag fails.
+    // The remote goes away, so both the push and the reconciliation read fail.
     std::fs::remove_dir_all(&remote).expect("remove the remote");
 
     let outcome = tag(&repo, true, &upstream);
+    let TagOutcome::Unknown { tag, .. } = &outcome else {
+        panic!("an unconfirmable tag push was not reported as unknown: {outcome:?}");
+    };
+    assert_eq!(tag, "v1.0.1");
+    assert_eq!(
+        git_ok(&repo, &["tag", "--list", "v1.0.1"]),
+        "v1.0.1",
+        "the local tag was deleted despite the outcome being unknown"
+    );
+
+    let _ = std::fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn a_confirmed_rejection_reports_failure_and_removes_the_local_tag() {
+    // When the remote is readable and the tag is confirmed still absent after a
+    // failed push, that is a genuine rejection: reported as failed, and the
+    // local tag removed so a retry is not blocked by the collision check.
+    let (repo, remote, upstream) = published("denied");
+    git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
+    git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
+
+    // A pre-receive hook that rejects every push while the remote stays readable,
+    // so reconciliation can confirm the tag never landed.
+    let hook = remote.join("hooks").join("pre-receive");
+    std::fs::create_dir_all(remote.join("hooks")).expect("hooks dir");
+    std::fs::write(&hook, "#!/bin/sh\nexit 1\n").expect("write hook");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+
+    let outcome = tag(&repo, true, &upstream);
     let TagOutcome::Failed(reason) = &outcome else {
-        panic!("a failed tag push was not reported: {outcome:?}");
+        panic!("a confirmed rejection was not reported as failed: {outcome:?}");
     };
     assert!(!reason.is_empty(), "the failure carried no explanation");
     assert_eq!(
         git_ok(&repo, &["tag", "--list", "v1.0.1"]),
         "",
-        "the local tag was left behind after a failed push"
+        "the local tag was left behind after a confirmed rejection"
+    );
+    assert!(
+        !remote_tags(&remote).contains(&"v1.0.1".to_string()),
+        "the rejected tag reached the remote after all"
     );
 
-    let _ = std::fs::remove_dir_all(&repo);
+    for dir in [&repo, &remote] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[test]
+fn a_tag_already_on_the_remote_is_refused_even_when_absent_locally() {
+    // Another machine may have published the next version. Tagging over it would
+    // repoint a release, so a name already on the remote is refused even when
+    // this checkout has never seen it.
+    let (repo, remote, upstream) = published("remote-collision");
+    git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
+    git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
+
+    // Publish v1.0.1 from here, then forget it locally so the collision is only
+    // visible on the remote.
+    git_ok(&repo, &["tag", "-a", "v1.0.1", "-m", "elsewhere"]);
+    git_ok(&repo, &["push", "-q", "origin", "v1.0.1"]);
+    git_ok(&repo, &["tag", "-d", "v1.0.1"]);
+
+    let outcome = tag(&repo, true, &upstream);
+    let TagOutcome::Refused(reason) = &outcome else {
+        panic!("a remote tag collision was not refused: {outcome:?}");
+    };
+    assert!(reason.contains("already exists on origin"), "{reason}");
+
+    for dir in [&repo, &remote] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

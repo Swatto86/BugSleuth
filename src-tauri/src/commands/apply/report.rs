@@ -116,6 +116,16 @@ fn describe_push(outcome: &bugsleuth_engine::apply::PushOutcome) -> String {
              means a fetch and a rebase, or a force, and neither is a choice a tool should make \
              with your history.\n\n"
         ),
+        P::Unknown {
+            branch,
+            upstream,
+            error,
+        } => format!(
+            "The push to {upstream} errored and the remote could not be confirmed, so whether \
+             {branch} was published is unknown: {error}\n\nCheck {upstream} before you retry — the \
+             commits may already be there, and pushing again is not automatic here because it \
+             could publish work twice.\n\n"
+        ),
     }
 }
 
@@ -142,6 +152,12 @@ fn describe_tag(outcome: &bugsleuth_engine::apply::TagOutcome) -> String {
         T::Failed(error) => format!(
             "The tag was rejected and no release was started: {error}\n\nThe commits are pushed \
              either way. Tag it by hand once you know why.\n\n"
+        ),
+        T::Unknown { tag, remote, error } => format!(
+            "The tag push to {remote} errored and the remote could not be confirmed, so whether \
+             {tag} started a release is unknown: {error}\n\nCheck {remote} for {tag} before you \
+             retry — the release may already be running, and tagging again is not automatic here \
+             because starting a release twice is not something a later commit takes back.\n\n"
         ),
     }
 }

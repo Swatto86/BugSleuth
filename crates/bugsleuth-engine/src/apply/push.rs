@@ -35,9 +35,18 @@ pub enum PushOutcome {
         branch: String,
         upstream: String,
     },
-    /// git ran and rejected it. Left for the user: the fix is a fetch and a
-    /// rebase, or a force-push, and neither is this tool's to choose.
+    /// git ran and the remote is confirmed still unchanged: a genuine rejection.
+    /// Left for the user: the fix is a fetch and a rebase, or a force-push, and
+    /// neither is this tool's to choose.
     Failed(String),
+    /// The push errored and the remote could not be confirmed either way. The
+    /// commits may or may not be published, so this must not be retried
+    /// automatically and must never be described as a definite failure.
+    Unknown {
+        branch: String,
+        upstream: String,
+        error: String,
+    },
 }
 
 /// Why this must not be pushed, or `None` when the observed apply is publishable.
@@ -178,9 +187,34 @@ pub(super) fn push(
     // Still no force and no refspec of our own: a rejection is left rejected,
     // because recovering from one means a fetch and a rebase, or a force, and
     // a tool that picks either on your behalf is a tool that loses work.
+    // The object a successful push would place on the remote branch.
+    let desired = match git(repo, &["rev-parse", "HEAD"]) {
+        Ok(id) if !id.trim().is_empty() => id.trim().to_string(),
+        _ => {
+            return PushOutcome::Refused(
+                "could not resolve HEAD to publish, so nothing was pushed.".to_string(),
+            );
+        }
+    };
+
     match git(repo, &["-c", "push.default=upstream", "push"]) {
         Ok(_) => PushOutcome::Pushed { branch, upstream },
-        Err(error) => PushOutcome::Failed(error.to_string()),
+        Err(error) => {
+            // A push error only means the client got no success reply. The
+            // update may already be on the remote, so re-read the ref before
+            // calling it a failure.
+            let before = Ok(Some(live_upstream_tip));
+            let after = super::remote::remote_oid(repo, &remote, &reference);
+            match super::remote::classify(&before, &desired, &after) {
+                super::remote::UpdateAfterError::Landed => PushOutcome::Pushed { branch, upstream },
+                super::remote::UpdateAfterError::Rejected => PushOutcome::Failed(error.to_string()),
+                super::remote::UpdateAfterError::Unknown => PushOutcome::Unknown {
+                    branch,
+                    upstream,
+                    error: error.to_string(),
+                },
+            }
+        }
     }
 }
 

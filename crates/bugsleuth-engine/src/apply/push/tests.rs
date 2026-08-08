@@ -302,3 +302,43 @@ fn a_rejected_push_is_reported_rather_than_forced() {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
+
+#[test]
+fn a_confirmed_rejection_is_reported_as_failed_not_unknown() {
+    // The remote is readable and confirmed unchanged after the push errored, so
+    // this is a genuine rejection rather than an ambiguous one — Failed, not
+    // Unknown, and the branch on the remote must not have moved.
+    let repo = repo_with_a_commit("push-denied");
+    let remote = with_upstream(&repo, "push-denied-remote");
+    let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
+    let base = git_ok(&repo, &["rev-parse", "HEAD"]);
+
+    // A pre-receive hook rejects the push while the remote stays readable.
+    std::fs::create_dir_all(remote.join("hooks")).expect("hooks dir");
+    let hook = remote.join("hooks").join("pre-receive");
+    std::fs::write(&hook, "#!/bin/sh\nexit 1\n").expect("write hook");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+
+    std::fs::write(repo.join("b.txt"), "the fix\n").expect("write");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "the fix"]);
+
+    let outcome = push(&repo, &Baseline::Commit(base.clone()), 1, &[]);
+    let PushOutcome::Failed(reason) = &outcome else {
+        panic!("a confirmed rejection was not reported as failed: {outcome:?}");
+    };
+    assert!(!reason.is_empty(), "the failure carried no explanation");
+    assert_eq!(
+        remote_head(&remote, &branch),
+        base,
+        "the remote branch moved despite the push being reported as rejected"
+    );
+
+    for dir in [&repo, &remote] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}

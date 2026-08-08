@@ -40,8 +40,17 @@ pub enum TagOutcome {
         tag: String,
         remote: String,
     },
-    /// git ran and rejected it. Left for the user, exactly as a rejected push is.
+    /// git ran and the remote tag is confirmed still absent: a genuine rejection.
+    /// Left for the user, exactly as a rejected push is.
     Failed(String),
+    /// The tag push errored and the remote could not be confirmed either way.
+    /// The release may already have started, so this is never described as a
+    /// definite failure and the local tag is kept rather than deleted.
+    Unknown {
+        tag: String,
+        remote: String,
+        error: String,
+    },
 }
 
 /// The next patch version after `latest`, or `None` if it is not a version this
@@ -142,6 +151,19 @@ pub(super) fn tag(repo: &Path, pushed: bool, upstream: &str) -> TagOutcome {
         ));
     }
 
+    // The same name may exist on the remote without existing locally — another
+    // machine may have tagged it. Publishing over it would repoint a release, so
+    // this is refused too. A remote that cannot be read is not treated as a
+    // collision; the local check above already ran.
+    let reference = format!("refs/tags/{next}");
+    let remote_before = super::remote::remote_oid(repo, remote, &reference);
+    if let Ok(Some(_)) = &remote_before {
+        return TagOutcome::Refused(format!(
+            "{next} already exists on {remote}, so nothing was tagged. Moving a published tag \
+             repoints whatever release was built from it."
+        ));
+    }
+
     // Annotated, not lightweight: `git describe` and most release tooling only
     // see annotated tags, and a release trigger that half the tooling cannot
     // find is worse than no tag.
@@ -152,6 +174,15 @@ pub(super) fn tag(repo: &Path, pushed: bool, upstream: &str) -> TagOutcome {
         return TagOutcome::Failed(error.to_string());
     }
 
+    // The tag object a successful push would place on the remote.
+    let desired = match git(repo, &["rev-parse", &next]) {
+        Ok(id) if !id.trim().is_empty() => id.trim().to_string(),
+        _ => {
+            let _ = git(repo, &["tag", "-d", &next]);
+            return TagOutcome::Failed(format!("could not resolve the new tag {next}"));
+        }
+    };
+
     // By name, never `--tags`. `git push --tags` publishes every local tag,
     // including private backup tags that were deliberately never pushed — one
     // bulk push republished history that had been deliberately squashed away.
@@ -161,10 +192,34 @@ pub(super) fn tag(repo: &Path, pushed: bool, upstream: &str) -> TagOutcome {
             remote: remote.to_string(),
         },
         Err(error) => {
-            // The local tag is left behind otherwise, so a retry hits the
-            // "already exists" refusal above and can never succeed.
-            let _ = git(repo, &["tag", "-d", &next]);
-            TagOutcome::Failed(error.to_string())
+            // A push error only means the client got no success reply. The tag
+            // may already be on the remote and the release already running, so
+            // re-read the ref before deciding — and never delete the local tag
+            // unless the remote is confirmed to have stayed unchanged.
+            let after = super::remote::remote_oid(repo, remote, &reference);
+            match super::remote::classify(&remote_before, &desired, &after) {
+                super::remote::UpdateAfterError::Landed => TagOutcome::Tagged {
+                    tag: next,
+                    remote: remote.to_string(),
+                },
+                super::remote::UpdateAfterError::Rejected => {
+                    // Confirmed absent on the remote: safe to remove the local
+                    // tag so a retry is not blocked by the collision check.
+                    let cleanup = git(repo, &["tag", "-d", &next]);
+                    match cleanup {
+                        Ok(_) => TagOutcome::Failed(error.to_string()),
+                        Err(cleanup_error) => TagOutcome::Failed(format!(
+                            "{error}; and the local tag {next} could not be removed afterward: \
+                             {cleanup_error}"
+                        )),
+                    }
+                }
+                super::remote::UpdateAfterError::Unknown => TagOutcome::Unknown {
+                    tag: next,
+                    remote: remote.to_string(),
+                    error: error.to_string(),
+                },
+            }
         }
     }
 }

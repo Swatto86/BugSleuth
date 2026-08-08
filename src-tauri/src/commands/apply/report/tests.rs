@@ -202,6 +202,39 @@ fn a_release_that_was_not_tagged_says_so_rather_than_staying_silent() {
 }
 
 #[test]
+fn an_unknown_push_never_claims_the_commits_were_or_were_not_published() {
+    // The remote could not be confirmed after a push error. Saying "rejected and
+    // nothing was published" would be a claim reconciliation never established;
+    // the commits may already be there.
+    let text = describe_push(&PushOutcome::Unknown {
+        branch: "main".into(),
+        upstream: "origin/main".into(),
+        error: "connection reset".into(),
+    });
+    assert!(text.contains("unknown"), "{text}");
+    assert!(text.contains("origin/main"), "{text}");
+    assert!(
+        !text.contains("nothing was published"),
+        "an unknown push claimed nothing was published: {text}"
+    );
+}
+
+#[test]
+fn an_unknown_tag_never_claims_the_release_did_not_start() {
+    let text = describe_tag(&TagOutcome::Unknown {
+        tag: "v2.4.8".into(),
+        remote: "origin".into(),
+        error: "connection reset".into(),
+    });
+    assert!(text.contains("unknown"), "{text}");
+    assert!(text.contains("v2.4.8"), "{text}");
+    assert!(
+        !text.contains("no release was started"),
+        "an unknown tag claimed no release was started: {text}"
+    );
+}
+
+#[test]
 fn a_tagged_release_names_it_and_does_not_claim_the_build_passed() {
     // The tag starts a workflow this app never watches. Saying "released"
     // would be claiming an outcome nothing here observed.

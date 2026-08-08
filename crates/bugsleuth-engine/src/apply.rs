@@ -24,6 +24,7 @@ use crate::sweep::Vendor;
 mod attribution;
 mod observed;
 mod push;
+mod remote;
 mod tag;
 use attribution::{attributed_since, strip_attribution};
 use observed::{changed_since, commits_since, dirty_files, git, summarise, theirs};
