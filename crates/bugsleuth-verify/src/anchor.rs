@@ -68,8 +68,13 @@ pub fn verify_anchor(repo: &Path, raw: &RawFinding) -> Result<VerifiedAnchor, Re
         .ok_or_else(|| Rejection::SnippetNotInFile(raw.file.clone()))?;
 
     // Re-quote from the file rather than echoing the model's copy, so the report
-    // shows what the code actually says.
-    let end = (found + needle.len()).min(haystack.len());
+    // shows what the code actually says. The end comes from where the match
+    // actually finished, not from the needle's length: a match that skipped an
+    // interior blank line spans more physical lines than the needle has, and
+    // `found + needle.len()` would stop short and drop its last line(s).
+    let end = matches_at(&trimmed, &needle, found)
+        .unwrap_or(found + needle.len())
+        .min(haystack.len());
     let snippet = haystack[found..end].join("\n");
 
     Ok(VerifiedAnchor {
@@ -92,18 +97,22 @@ fn find_match(file_lines: &[&str], needle: &[&str], claimed_line: u32) -> Option
     }
     let claimed_index = claimed_line.saturating_sub(1) as usize;
     (0..file_lines.len())
-        .filter(|start| matches_at(file_lines, needle, *start))
+        .filter(|start| matches_at(file_lines, needle, *start).is_some())
         .min_by_key(|start| start.abs_diff(claimed_index))
 }
 
-/// Whether `needle` matches starting exactly at `start`.
+/// Where a match of `needle` starting at `start` finishes, or `None`.
+///
+/// Returns the cursor one past the last matched file line, so the caller can
+/// re-quote the region that was actually matched. This matters because blank
+/// lines *between* needle lines are skipped, so the matched region can span more
+/// physical lines than the needle has — and re-quoting `needle.len()` lines then
+/// stops short, dropping the final line(s) the finding points at.
 ///
 /// The first needle line must match `start` itself — a match may not begin by
 /// skipping forward over blank lines, or every blank line preceding a match
 /// would also count as a match and the reported line would drift backwards.
-/// Blank lines *between* needle lines are skipped, so a quote that dropped an
-/// interior blank line still matches.
-fn matches_at(file_lines: &[&str], needle: &[&str], start: usize) -> bool {
+fn matches_at(file_lines: &[&str], needle: &[&str], start: usize) -> Option<usize> {
     let mut cursor = start;
     for (index, wanted) in needle.iter().enumerate() {
         if index > 0 {
@@ -113,10 +122,10 @@ fn matches_at(file_lines: &[&str], needle: &[&str], start: usize) -> bool {
         }
         match file_lines.get(cursor) {
             Some(line) if line == wanted => cursor += 1,
-            _ => return false,
+            _ => return None,
         }
     }
-    true
+    Some(cursor)
 }
 
 /// Whether `candidate` is genuinely inside `repo` once symlinks are followed.

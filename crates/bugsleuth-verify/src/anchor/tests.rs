@@ -92,6 +92,19 @@ fn matches_a_multi_line_quote_across_a_blank_line() {
     let anchor = verify_anchor(&repo, &raw("src/lib.rs", 2, "let x = 1;\nlet y = 2;"));
     let anchor = anchor.unwrap_or_else(|e| panic!("rejected a multi-line anchor: {e}"));
     assert_eq!(anchor.line, 2);
+    // The re-quoted snippet must keep both matched lines. The match skips the
+    // blank line between them, so re-quoting `needle.len()` lines used to stop
+    // one line short and drop `let y = 2;` — the line the finding points at.
+    assert!(
+        anchor.snippet.contains("let x = 1;"),
+        "{:?}",
+        anchor.snippet
+    );
+    assert!(
+        anchor.snippet.contains("let y = 2;"),
+        "snippet dropped its last line across the blank: {:?}",
+        anchor.snippet
+    );
 }
 
 #[test]
