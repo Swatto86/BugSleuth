@@ -232,6 +232,81 @@ fn a_per_defect_write_failure_is_returned_not_swallowed() {
 }
 
 #[test]
+fn failed_expected_prompt_is_preserved() {
+    // The last good work order is fix-prompt-01.md. A later run still expects it,
+    // but its atomic replacement fails — a full disk, a transient rename block.
+    // Cleanup must not then delete the old copy: it is expected, so it is not
+    // stale, and it is the only usable copy precisely because the write failed.
+    let dir = std::env::temp_dir()
+        .join("bugsleuth-failed-expected")
+        .join(format!("{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(dir.join("fix-prompt-01.md"), "LAST GOOD WORK ORDER")
+        .unwrap_or_else(|e| panic!("{e}"));
+    // A genuinely obsolete prompt from a longer previous run.
+    std::fs::write(dir.join("fix-prompt-07.md"), "obsolete").unwrap_or_else(|e| panic!("{e}"));
+
+    let writer = |path: &std::path::Path, contents: &str| -> std::io::Result<()> {
+        if path
+            .file_name()
+            .map(|n| n.to_string_lossy() == "fix-prompt-01.md")
+            .unwrap_or(false)
+        {
+            Err(std::io::Error::new(std::io::ErrorKind::Other, "disk full"))
+        } else {
+            crate::atomic::write(path, contents)
+        }
+    };
+    let written = super::write_all_with(&dir, "C:/x", &[ranked_of(1)], &[], 1, writer)
+        .unwrap_or_else(|e| panic!("{e}"));
+
+    assert_eq!(
+        std::fs::read_to_string(dir.join("fix-prompt-01.md")).unwrap_or_default(),
+        "LAST GOOD WORK ORDER",
+        "a failed replacement deleted the last good copy"
+    );
+    assert!(
+        !dir.join("fix-prompt-07.md").exists(),
+        "a genuinely obsolete prompt was not cleaned up"
+    );
+    assert!(
+        written
+            .warnings
+            .iter()
+            .any(|w| w.contains("fix-prompt-01.md")),
+        "the write failure was not reported: {:?}",
+        written.warnings
+    );
+    assert_eq!(written.per_defect_written, 0, "a failed write was counted");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_stale_prompt_that_cannot_be_removed_is_reported() {
+    // A stale prompt that remove_file cannot delete — a directory sits where the
+    // file was — must be reported, not silently swallowed and reported as a
+    // clean handoff.
+    let dir = std::env::temp_dir()
+        .join("bugsleuth-stale-unremovable")
+        .join(format!("{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("fix-prompt-08.md")).unwrap_or_else(|e| panic!("{e}"));
+
+    let written =
+        write_all(&dir, "C:/x", &[ranked_of(1)], &[], 1).unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        written
+            .warnings
+            .iter()
+            .any(|w| w.contains("fix-prompt-08.md")),
+        "an unremovable stale prompt was not reported: {:?}",
+        written.warnings
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_prompt_tells_the_agent_not_to_sign_the_commits() {
     // Every CLI this drives adds an authorship trailer to a commit by default.
     // BugSleuth asks the agent to commit per defect, so without this line the

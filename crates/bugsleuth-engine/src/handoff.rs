@@ -169,6 +169,26 @@ pub fn write_all(
     not_reviewed: &[String],
     sweeps: usize,
 ) -> std::io::Result<WrittenPrompts> {
+    write_all_with(dir, repo, ranked, not_reviewed, sweeps, |path, body| {
+        crate::atomic::write(path, body)
+    })
+}
+
+/// The body of [`write_all`], with the durable write injected so a test can make
+/// one prompt's replacement fail deterministically — the on-disk ways to force
+/// that are brittle across platforms, and the failure being deleted is the whole
+/// point of this defect.
+fn write_all_with<W>(
+    dir: &std::path::Path,
+    repo: &str,
+    ranked: &[Ranked],
+    not_reviewed: &[String],
+    sweeps: usize,
+    write: W,
+) -> std::io::Result<WrittenPrompts>
+where
+    W: Fn(&std::path::Path, &str) -> std::io::Result<()>,
+{
     std::fs::create_dir_all(dir)?;
 
     // Written first, deleted after. This used to clear the previous run's
@@ -186,40 +206,70 @@ pub fn write_all(
     // a failure left an empty fix-prompt.md where the last run's whole work
     // order had been.
     let bundle = dir.join("fix-prompt.md");
-    crate::atomic::write(&bundle, prompt(repo, ranked, not_reviewed, sweeps))?;
+    write(&bundle, &prompt(repo, ranked, not_reviewed, sweeps))?;
 
     // Acknowledged findings are not fix work, so they get no per-defect prompt —
     // the same filter the bundle uses, applied here so the two never disagree.
     let actionable: Vec<&Ranked> = ranked.iter().filter(is_actionable).collect();
-    let mut written: Vec<String> = Vec::new();
+
+    // The names this run expects to exist afterwards, decided independently of
+    // whether each write succeeds. Staleness keys off this, not off the writes
+    // that landed: if a currently-expected prompt's replacement fails, its
+    // previous good copy is *not* stale — deleting it because the new write
+    // failed would destroy the last usable copy precisely when it is needed.
+    let expected: std::collections::HashSet<String> = actionable
+        .iter()
+        .map(|entry| format!("fix-prompt-{:02}.md", entry.position))
+        .collect();
+
+    let mut written = 0usize;
     let mut warnings: Vec<String> = Vec::new();
     for entry in &actionable {
         let name = format!("fix-prompt-{:02}.md", entry.position);
         let body = single(repo, entry, actionable.len(), sweeps);
-        match crate::atomic::write(&dir.join(&name), body) {
-            Ok(()) => written.push(name.to_lowercase()),
+        match write(&dir.join(&name), &body) {
+            Ok(()) => written += 1,
             Err(error) => warnings.push(format!("could not write {name}: {error}")),
         }
     }
 
     // Only now are the leftovers from a previous, longer run removed — a file
-    // this run did not just write is one that would otherwise be read as part
-    // of this report.
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_lowercase();
-            let stale = name.starts_with("fix-prompt-")
-                && !crate::atomic::is_staged(&name)
-                && name.ends_with(".md")
-                && !written.contains(&name);
-            if stale {
-                let _ = std::fs::remove_file(entry.path());
+    // this run does not expect is one that would otherwise be read as part of
+    // this report. Enumeration and removal failures are surfaced rather than
+    // dropped: a cleanup that silently failed would leave a stale work order
+    // beside the new ones and report success.
+    match std::fs::read_dir(dir) {
+        Ok(entries) => {
+            for entry in entries {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(error) => {
+                        warnings.push(format!(
+                            "could not read an entry while cleaning {}: {error}",
+                            dir.display()
+                        ));
+                        continue;
+                    }
+                };
+                let name = entry.file_name().to_string_lossy().to_lowercase();
+                let stale = name.starts_with("fix-prompt-")
+                    && !crate::atomic::is_staged(&name)
+                    && name.ends_with(".md")
+                    && !expected.contains(&name);
+                if stale && let Err(error) = std::fs::remove_file(entry.path()) {
+                    warnings.push(format!("could not remove the stale prompt {name}: {error}"));
+                }
             }
         }
+        Err(error) => warnings.push(format!(
+            "could not list {} to clean up old prompts: {error}",
+            dir.display()
+        )),
     }
+
     Ok(WrittenPrompts {
         bundle,
-        per_defect_written: written.len(),
+        per_defect_written: written,
         warnings,
     })
 }
