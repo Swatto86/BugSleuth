@@ -1,6 +1,7 @@
 //! One lane sweep, end to end: brief the model, run it, verify what comes back.
 
 mod isolate;
+mod revision;
 
 use std::path::Path;
 use std::time::Duration;
@@ -15,6 +16,10 @@ use bugsleuth_verify::{Worktree, verify_anchor};
 
 use crate::brief;
 use crate::report::{LaneReport, Rejected, Status, rank};
+// `clean_revision` is re-exported so `orchestrate::persist` reaches it as
+// `crate::sweep::clean_revision`, unchanged by the split.
+pub(crate) use revision::clean_revision;
+use revision::reviewed_commit;
 
 /// Which CLI to run, and which model within it.
 ///
@@ -276,39 +281,6 @@ pub async fn run(request: Request<'_>) -> LaneReport {
     }
 }
 
-/// The commit HEAD points at, or nothing for a directory that is not a git
-/// repository. Never an error: provenance is worth recording, not worth
-/// failing a sweep over.
-fn reviewed_commit(repo: &Path) -> Option<String> {
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "HEAD"])
-        .current_dir(repo)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (!hash.is_empty()).then_some(hash)
-}
-
-/// The commit HEAD points at, but only when the working tree is clean.
-///
-/// A sweep is reusable only if it can be pinned to an exact source revision.
-/// A dirty tree cannot be — its content is not any commit — so this returns
-/// `None` for a dirty or non-git directory, and only a clean checkout yields a
-/// revision a later run can compare against.
-pub(crate) fn clean_revision(repo: &Path) -> Option<String> {
-    let output = std::process::Command::new("git")
-        .args(["status", "--porcelain", "--untracked-files=all"])
-        .current_dir(repo)
-        .output()
-        .ok()?;
-    if !output.status.success() || !output.stdout.is_empty() {
-        return None;
-    }
-    reviewed_commit(repo)
-}
 
 /// Split reported findings into those whose quoted code was located in the file
 /// they name, and those that were not.
