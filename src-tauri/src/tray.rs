@@ -12,6 +12,82 @@ use tauri::Emitter;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Runtime};
+use tauri_plugin_notification::NotificationExt;
+
+/// Long-running work whose completion the user may be waiting for with the
+/// window closed to the tray.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackgroundWork {
+    Review,
+    Apply,
+}
+
+/// What a finished piece of background work should show: always a tray tooltip,
+/// and a native notification only when the window is hidden — a visible window
+/// already shows the result, so notifying then would be a duplicate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CompletionPlan {
+    pub tooltip: String,
+    /// `(title, body)` when a notification should be sent.
+    pub notification: Option<(String, String)>,
+}
+
+/// Decide what to show for finished work. Pure, so the tooltip/notification
+/// choice can be tested without a running app.
+pub(crate) fn completion_plan(
+    work: BackgroundWork,
+    success: bool,
+    window_hidden: bool,
+) -> CompletionPlan {
+    let (tooltip, body) = match (work, success) {
+        (BackgroundWork::Review, true) => ("BugSleuth — review finished", "Your review finished."),
+        (BackgroundWork::Review, false) => ("BugSleuth — review failed", "Your review failed."),
+        (BackgroundWork::Apply, true) => ("BugSleuth — fixes applied", "The fixes were applied."),
+        (BackgroundWork::Apply, false) => {
+            ("BugSleuth — apply failed", "Applying the fixes failed.")
+        }
+    };
+    CompletionPlan {
+        tooltip: tooltip.to_string(),
+        notification: window_hidden.then(|| ("BugSleuth".to_string(), body.to_string())),
+    }
+}
+
+fn set_tray_tooltip<R: Runtime>(app: &AppHandle<R>, tooltip: &str) {
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_tooltip(Some(tooltip));
+    }
+}
+
+/// Mark background work as started: the tray tooltip says what is running, so a
+/// user who closed the window can see the app is busy.
+pub fn work_started<R: Runtime>(app: &AppHandle<R>, work: BackgroundWork) {
+    let tooltip = match work {
+        BackgroundWork::Review => "BugSleuth — review running",
+        BackgroundWork::Apply => "BugSleuth — applying fixes",
+    };
+    set_tray_tooltip(app, tooltip);
+}
+
+/// Mark background work as finished: always update the tray tooltip, and when
+/// the window is hidden send a native notification so the completion is visible
+/// without reopening the window.
+pub fn work_finished<R: Runtime>(app: &AppHandle<R>, work: BackgroundWork, success: bool) {
+    let hidden = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .map(|visible| !visible)
+        .unwrap_or(false);
+    let plan = completion_plan(work, success, hidden);
+    // The tooltip is set first and unconditionally: if the OS refuses the
+    // notification — disabled by the user, or the portable exe is not a
+    // registered application — the tray's accessible name still carries the
+    // result.
+    set_tray_tooltip(app, &plan.tooltip);
+    if let Some((title, body)) = plan.notification {
+        let _ = app.notification().builder().title(title).body(body).show();
+    }
+}
 
 pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Open BugSleuth", true, None::<&str>)?;
@@ -109,4 +185,43 @@ pub(crate) fn quit_or_ask<R: Runtime>(app: &AppHandle<R>) {
     // Best effort. If the window cannot be told, the safe outcome is that
     // nothing is thrown away and the in-window Quit still works.
     let _ = app.emit("confirm-quit", ());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hidden_completion_requests_a_notification_with_distinct_text() {
+        let ok = completion_plan(BackgroundWork::Review, true, true);
+        let failed = completion_plan(BackgroundWork::Review, false, true);
+        assert!(
+            ok.notification.is_some() && failed.notification.is_some(),
+            "a hidden window got no completion notification"
+        );
+        assert_ne!(
+            ok.notification, failed.notification,
+            "success and failure sent the same notification text"
+        );
+        assert_ne!(
+            ok.tooltip, failed.tooltip,
+            "success and failure share a tooltip"
+        );
+        // Apply is distinguished from review, so the notification says which.
+        let apply = completion_plan(BackgroundWork::Apply, true, true);
+        assert_ne!(ok.notification, apply.notification);
+    }
+
+    #[test]
+    fn a_visible_window_updates_the_tooltip_without_a_notification() {
+        let plan = completion_plan(BackgroundWork::Apply, true, false);
+        assert!(
+            plan.notification.is_none(),
+            "a visible window fired a duplicate notification"
+        );
+        assert!(
+            !plan.tooltip.is_empty(),
+            "a finished job left the tray silent"
+        );
+    }
 }

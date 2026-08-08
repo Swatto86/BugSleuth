@@ -58,6 +58,7 @@ pub async fn apply_fixes(
     // a run start in the gap. Every early return before here has reserved
     // nothing, so none leaks the state.
     control.try_start_apply()?;
+    crate::tray::work_started(&app, crate::tray::BackgroundWork::Apply);
     tauri::async_runtime::spawn(async move {
         let report = bugsleuth_engine::apply::apply(bugsleuth_engine::apply::ApplyRequest {
             repo: &repo,
@@ -83,6 +84,13 @@ pub async fn apply_fixes(
                 "changed": Vec::<String>::new(),
             }),
         };
+        // Applying can run for a long time with the window closed to the tray,
+        // so its completion is announced the same way a review's is.
+        crate::tray::work_finished(
+            &app,
+            crate::tray::BackgroundWork::Apply,
+            payload["ok"].as_bool().unwrap_or(false),
+        );
         let _ = app.emit("apply-finished", payload);
         if let Some(control) = app.try_state::<RunControl>() {
             control.finish_apply();

@@ -49,6 +49,7 @@ pub async fn start_run(
     // early return leaves the state reserved.
     let cancel = bugsleuth_engine::cancel::Cancel::new();
     control.try_start_run(cancel.clone())?;
+    crate::tray::work_started(&app, crate::tray::BackgroundWork::Review);
 
     // Forward engine progress to the window as it happens. A run is tens of
     // minutes; a front end that only learns the outcome at the end shows a
@@ -134,6 +135,14 @@ pub async fn start_run(
             }
             Err(error) => serde_json::json!({ "ok": false, "text": error.to_string() }),
         };
+        // Announce completion to the tray, and to the desktop when the window is
+        // hidden — a review that finished while closed to the tray otherwise
+        // left no visible sign it was done.
+        crate::tray::work_finished(
+            &app,
+            crate::tray::BackgroundWork::Review,
+            payload["ok"].as_bool().unwrap_or(false),
+        );
         let _ = app.emit("run-finished", payload);
         // Cleared here, at the real end of the work — after the triage pass and
         // after the report and fix prompt are on disk. Clearing it when Stop was
