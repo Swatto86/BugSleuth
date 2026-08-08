@@ -88,6 +88,17 @@ export function bindControls(deps: ControlDeps): void {
       : 0;
     refresh();
   });
+  // On commit, snap the field to the value the run will actually use: the input
+  // handler clamps prove_top but never wrote the clamp back, so the box could
+  // show 50 while the run attempted 25. max="25" does not clamp typed input.
+  // Reconcile on `change` (blur), not `input`, so it does not fight typing.
+  ui.proveTop.addEventListener("change", () => {
+    if (!ui.proveEnabled.checked) return;
+    const bounded = boundedProveTop(ui.proveTop.value) || 1;
+    ui.proveTop.value = String(bounded);
+    settings().prove_top = bounded;
+    refresh();
+  });
   ui.testCommand.addEventListener("input", () => {
     settings().test_command = ui.testCommand.value;
     refresh();
