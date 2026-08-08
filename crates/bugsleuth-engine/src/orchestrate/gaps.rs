@@ -11,6 +11,22 @@ use bugsleuth_domain::Lane;
 use super::{Gap, RunOptions};
 use crate::plan::{Plan, Unit};
 
+/// Whether the repository has uncommitted changes.
+///
+/// A sweep by an ordinary vendor reads the **working tree**, but a vendor that
+/// must run in isolation (Kilo) reviews a worktree checked out at **HEAD**. On a
+/// dirty repository those are different code, so one run would review two
+/// versions at once and the merged report would silently span them. Surfacing
+/// the mismatch is the whole point of the caution below.
+pub(super) fn has_uncommitted_changes(repo: &std::path::Path) -> bool {
+    bugsleuth_verify::hide_console_window(&mut std::process::Command::new("git"))
+        .args(["status", "--porcelain"])
+        .current_dir(repo)
+        .output()
+        .map(|out| !out.stdout.is_empty())
+        .unwrap_or(false)
+}
+
 /// Everything worth saying before any quota is spent.
 ///
 /// Both of these inform a choice the reader can still make for free — commit
@@ -22,7 +38,7 @@ pub(super) fn caution(plan: &Plan, repo: &std::path::Path) {
     // tree. On a dirty repository those are different code, so one run would be
     // reviewing two versions at once and the merged report would silently mix
     // them. Say so rather than let the reader assume one consistent review.
-    if crate::orchestrate::proving::has_uncommitted_changes(repo)
+    if has_uncommitted_changes(repo)
         && plan
             .units
             .iter()
@@ -100,5 +116,46 @@ pub(super) fn note_panicked(panicked: &[String], gaps: &mut Vec<Gap>) {
             model: None,
             reason: format!("a sweep failed to complete and produced nothing: {error}"),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_dirty_repository_is_detected_and_a_clean_one_is_not() {
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-dirty-tests")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .is_ok()
+        };
+        if !git(&["init", "-q"]) {
+            return; // no usable git here; the rest of the suite still covers the logic
+        }
+        let _ = git(&["config", "user.email", "t@example.invalid"]);
+        let _ = git(&["config", "user.name", "test"]);
+        let _ = std::fs::write(dir.join("a.txt"), "hello\n");
+        let _ = git(&["add", "-A"]);
+        let _ = git(&["commit", "-qm", "base"]);
+        assert!(
+            !has_uncommitted_changes(&dir),
+            "a freshly committed tree is clean"
+        );
+
+        let _ = std::fs::write(dir.join("a.txt"), "changed\n");
+        assert!(
+            has_uncommitted_changes(&dir),
+            "an edited working tree is dirty, and a mixed-version review would silently miss it"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

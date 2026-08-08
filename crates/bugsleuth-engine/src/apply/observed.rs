@@ -67,8 +67,8 @@ pub(super) fn commits_since(repo: &Path, base: &Baseline) -> usize {
 
 /// Where BugSleuth's own throwaway checkouts live inside a reviewed repository.
 ///
-/// A proof attempt that was killed rather than dropped leaves one behind, and
-/// git reports it as untracked. Judged as the user's uncommitted work it would
+/// An isolated sweep (Kilo) that was killed rather than dropped leaves one
+/// behind, and git reports it as untracked. Judged as the user's uncommitted work it would
 /// refuse every apply — with advice to "commit or stash" litter this tool left —
 /// until someone deleted a directory by hand. It is not their work, so it is not
 /// counted as theirs, in the guard or in the list of what changed.
@@ -176,12 +176,12 @@ mod tests {
 
     #[test]
     fn bugsleuths_own_leftovers_are_not_treated_as_the_users_uncommitted_work() {
-        // A proof attempt that was killed leaves a worktree behind, and git
+        // An isolated sweep that was killed leaves a worktree behind, and git
         // calls it untracked. Counting it would refuse every apply — telling
         // the user to commit or stash a directory this tool created — until
         // they deleted it by hand.
         let mixed = vec![
-            ".bugsleuth-worktrees/prove-1/src/main.rs".to_string(),
+            ".bugsleuth-worktrees/sweep-kilo-1/src/main.rs".to_string(),
             "src/real.rs".to_string(),
         ];
         assert_eq!(theirs(mixed), ["src/real.rs"]);

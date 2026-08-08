@@ -70,7 +70,7 @@ fn dropping_a_worktree_deletes_it_even_with_deeply_nested_build_output() {
         };
         let path = worktree.path().to_path_buf();
 
-        // Imitate what `cargo test` leaves behind inside a proof worktree:
+        // Imitate what a build leaves behind inside an isolated-sweep worktree:
         // paths long enough that `git worktree remove` fails on Windows with
         // "Filename too long" and silently leaves the directory in place.
         let mut deep = path.join("target");

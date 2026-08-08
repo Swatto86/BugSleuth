@@ -230,11 +230,10 @@ mod tests {
 
     #[test]
     fn the_gate_mandate_names_the_shapes_it_was_graded_on() {
-        // Graded before it shipped, against four gate defects seeded into
-        // `fixtures/seeded-repo` (see fixtures/SEEDED.md, G1-G4): a scan whose
-        // split never matches, a tautological assertion on an unsigned type, a
-        // pipeline whose exit status is `tail`'s, and an `#[ignore = "flaky"]`
-        // on a test that fails deterministically.
+        // Graded before it shipped, against four seeded gate defects (G1-G4): a
+        // scan whose split never matches, a tautological assertion on an
+        // unsigned type, a pipeline whose exit status is `tail`'s, and an
+        // `#[ignore = "flaky"]` on a test that fails deterministically.
         //
         // Three sonnet sweeps of the fixture scored 4/4, 3/4 and 4/4 — eleven
         // findings, none false, and not one about the production code the other

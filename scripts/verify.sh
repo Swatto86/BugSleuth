@@ -47,7 +47,7 @@ npm run --silent build
 say "frontend formatting"
 # Scoped to the TypeScript the formatter has actually been applied to. The
 # markup, CSS and prose are hand-laid-out and prettier's opinion of them is
-# not worth the churn — reformatting PROGRESS.md alone is 1200 lines nobody
+# not worth the churn — reflowing the markdown docs is a large diff nobody
 # asked for.
 #
 # The version is pinned exactly in package.json, not a caret range: two
@@ -168,13 +168,12 @@ echo "no test has gone missing OK ($(($(wc -l < tests.lock) - 1)) recorded)"
 fi
 
 say "file sizes"
-# 400 lines is the hard cap. Generated, vendored and lock files are exempt, as
-# are the fixtures, which are deliberately awful on purpose.
+# 400 lines is the hard cap. Generated, vendored and lock files are exempt.
 hard=400
 over=0
 while IFS= read -r file; do
   case "$file" in
-    ./target/*|./node_modules/*|./ui/dist/*|./fixtures/*|./.git/*) continue ;;
+    ./target/*|./node_modules/*|./ui/dist/*|./.git/*) continue ;;
   esac
   lines=$(wc -l < "$file")
   if [ "$lines" -gt "$hard" ]; then

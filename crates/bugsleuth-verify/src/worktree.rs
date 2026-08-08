@@ -1,10 +1,10 @@
 //! Throwaway git worktrees.
 //!
-//! Proving a finding means letting a model write a test and run it, which means
-//! giving it write access to a checkout. It must never be *your* checkout. A
-//! worktree on a throwaway branch gives each proof attempt its own directory,
-//! sharing the object store so it is cheap, and leaves the working tree
-//! untouched no matter what the model does.
+//! Some vendors (Kilo) cannot be constrained to read-only, so a sweep by one has
+//! to be run somewhere it cannot alter the code it is reviewing. It must never be
+//! *your* checkout. A worktree on a throwaway branch gives each isolated sweep
+//! its own directory, sharing the object store so it is cheap, and leaves the
+//! working tree untouched no matter what the model does.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -31,7 +31,7 @@ pub enum WorktreeError {
 /// A checkout that deletes itself.
 ///
 /// Cleanup runs on drop, including on panic and on an early return from an
-/// error, so a failed proof attempt cannot leave a stray branch and directory
+/// error, so a failed isolated sweep cannot leave a stray branch and directory
 /// behind. Cleanup failures are deliberately swallowed: a leaked temporary
 /// directory is a much smaller problem than masking the real error that caused
 /// the unwind.
@@ -45,8 +45,8 @@ pub struct Worktree {
 /// Distinguishes worktrees made by one process, as the process id cannot.
 ///
 /// Two runs in different processes get different ids; two worktrees inside one
-/// process would not, and the orchestrator is free to grow a second proof in
-/// flight. A counter costs nothing and removes the question.
+/// process would not, and the orchestrator is free to grow a second isolated
+/// sweep in flight. A counter costs nothing and removes the question.
 static NEXT: AtomicU64 = AtomicU64::new(0);
 
 impl Worktree {
@@ -161,12 +161,11 @@ impl Drop for Worktree {
 /// Delete a worktree directory and deregister it.
 ///
 /// `git worktree remove` alone is not enough. If anything built inside the
-/// worktree — and a proof attempt runs `cargo test`, so it will have — the
-/// resulting `target/` paths exceed the Windows 260-character limit and git
-/// gives up with "Filename too long", leaving the directory behind. That is not
-/// cosmetic: the leftovers make the *reviewed repository* dirty, which breaks
-/// the clean-baseline check the next proof attempt depends on, and quietly
-/// litters a repository BugSleuth promised not to modify.
+/// worktree — and a sweep that runs commands may have — the resulting `target/`
+/// paths exceed the Windows 260-character limit and git gives up with "Filename
+/// too long", leaving the directory behind. That is not cosmetic: the leftovers
+/// make the *reviewed repository* dirty and quietly litter a repository
+/// BugSleuth promised not to modify.
 ///
 /// So: ask git first, then delete whatever survives ourselves, using the
 /// extended-length path form that lifts the limit, and prune git's registry.

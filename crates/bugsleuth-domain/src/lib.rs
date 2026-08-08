@@ -7,7 +7,6 @@ mod finding;
 mod ids;
 mod lane;
 mod limits;
-mod proof;
 mod triage;
 
 pub use finding::{
@@ -15,9 +14,5 @@ pub use finding::{
 };
 pub use ids::{FindingId, LaneId, ModelId, RunId};
 pub use lane::Lane;
-pub use limits::{
-    PROVING_EXECUTION_WARNING, REVIEW_LIMITS, UNSANDBOXED_VENDOR_WARNING, as_list as limits_list,
-    printable,
-};
-pub use proof::{ProofClaim, ProofVerdict, proof_schema};
+pub use limits::{REVIEW_LIMITS, UNSANDBOXED_VENDOR_WARNING, as_list as limits_list, printable};
 pub use triage::{SEVERITY_RUBRIC, SeverityVerdict, SeverityVerdicts, triage_schema};

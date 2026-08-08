@@ -24,9 +24,6 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// Run one lane against a repository.
     Sweep(SweepArgs),
-    /// Ask a model to demonstrate a defect with a failing test, then check the
-    /// attempt by running the tests independently.
-    Prove(ProveArgs),
     /// Run every configured (model x lane) pair and produce one merged report.
     Run(RunArgs),
     /// Merge several sweep reports into one ranked list of distinct defects.
@@ -70,17 +67,11 @@ pub(crate) struct RunArgs {
     /// skip the pass and keep each model's own grade.
     #[arg(long, default_value = "haiku")]
     pub(crate) triage_model: String,
-    /// Attempt to prove the top N merged defects with a failing test. 0 (the
-    /// default) proves nothing. Each attempt costs a model invocation and a full
-    /// test run, so this is the expensive part of a run.
-    #[arg(long, default_value_t = 0, requires = "test_command")]
-    pub(crate) prove_top: usize,
-    /// Command that runs the target's tests, e.g. "cargo test".
-    #[arg(long)]
-    pub(crate) test_command: Option<String>,
-    /// Model used for proof attempts. Kilo cannot prove.
-    #[arg(long, default_value = "sonnet")]
-    pub(crate) prove_model: String,
+    /// How many sweeps of one provider may run at once. More is faster but leans
+    /// harder on that vendor's rate limit; the historical overload was around
+    /// three CLIs at once. 1 runs each provider's sweeps strictly one at a time.
+    #[arg(long, default_value_t = 3)]
+    pub(crate) per_provider: usize,
     /// Directory to write fix prompts into: `fix-prompt.md` with everything,
     /// plus `fix-prompt-01.md` onward, one self-contained prompt per defect for
     /// a model that cannot hold the whole thing.
@@ -104,43 +95,6 @@ pub(crate) struct JudgeArgs {
     /// what it is working on.
     #[arg(long, default_value = ".")]
     pub(crate) repo: PathBuf,
-}
-
-#[derive(Parser)]
-pub(crate) struct ProveArgs {
-    /// Repository containing the defect. It is never modified — the attempt runs
-    /// in a throwaway git worktree made from it.
-    #[arg(long)]
-    pub(crate) repo: PathBuf,
-    /// Commit to base the worktree on.
-    #[arg(long, default_value = "HEAD")]
-    pub(crate) commit: String,
-    /// Description of the defect to prove. Use `--defect-file` for a long one.
-    #[arg(long, conflicts_with = "defect_file")]
-    pub(crate) defect: Option<String>,
-    /// Read the defect description from a file.
-    #[arg(long)]
-    pub(crate) defect_file: Option<PathBuf>,
-    #[arg(long, default_value = "sonnet")]
-    pub(crate) model: String,
-    /// Command that runs the tests, e.g. "cargo test -p mycrate --lib".
-    #[arg(long, default_value = "cargo test")]
-    pub(crate) test_command: String,
-    /// Name for the throwaway branch and worktree directory.
-    #[arg(long, default_value = "proof")]
-    pub(crate) label: String,
-    #[arg(long, default_value_t = 40)]
-    pub(crate) max_turns: u32,
-    #[arg(long, default_value_t = 1200)]
-    pub(crate) timeout_secs: u64,
-    #[arg(long, default_value_t = 600)]
-    pub(crate) test_timeout_secs: u64,
-    /// Write the model's added test as a patch here, so it can be replayed
-    /// against fixed code.
-    #[arg(long)]
-    pub(crate) patch_out: Option<PathBuf>,
-    #[arg(long)]
-    pub(crate) use_api_key: bool,
 }
 
 #[derive(Parser)]

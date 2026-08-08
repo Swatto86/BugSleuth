@@ -11,7 +11,7 @@
 //! always enumerated, and one with no model assigned is carried through the
 //! whole run as an explicit "not swept".
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 use bugsleuth_domain::Lane;
@@ -72,30 +72,35 @@ pub struct Plan {
 }
 
 impl Plan {
-    /// Units grouped so that no two for the same vendor run at once.
+    /// Units grouped so that at most `per_vendor` sweeps of one vendor run at once.
     ///
-    /// Returned as a list of *batches*: everything in a batch is a different
-    /// vendor and may run concurrently, and batches run one after another. This
-    /// is the quota governor in its simplest useful form — with CLI subscriptions
-    /// the binding constraint is rate limits rather than money, and hammering one
+    /// Returned as a list of *batches*: within a batch no vendor appears more
+    /// than `per_vendor` times, so those sweeps run concurrently, and batches run
+    /// one after another. This is the quota governor — with CLI subscriptions the
+    /// binding constraint is rate limits rather than money, and hammering one
     /// vendor with parallel invocations is the fastest way to hit them.
     ///
     /// It is also what a real failure suggested: three CLIs started at once and
     /// one died with a silent non-zero exit, the shape these tools use for an
-    /// overload.
-    pub fn batches(&self) -> Vec<Vec<Unit>> {
+    /// overload. So the fan-out per vendor is a bounded, deliberate choice rather
+    /// than "all of them at once": `per_vendor` of 1 restores strictly sequential
+    /// per-vendor behaviour, and a higher value trades rate-limit headroom for
+    /// speed. Zero is treated as one — a batch that took no units would spin the
+    /// loop forever.
+    pub fn batches(&self, per_vendor: usize) -> Vec<Vec<Unit>> {
+        let per_vendor = per_vendor.max(1);
         let mut remaining = self.units.clone();
         let mut batches = Vec::new();
 
         while !remaining.is_empty() {
             let mut batch: Vec<Unit> = Vec::new();
-            let mut vendors: BTreeSet<String> = BTreeSet::new();
+            let mut counts: BTreeMap<String, usize> = BTreeMap::new();
             remaining.retain(|unit| {
-                let vendor = vendor_of(&unit.model);
-                if vendors.contains(&vendor) {
+                let seen = counts.entry(vendor_of(&unit.model)).or_insert(0);
+                if *seen >= per_vendor {
                     return true;
                 }
-                vendors.insert(vendor);
+                *seen += 1;
                 batch.push(unit.clone());
                 false
             });
@@ -188,8 +193,8 @@ pub fn plan(config: &Config) -> Result<Plan> {
         check_effort(&model_id, model.effort.trim())?;
         // A config file is a file; the UI's picker is not the only way in.
         // Enumerating even a moderately large pass count hangs the run before
-        // a single sweep is paid for, so refuse loudly (same class as
-        // MAX_PROVE_TOP in src-tauri/src/outcome.rs).
+        // a single sweep is paid for, so refuse loudly — the same class of
+        // sender-supplied bound the desktop shell clamps for concurrency.
         const MAX_PASSES: usize = 25;
         let passes = model.passes.max(1);
         if passes > MAX_PASSES {

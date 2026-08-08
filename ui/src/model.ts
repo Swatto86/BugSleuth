@@ -6,17 +6,6 @@
  */
 
 /**
- * The most defects a run will attempt to prove.
- *
- * Also written in `index.html` as the input's `max`, and a test asserts the two
- * agree — a limit expressed on both sides of a boundary with nothing making
- * them match is precisely the defect class this pair had. `max` on a number
- * input only marks the field invalid when a value is typed; it neither clamps
- * the value nor stops anything reading it.
- */
-export const MAX_PROVE_TOP = 25;
-
-/**
  * The most passes a model may request.
  *
  * Must equal `MAX_PASSES` in `crates/bugsleuth-engine/src/plan.rs`, which
@@ -26,19 +15,28 @@ export const MAX_PROVE_TOP = 25;
 export const MAX_PASSES = 25;
 
 /**
- * Read a proof count the backend can actually accept.
+ * The most sweeps of one provider a run may fan out concurrently.
  *
- * Two failures at once, both found by BugSleuth reviewing itself. The value was
- * clamped below at zero and not above at all, so typing 500 asked for 500 proof
- * attempts — each one a model invocation and a full test run. And it was never
- * made an integer, so `1.5` reached Tauri as a JSON float, failed to
- * deserialize into `usize`, and stopped settings saving *and* runs starting
- * with a raw deserialization error.
+ * Also written in `index.html` as the input's `max`, and Rust clamps the stored
+ * value to the same ceiling before a run (`provider_concurrency.clamp(1, 10)` in
+ * `src-tauri/src/commands/run.rs`). A bound expressed only by the sender is not
+ * a bound — the point of the ceiling is to keep a hand-edited settings file from
+ * spawning the burst that overloads a vendor.
  */
-export function boundedProveTop(raw: string): number {
+export const MAX_PROVIDER_CONCURRENCY = 10;
+
+/**
+ * Read a provider-concurrency the backend can actually accept.
+ *
+ * At least one, or a run would fan out to nothing and sweep nobody; at most the
+ * shared ceiling; and always an integer, because a float reaches Tauri as JSON
+ * and fails to deserialize into `usize`, which stopped settings saving and runs
+ * starting for the old proof count. A blank or garbage field settles on one.
+ */
+export function boundedProviderConcurrency(raw: string): number {
   const parsed = Math.floor(Number(raw));
-  if (!Number.isFinite(parsed)) return 0;
-  return Math.min(MAX_PROVE_TOP, Math.max(0, parsed));
+  if (!Number.isFinite(parsed)) return 1;
+  return Math.min(MAX_PROVIDER_CONCURRENCY, Math.max(1, parsed));
 }
 
 export const LANES = [
@@ -118,9 +116,16 @@ export interface Settings {
   scope: string;
   models: ModelSetting[];
   theme: "system" | "light" | "dark";
-  prove_top: number;
-  test_command: string;
   reuse_completed: boolean;
+  /**
+   * How many sweeps of one provider may run at once.
+   *
+   * Same-provider models used to run strictly one at a time — the guard against
+   * a vendor's rate limit. Three by default so several models of one provider
+   * overlap; 1 restores the sequential behaviour. Rust clamps it to 1–10 before
+   * a run, so a value outside that is not a valid backend instruction.
+   */
+  provider_concurrency: number;
   /**
    * Model that re-grades every severity once the sweeps are merged, seeing the
    * whole list at once. Empty turns the pass off.
@@ -266,18 +271,21 @@ export function vendorOf(modelId: string): string {
 /**
  * How many rounds a run takes.
  *
- * The engine never runs two invocations of the same vendor at once, so the
- * number of rounds is the largest number of sweeps any single vendor has to do.
- * Worth showing before a run because it, not the sweep count, is what decides
- * how long someone waits.
+ * The engine runs up to `concurrency` sweeps of one vendor at once, so a vendor
+ * with N sweeps needs ceil(N / concurrency) rounds, and the run's rounds are the
+ * most any single vendor needs. Worth showing before a run because it, not the
+ * sweep count, is what decides how long someone waits — and it is what the
+ * concurrency setting changes. Mirrors `Plan::batches` in plan.rs.
  */
-export function batchCount(models: ModelSetting[]): number {
+export function batchCount(models: ModelSetting[], concurrency = 1): number {
   const perVendor = new Map<string, number>();
   for (const key of unitKeys(models)) {
     const vendor = vendorOf(key.split(" ")[0] ?? "");
     perVendor.set(vendor, (perVendor.get(vendor) ?? 0) + 1);
   }
-  return perVendor.size === 0 ? 0 : Math.max(...perVendor.values());
+  const perRound = Math.max(1, Math.floor(concurrency));
+  const rounds = [...perVendor.values()].map((n) => Math.ceil(n / perRound));
+  return rounds.length === 0 ? 0 : Math.max(...rounds);
 }
 
 /** Whether a configuration could run at all. */

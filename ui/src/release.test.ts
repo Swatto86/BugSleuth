@@ -156,7 +156,7 @@ test("the documentation does not point at files that no longer exist", () => {
   // document describing a system that is not there is the same defect as a
   // comment describing behaviour the code does not implement — it is worse in
   // documentation, because a reader has no compiler to disagree with it.
-  const docs = ["README.md", "ARCHITECTURE.md", "RUNBOOK.md", "PROGRESS.md"];
+  const docs = ["README.md", "ARCHITECTURE.md", "RUNBOOK.md"];
   const missing: string[] = [];
 
   for (const doc of docs) {

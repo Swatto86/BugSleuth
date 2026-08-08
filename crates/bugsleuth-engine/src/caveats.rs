@@ -13,7 +13,7 @@
 //! fixing it by remembering harder would have been the wrong answer. There is
 //! one function per caveat now, and a test asserts every document uses them.
 
-use bugsleuth_domain::{PROVING_EXECUTION_WARNING, UNSANDBOXED_VENDOR_WARNING, limits_list};
+use bugsleuth_domain::{UNSANDBOXED_VENDOR_WARNING, limits_list};
 
 /// What the method could not see, whatever it found.
 ///
@@ -41,22 +41,6 @@ pub(crate) fn salvaged(was_salvaged: bool) -> &'static str {
     } else {
         ""
     }
-}
-
-/// The caution owed when proof was actually attempted.
-///
-/// Only when it was. A warning about executing untrusted code, printed on every
-/// report whether or not anything ran, is one nobody reads by the third time —
-/// and the whole point is that it is read on the run where it is true.
-pub(crate) fn proving(attempted: bool, indent: &str) -> String {
-    if !attempted {
-        return String::new();
-    }
-    format!(
-        "
-{indent}Caution: {PROVING_EXECUTION_WARNING}
-"
-    )
 }
 
 /// The caution owed when a vendor that cannot be sandboxed actually ran.

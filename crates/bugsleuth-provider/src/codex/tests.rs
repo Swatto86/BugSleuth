@@ -34,7 +34,7 @@ fn a_sweep_runs_read_only_and_ignores_the_reviewed_repos_own_config() {
 }
 
 #[test]
-fn a_proof_attempt_may_write_because_it_has_to_add_a_test() {
+fn an_apply_may_write_because_it_has_to_edit_files() {
     let joined = args_for("", Sandbox::WorkspaceWrite).join(" ");
     assert!(joined.contains("--sandbox workspace-write"));
     // Still never the escape hatch, even when writing is allowed.

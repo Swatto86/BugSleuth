@@ -16,7 +16,7 @@
  * Both directions are checked, with opposite biases, because a wrong answer
  * costs something different each way.
  *
- * Element ids are here for the same reason. `el("prove-top")` throws when the
+ * Element ids are here for the same reason. `el("provider-concurrency")` throws when the
  * markup no longer has that id, which is at least loud — but it is loud at boot
  * on a user's machine, after packaging, and the whole window fails to start.
  */

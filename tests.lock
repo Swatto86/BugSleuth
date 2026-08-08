@@ -10,9 +10,7 @@ node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
-node a bare voided call is not handled
 node a blank row makes the configuration unrunnable, exactly like the engine
-node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
@@ -36,12 +34,9 @@ node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
-node a name that does not exist is undefined rather than empty
 node a partly-failed handoff save is surfaced, not swallowed
 node a passes count above the backend cap is not runnable and is clamped in the picker
 node a progress event carries the fields the window renders from
-node a proof count is always an integer the backend can deserialize
-node a proof count is clamped to the cap the field advertises
 node a repeated pass is a whole extra sweep, and an extra round
 node a reused sweep says it was reused rather than pretending to be fresh
 node a round names what is about to run and where it sits in the sequence
@@ -60,7 +55,6 @@ node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
-node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
@@ -70,8 +64,6 @@ node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
-node an awaited call in a discarded callback is not handled
-node an awaited call inside its own try is handled
 node an awaited call inside its own try is handled
 node an awaited call inside its own try is handled
 node an awaited call inside its own try is handled
@@ -87,8 +79,8 @@ node an uncovered lane is reported
 node an unknown prefix is treated as a Claude model, colon and all
 node both sides are actually being read
 node both themes define the same set of colours
+node concurrency collapses a busy vendor's rounds
 node dark theme meets WCAG AA everywhere the UI uses it
-node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
@@ -115,7 +107,6 @@ node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
-node interface fields come back without comments or nesting confusing them
 node lane titles match the engine's own names, including UX
 node light theme meets WCAG AA everywhere the UI uses it
 node names are joined the way English does
@@ -125,6 +116,9 @@ node no command is exposed to the page that the page never calls
 node no element asks for a class the stylesheet does not define
 node one vendor doing everything is one round per lane
 node only a complete shipped preset bypasses replacement confirmation
+node provider concurrency is always an integer the backend can deserialize
+node provider concurrency is clamped to the cap the field advertises
+node provider concurrency never drops below one
 node release tag matches version embedded in the app
 node removing a configured model row is guarded by a confirmation
 node render redirects focus when the focused row was just removed
@@ -136,7 +130,7 @@ node starting a run moves focus off the disabled Run button to Stop
 node startup renders do not persist settings back over the saved file
 node the README still promises a single file that runs with nothing installed
 node the README's download table names assets the workflow builds
-node the advertised cap and the enforced cap are the same number
+node the advertised concurrency cap and the enforced cap are the same number
 node the clear handler disables its button and re-enables it on both outcomes
 node the clear handler shows a running status while the delete is in flight
 node the clearing flag is set before the clear and released on both outcomes
@@ -145,10 +139,8 @@ node the documentation does not point at files that no longer exist
 node the frontend actually calls into Rust, so this test is not vacuous
 node the precise scan sees each of the three ways a class is set
 node the preset handler guards on the whole configuration, not per row
-node the proof cap is the same number in the window, the markup and Rust
-node the prove-top field is reconciled to the value the run will use
+node the provider-concurrency cap is the same number in the window, the markup and Rust
 node the quit guard consults the clearing state, like the tray does
-node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
@@ -232,7 +224,6 @@ rust brief::tests::each_lane_gets_its_own_mandate_and_not_another_lanes
 rust brief::tests::only_the_vendor_that_needs_the_schema_is_given_it
 rust brief::tests::the_brief_always_explains_that_a_bad_quote_discards_the_finding
 rust brief::tests::the_example_reply_is_actually_valid
-rust brief::tests::the_proof_brief_forbids_fixing_the_defect
 rust bulk::tests::a_documentation_file_larger_than_the_code_is_named
 rust bulk::tests::a_lockfile_is_not_named
 rust bulk::tests::a_symlink_to_a_file_outside_the_repository_is_not_counted
@@ -261,7 +252,6 @@ rust claude::envelope::tests::an_error_envelope_becomes_an_error_not_an_empty_sw
 rust claude::envelope::tests::any_other_envelope_error_is_still_an_ordinary_failure
 rust claude::envelope::tests::output_that_is_not_an_envelope_is_still_shown_rather_than_dropped
 rust claude::envelope::tests::usage_token_counts_are_surfaced_as_text
-rust claude::prove::tests::a_proof_attempt_may_write_and_run_tests_but_not_reach_the_network
 rust claude::salvage::tests::a_turn_limit_failure_offers_its_session_for_salvage
 rust claude::salvage::tests::a_turn_limit_with_no_session_id_cannot_be_salvaged
 rust claude::salvage::tests::any_other_failure_is_not_worth_resuming
@@ -295,8 +285,8 @@ rust codex::scratch::tests::a_plain_error_event_is_also_read
 rust codex::scratch::tests::each_scratch_directory_is_new_rather_than_reused
 rust codex::scratch::tests::output_that_is_not_events_yields_no_error_rather_than_a_wrong_one
 rust codex::scratch::tests::the_scratch_directory_is_outside_the_reviewed_repository
-rust codex::tests::a_proof_attempt_may_write_because_it_has_to_add_a_test
 rust codex::tests::a_sweep_runs_read_only_and_ignores_the_reviewed_repos_own_config
+rust codex::tests::an_apply_may_write_because_it_has_to_edit_files
 rust codex::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
 rust codex::tests::an_invocation_that_must_write_does_not_also_ignore_the_machines_config
 rust codex::tests::an_invocation_with_no_schema_names_no_schema_file
@@ -438,6 +428,7 @@ rust models::tests::effort_not_supported_by_codex_model_is_rejected
 rust models::tests::efforts_are_recorded_per_model_and_only_where_the_model_has_any
 rust models::tests::only_claude_has_a_vendor_wide_effort_list
 rust one_defect_anchored_five_lines_apart_by_two_vendors_still_merges
+rust orchestrate::gaps::tests::a_dirty_repository_is_detected_and_a_clean_one_is_not
 rust orchestrate::persist::naming_tests::a_second_pass_writes_beside_the_first_rather_than_over_it
 rust orchestrate::persist::naming_tests::an_effort_spelling_the_pass_suffix_cannot_collide_with_a_real_second_pass
 rust orchestrate::persist::naming_tests::an_encoded_name_can_never_reach_outside_the_run_directory
@@ -458,13 +449,6 @@ rust orchestrate::persist::tests::nothing_is_reused_unless_resume_was_asked_for
 rust orchestrate::persist::tests::the_current_name_wins_over_a_legacy_file_for_the_same_unit
 rust orchestrate::persist::tests::the_legacy_name_does_not_smuggle_a_differently_scoped_sweep_back_in
 rust orchestrate::progress::tests::a_failed_sweep_reads_as_a_failure_rather_than_as_zero_findings
-rust orchestrate::proving::tests::a_dirty_repository_is_detected_and_a_clean_one_is_not
-rust orchestrate::proving::tests::a_failed_proof_is_not_presented_as_the_defect_being_disproved
-rust orchestrate::proving::tests::a_genuine_failure_to_prove_still_reads_as_one
-rust orchestrate::proving::tests::an_attempt_that_never_ran_is_not_reported_as_a_defect_resisting_a_test
-rust orchestrate::proving::tests::defects_below_the_cut_are_reported_as_unattempted_not_unproven
-rust orchestrate::proving::tests::proven_and_unproven_findings_are_never_mixed_together
-rust orchestrate::proving::tests::proving_nothing_renders_nothing_rather_than_an_empty_heading
 rust orchestrate::render::tests::a_complete_run_says_nothing_about_unswept_lanes
 rust orchestrate::render::tests::a_failed_sweep_is_named_with_its_reason
 rust orchestrate::render::tests::a_lane_with_no_model_is_named_in_the_report
@@ -488,9 +472,6 @@ rust orchestrate::tests::a_fully_resumed_run_merges_previous_sweeps_without_call
 rust orchestrate::tests::a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted
 rust orchestrate::tests::finishing_one_pass_leaves_the_other_passes_outstanding
 rust orchestrate::tests::the_report_label_and_the_comparison_come_from_one_function
-rust outcome::tests::a_vendor_that_cannot_prove_is_skipped_rather_than_attempted
-rust outcome::tests::nothing_provable_still_leaves_something_to_try
-rust outcome::tests::proving_uses_a_vendor_the_user_actually_configured
 rust payload::tests::a_regrade_reaches_the_window_as_data_with_both_grades_and_the_reason
 rust payload::tests::an_unmoved_grade_sends_no_regrade_fields_so_the_card_stays_quiet
 rust payload::tests::each_card_carries_a_standalone_prompt_for_that_one_defect
@@ -498,16 +479,18 @@ rust plan::effort_gate_tests::the_sweep_command_checks_effort_the_same_way_run_d
 rust plan::tests::a_bare_model_name_is_treated_as_the_claude_vendor_for_batching
 rust plan::tests::a_configuration_that_would_run_nothing_is_an_error_not_an_empty_report
 rust plan::tests::a_fully_covered_run_reports_no_gaps
+rust plan::tests::a_higher_concurrency_lets_several_sweeps_of_one_vendor_share_a_batch
 rust plan::tests::a_huge_pass_count_is_refused_rather_than_enumerated_forever
 rust plan::tests::a_lane_with_no_model_is_reported_rather_than_quietly_omitted
 rust plan::tests::a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed
+rust plan::tests::a_zero_concurrency_is_treated_as_one_and_does_not_loop_forever
 rust plan::tests::an_effort_the_vendor_does_not_accept_is_refused_before_anything_is_paid_for
 rust plan::tests::an_unknown_lane_name_is_rejected_rather_than_silently_skipped
+rust plan::tests::at_concurrency_one_no_two_sweeps_of_the_same_vendor_share_a_batch
 rust plan::tests::batching_runs_every_unit_exactly_once
 rust plan::tests::canonical_spec_collapses_claude_but_keeps_the_default_and_other_vendors
 rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
 rust plan::tests::every_effort_the_vendor_documents_is_accepted
-rust plan::tests::no_two_sweeps_of_the_same_vendor_share_a_batch
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
 rust process::tests::a_timeout_kills_what_the_child_started_and_not_only_the_child
@@ -516,16 +499,6 @@ rust process::tests::captures_stdout_and_a_zero_exit_code
 rust process::tests::kills_a_child_that_outlives_its_timeout
 rust process::tests::reports_a_nonzero_exit_code_rather_than_erroring
 rust process::tests::the_result_of_writing_the_prompt_is_still_consumed
-rust proof::tests::only_a_clean_proof_counts_as_proof
-rust proof::tests::the_schema_required_set_builds_a_claim
-rust prove::judge::tests::a_broken_build_is_not_a_demonstrated_defect
-rust prove::judge::tests::a_green_suite_proves_nothing
-rust prove::judge::tests::a_red_suite_that_kept_every_passing_test_needs_the_named_test_checked
-rust prove::judge::tests::a_runner_that_hides_its_test_names_cannot_prove_preservation
-rust prove::judge::tests::breaking_existing_tests_is_never_accepted_as_proof
-rust prove::judge::tests::only_a_named_test_that_actually_ran_and_failed_is_proof
-rust prove::judge::tests::previously_passing_test_identity_cannot_be_replaced_by_a_new_pass
-rust prove::tests::every_non_proved_verdict_reports_as_not_proved
 rust rank::tests::agreement_does_not_affect_the_order
 rust rank::tests::identical_severity_and_agreement_order_by_location_so_runs_are_stable
 rust rank::tests::positions_are_one_based_and_contiguous
@@ -540,7 +513,6 @@ rust settings::tests::a_missing_settings_file_is_first_launch_and_yields_default
 rust settings::tests::a_read_error_that_is_not_a_missing_file_is_surfaced
 rust settings::tests::malformed_settings_are_reported_and_left_in_place
 rust settings::tests::the_default_covers_every_lane_so_a_first_run_has_no_silent_holes
-rust settings::tests::the_default_does_not_prove_anything_until_asked
 rust settings::tests::unknown_fields_and_missing_fields_both_survive_a_round_trip
 rust signin::tests::a_failure_keeps_the_reason_the_vendor_gave
 rust signin::tests::a_timeout_says_what_it_means_for_a_real_run
@@ -567,17 +539,6 @@ rust sweep::tests::an_unknown_prefix_is_treated_as_a_model_name_not_silently_dro
 rust sweep::tests::kilo_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode
 rust sweep::tests::only_kilo_needs_the_schema_spelled_out_in_its_prompt
 rust sweep::tests::the_vendor_prefix_never_reaches_the_cli
-rust testrun::tests::a_compile_error_is_not_mistaken_for_a_demonstrated_bug
-rust testrun::tests::a_green_run_is_recognised
-rust testrun::tests::a_non_zero_exit_with_no_test_output_counts_as_not_built
-rust testrun::tests::a_real_test_failure_is_recognised
-rust testrun::tests::a_test_name_may_not_carry_shell_or_flag_characters
-rust testrun::tests::an_unsafe_test_name_is_refused_rather_than_run
-rust testrun::tests::ignored_and_summary_lines_are_not_counted_as_passing_tests
-rust testrun::tests::passed_tests_reads_the_names_of_the_tests_that_passed
-rust testrun::tests::private_log_dir_tests::a_directory_already_there_is_not_taken_over
-rust testrun::tests::private_log_dir_tests::the_log_directory_is_outside_any_reviewed_repository
-rust testrun::tests::private_log_dir_tests::two_runs_never_get_the_same_directory
 rust the_real_repo_corpus_merges_four_findings_into_three_defects
 rust the_same_defect_described_by_each_vendor_is_merged
 rust the_same_defect_seen_twice_by_one_model_still_merges

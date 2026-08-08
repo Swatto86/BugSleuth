@@ -1,8 +1,0 @@
-[package]
-name = "seeded-repo"
-version = "0.1.0"
-edition = "2021"
-
-# Deliberately excluded from the BugSleuth workspace: it is test data containing
-# known defects, not a member crate. Building the workspace must not build it.
-[workspace]

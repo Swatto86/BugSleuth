@@ -1,9 +1,10 @@
 //! Applying the fix prompt to the repository it came from.
 //!
 //! Everything else in BugSleuth is careful never to modify the code it reads: a
-//! sweep is read-only, a proof attempt gets a throwaway worktree. This is the
-//! one deliberate exception, and it exists because the alternative — copy the
-//! prompt, open another tool, paste it — is what everyone was doing anyway.
+//! read-only sweep cannot write, and a vendor that cannot be sandboxed reviews a
+//! throwaway worktree. This is the one deliberate exception, and it exists
+//! because the alternative — copy the prompt, open another tool, paste it — is
+//! what everyone was doing anyway.
 //!
 //! The safety story is git, not a sandbox. A model given write access to a real
 //! checkout can do anything to it, so the only claim worth making is that

@@ -1,6 +1,6 @@
 //! Collecting the refs that killed runs leave behind.
 //!
-//! Every proof attempt gets a throwaway branch, deleted on drop. A run that is
+//! Every isolated sweep gets a throwaway branch, deleted on drop. A run that is
 //! killed rather than dropped never reaches that, and because the names carry
 //! the creating process's id nothing will ever reuse one — so the branch stays
 //! in the user's own repository for good. They accumulate one per kill, in

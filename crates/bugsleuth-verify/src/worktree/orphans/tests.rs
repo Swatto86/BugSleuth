@@ -2,7 +2,7 @@
 //!
 //! The dangerous direction here is not "a leaked branch survives" — that is the
 //! old behaviour and merely untidy. It is deleting a branch a live worktree is
-//! standing on, which takes a running proof attempt down with it. So the
+//! standing on, which takes a running isolated sweep down with it. So the
 //! parsing that decides "live" is tested against the listings git really
 //! produces, including the ones that carry no branch at all.
 
@@ -175,7 +175,7 @@ fn a_branch_left_by_a_killed_run_is_swept_up_by_the_next_one() {
     );
 
     // A concurrent run's branch survives — the worse of the two failure modes,
-    // since it takes a running proof attempt down rather than merely leaving
+    // since it takes a running isolated sweep down rather than merely leaving
     // litter.
     //
     // What this does not prove: it holds whether the protection comes from the

@@ -51,9 +51,8 @@ let settings: Settings = {
   scope: "",
   models: preset("balanced"),
   theme: "system",
-  prove_top: 0,
-  test_command: "",
   reuse_completed: true,
+  provider_concurrency: 3,
   triage_model: TRIAGE_MODEL,
   apply_model: "",
   apply_effort: "",
@@ -113,7 +112,7 @@ function renderCoverage(): void {
 
 function renderPlanSummary(): void {
   const units = unitCount(settings.models);
-  const rounds = batchCount(settings.models);
+  const rounds = batchCount(settings.models, settings.provider_concurrency);
   ui.planSummary.textContent =
     units === 0
       ? ""
@@ -330,13 +329,7 @@ async function boot(): Promise<void> {
   ui.theme.value = settings.theme;
   ui.repo.value = settings.repo;
   ui.scope.value = settings.scope;
-  // A stored zero means proving is off; the switch says so and the fields that
-  // only matter when it is on are hidden. Showing "0" in a number box was how
-  // the first person to open this could not tell whether it was on.
-  ui.proveEnabled.checked = settings.prove_top > 0;
-  ui.proveSettings.classList.toggle("hidden", settings.prove_top === 0);
-  ui.proveTop.value = String(Math.max(1, settings.prove_top));
-  ui.testCommand.value = settings.test_command;
+  ui.providerConcurrency.value = String(settings.provider_concurrency);
   ui.reuseCompleted.checked = settings.reuse_completed;
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
   renderWithoutPersisting();

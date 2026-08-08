@@ -24,9 +24,7 @@ pub const REVIEW_LIMITS: [&str; 5] = [
     "No finding here came from running the program. Every one comes from reading \
      code, so defects that only appear when it executes — a race that needs real \
      timing, a leak that needs hours, anything depending on real data or a real \
-     network — were not looked for. Proving is the exception: it runs the \
-     repository's own test suite in a throwaway checkout, so if you asked for \
-     proof, that code did execute on this machine.",
+     network — were not looked for.",
     "Only code inside this repository was read. Where the code has to agree \
      with something outside it — a remote API's requirements, another service's \
      actual behaviour, the operating system's — only one side of that agreement \
@@ -61,25 +59,6 @@ pub const REVIEW_LIMITS: [&str; 5] = [
 /// quietly accepted: the user chooses which vendors run, so the user is owed
 /// the difference between them.
 pub const UNSANDBOXED_VENDOR_WARNING: &str = "This run includes Kilo, whose limits come from your own Kilo configuration rather than from a flag BugSleuth passes. The sweep is refused unless that configuration denies the network, and its `ask` agent is what stops the review writing files or running commands — but widening that configuration widens what a sweep can do, with no warning here. Since the repository being reviewed is untrusted, text inside it can address the agent directly.";
-
-/// What proving does to the machine it runs on, said before it is too late.
-///
-/// Proving a defect means writing a test and running the repository's own test
-/// suite — three separate runs per defect: a baseline, the full suite after the
-/// model's change, and a named-test confirmation. Each is an ordinary process
-/// with the permissions of whoever started BugSleuth. A `build.rs`, a procedural
-/// macro, a test harness or a cargo config in the reviewed repository executes
-/// with those permissions and can read anything that account can read.
-///
-/// The throwaway worktree is not containment. It stops the reviewed repository
-/// being *modified*; it does nothing about what code inside it can reach.
-///
-/// This is stated rather than fixed because there is no honest way to fix it and
-/// still prove anything: proving a defect *is* running its test. What was wrong
-/// was leaving it unsaid — the review limits told the reader that code executed
-/// and left them to infer the rest, and this tool exists for people who cannot
-/// check that inference themselves.
-pub const PROVING_EXECUTION_WARNING: &str = "Proving ran this repository's own build and test commands on this machine, with your account's permissions and no sandbox — a build script, a procedural macro or a test fixture in the reviewed code executed as you. The throwaway checkout stops the reviewed code being modified and nothing else. Only ask for proof on a repository you would already be willing to run.";
 
 /// Text from the reviewed repository, made safe to print on a terminal.
 ///

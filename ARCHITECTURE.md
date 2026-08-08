@@ -29,7 +29,7 @@ no async. `judge` does not know `provider` exists; `provider` does not know
 
 | Crate | Owns | Deliberately does not |
 |---|---|---|
-| `bugsleuth-domain` | Lanes and their mandates, findings, proof verdicts, the JSON schemas | Touch the filesystem or the network |
+| `bugsleuth-domain` | Lanes and their mandates, findings, the JSON schemas | Touch the filesystem or the network |
 | `bugsleuth-provider` | One subprocess adapter per vendor; shared spawn/timeout/kill | Know what a lane means, or what a run is |
 | `bugsleuth-verify` | Anchor checking, git worktrees, running tests | Know which model produced anything |
 | `bugsleuth-judge` | Clustering, agreement counting, ranking | Know how findings were produced |
@@ -43,9 +43,6 @@ no async. `judge` does not know `provider` exists; `provider` does not know
 are separate types, and the only way to get from one to the other is through
 `bugsleuth-verify`. A report holds `Finding`s, so an unverified claim **cannot**
 reach a report — not by convention, but because it does not typecheck.
-
-The same shape appears in proof: `ProofClaim` is the model's account of what it
-did; `ProofVerdict` is what we observed by running the tests ourselves.
 
 ## Where vendor differences live
 
@@ -63,9 +60,6 @@ Two consequences worth knowing:
 - **Kilo sweeps run in a throwaway git worktree**, because it is the only way to
   guarantee a review cannot modify the code it is reviewing. The adapter takes a
   `worktree`, not a `repo`, so the unsafe call does not compile.
-- **Kilo cannot prove.** Without enforceable structured output its self-report
-  cannot be relied on, and a proof step that launders a guess into apparent
-  evidence is worse than no proof step.
 
 Vendor dispatch is an enum, not a trait. The set is closed and small, and the
 differences above are worth seeing rather than hiding behind one interface.
@@ -78,10 +72,10 @@ or not the behaviour it names is correct.* It follows from the constraint at the
 top of this file — if a claim nobody can check is worthless, so is a check that
 cannot fail, and nothing else was looking at those.
 
-It was graded before it shipped, against four gate defects seeded into
-`fixtures/seeded-repo`: three sweeps scored 4/4, 3/4 and 4/4, with no false
-positives and nothing reported that belonged to another lane. Then it was run
-against this repository and found two real ones — a lane round-trip test whose
+It was graded before it shipped, against four seeded gate defects: three sweeps
+scored 4/4, 3/4 and 4/4, with no false positives and nothing reported that
+belonged to another lane. Then it was run against this repository and found two
+real ones — a lane round-trip test whose
 `unwrap_or` fallback was the value under test, so the Ux case could not fail,
 and a `tsconfig.json` that excluded every `*.test.ts` from the only
 type-checking the gate does, so a mismatch between a function and its own test
@@ -92,16 +86,19 @@ passed everything. Both are fixed; both had been read over many times.
 1. **Plan** — the config assigns lanes to models; the (model × lane) product is
    enumerated. Every lane is always listed, so one with no model assigned is
    carried through as an explicit gap.
-2. **Batch** — units are grouped so no two invocations of the same vendor run at
-   once. With CLI subscriptions the binding constraint is rate limits, not money.
+2. **Batch** — units are grouped so that at most *N* invocations of one vendor
+   run at once, *N* being the per-provider concurrency setting (default 3). With
+   CLI subscriptions the binding constraint is rate limits, not money, so the
+   fan-out per vendor is bounded and chosen rather than "all at once"; *N* of 1
+   restores strictly sequential per-vendor behaviour.
 3. **Sweep** — each unit runs its vendor against the repository. Failure is a
    *reported state*, never an exception that vanishes.
 4. **Verify** — every finding's quoted snippet must exist in the file it names,
    or it is discarded. Line numbers are corrected rather than treated as fatal.
 5. **Judge** — findings are clustered by anchor *and* wording; agreement is
-   counted per distinct model; the result is ranked severity-first.
-6. **Prove** (optional) — the top N defects get a failing-test attempt in a
-   throwaway worktree, judged by re-running the tests ourselves.
+   counted per distinct model; the result is ranked severity-first. The ranked
+   list, its gaps and a fix prompt are the run's output — handed to a model to
+   fix, or read as-is.
 
 ## Two front ends, one engine
 
@@ -133,11 +130,6 @@ These are the ones to protect when changing anything:
 - **A lane that did not run is never rendered as a lane that found nothing.**
   Both kinds of hole — no model assigned, and sweep failed — are named with a
   reason, and either makes the command exit non-zero.
-- **A proof that broke the code is rejected.** Pass counts are compared before
-  and after; if any previously passing test stops passing, the attempt is thrown
-  out regardless of what the model claims. An agent asked to make a test fail can
-  always succeed by sabotage, and that produces a red test proving nothing.
-- **"Not attempted" is never "not proven."**
 - **Severities are not compared across lanes.** They were assigned by models
   answering different questions.
 - **A review cannot modify the code it reviews**, and **the reviewed repository
@@ -165,8 +157,8 @@ These are the ones to protect when changing anything:
   expressions. Six defects in one day were a regex over source that matched less
   than existed and returned a smaller answer instead of an error.
 - **Names that cross the JavaScript/Rust boundary are compared**: commands,
-  events, settings fields, lane titles, the proof cap. Each is a string on both
-  sides with no compiler spanning them.
+  events, settings fields, lane titles, the per-provider concurrency cap. Each is
+  a string on both sides with no compiler spanning them.
 - **Shared prose lives in one function.** The review limits, the unsandboxed
   caution and the cut-short note are each written once and asserted to appear in
   every document that reports findings.
@@ -201,9 +193,8 @@ There is no sandbox here and no pretending otherwise. The guarantee is git:
 
 One vendor difference is worth knowing, because it was silent: Codex refuses
 every write when `--ignore-user-config` is set, whatever `--sandbox` says, and
-no config override restores it. Writing invocations therefore drop that flag.
-The same defect had been quietly disabling every Codex *proof attempt*, which
-reported as "not proven" rather than as "could not write".
+no config override restores it. The apply invocation therefore drops that flag —
+it is the only invocation that has to write.
 
 ## Not built, deliberately
 

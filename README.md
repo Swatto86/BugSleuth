@@ -7,11 +7,8 @@ It exists for a specific problem: shipping code you cannot personally review. An
 AI wrote it, you cannot read it, and there is no independent reviewer. Asking one
 model to review another model's output has correlated blind spots — especially
 within the same family — so BugSleuth asks several different vendors, each with a
-different mandate, and then makes them prove it.
-
-See [PROGRESS.md](PROGRESS.md) for everything that has actually been measured,
-including where it falls short. [NIGHT-REPORT.md](NIGHT-REPORT.md) is the first
-night's record, kept as written; several of its numbers have been superseded.
+different mandate, mechanically verifies what they claim, and merges it into one
+ranked list.
 
 ## Install
 
@@ -51,11 +48,11 @@ it can start, though only a real sweep proves you are signed in.
 
 ## The two ideas
 
-**Findings must carry their own proof.** A well-written hallucination and a real
+**Findings are checked, not trusted.** A well-written hallucination and a real
 bug look identical to someone who cannot read the code. So every finding is
-checked mechanically: its quoted snippet must exist in the file it names, and
-where possible a model is asked to write a test that *fails because of* the
-defect. BugSleuth runs that test itself and only believes what it observes.
+checked mechanically: its quoted snippet must exist in the file it names, or it
+is discarded. A model's claim that cannot be located in the code never reaches
+the report.
 
 **Diversity is manufactured, not hoped for.** Each review runs in a *lane* — a
 narrow mandate with its own brief — because one generic "find bugs" prompt
@@ -110,12 +107,12 @@ it lands, so `--resume` picks up a run that died without paying for the sweeps
 it already completed.
 
 ```bash
-cargo run -p bugsleuth-cli -- run --repo <path> --config c.json --prove-top 5 --test-command "cargo test"
+cargo run -p bugsleuth-cli -- run --repo <path> --config c.json --per-provider 1
 ```
 
-The same, then attempts to prove the top five merged defects with a failing
-test. This is the expensive part — one model invocation and a full test run per
-attempt — so it is off by default.
+The same, but runs each provider's sweeps strictly one at a time. `--per-provider`
+defaults to 3, so several models of one provider overlap; lower it when a
+vendor's rate limit bites, or raise it if your subscription has room.
 
 ```bash
 cargo run -p bugsleuth-cli -- judge run-a.json run-b.json run-c.json
@@ -123,13 +120,6 @@ cargo run -p bugsleuth-cli -- judge run-a.json run-b.json run-c.json
 
 Merges sweep files you already have into one ranked list of distinct defects,
 recording how many vendors independently found each one.
-
-```bash
-cargo run -p bugsleuth-cli -- prove --repo <git repo> --defect-file defect.md --test-command "cargo test"
-```
-
-Asks a model to demonstrate a defect with a failing test, in a throwaway git
-worktree, then judges the attempt by running the tests independently.
 
 ## What it will not do
 
@@ -157,15 +147,8 @@ repository you care about:
 - **A lane that failed is never reported as clean.** It says `NOT SWEPT` with the
   reason and exits non-zero. Silently omitting a lane that did not run is the
   most dangerous output this tool could produce.
-- **A proof that breaks the code is rejected.** An agent asked to make a test
-  fail can always succeed by sabotaging the source. Pass counts are compared
-  before and after; if any previously passing test stops passing, the proof is
-  thrown out whatever the model claims.
 - **API keys are read from the environment only**, never accepted as arguments,
   so they cannot reach a shell history or a process listing.
-- **"Not attempted" is never reported as "not proven".** Defects below the
-  `--prove-top` cut are labelled unattempted, because "we did not try" and "we
-  tried and failed" are different facts and the second is much stronger.
 - **Publishing is opted into, narrow, and never forced.** Applying fixes can push
   what it committed, but only with the box ticked, only the branch you are on,
   only to the upstream that branch already has, and never with `--force`. A
@@ -217,11 +200,11 @@ the loop.
 
 | Crate | Responsibility |
 |---|---|
-| `bugsleuth-domain` | Lanes, findings, proof verdicts. Types only — no I/O, depends on nothing else here |
+| `bugsleuth-domain` | Lanes, findings, the JSON schemas. Types only — no I/O, depends on nothing else here |
 | `bugsleuth-provider` | One CLI adapter per vendor, plus shared subprocess handling |
-| `bugsleuth-verify` | Anchor checking, git worktrees, test execution |
+| `bugsleuth-verify` | Anchor checking, git worktrees for isolated sweeps |
 | `bugsleuth-judge` | Clustering, agreement counting, ranking |
-| `bugsleuth-engine` | The crate that composes the others: briefs, planning, running, merging, proving |
+| `bugsleuth-engine` | The crate that composes the others: briefs, planning, running, merging |
 | `bugsleuth-cli` | The `bugsleuth` binary — argument parsing and printing |
 | `src-tauri` | The desktop shell. Commands are deserialize, call the engine, serialize |
 

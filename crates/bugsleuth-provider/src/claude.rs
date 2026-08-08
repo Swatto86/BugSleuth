@@ -2,8 +2,7 @@
 //!
 //! Runs `claude --print` non-interactively against a repository. Nothing here
 //! trusts the model: a sweep returns `RawFindings`, which cannot reach a report
-//! without anchor verification, and a proof attempt returns the model's own
-//! account of what it did, which is checked by re-running the tests.
+//! without anchor verification.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -21,13 +20,11 @@ mod apply;
 pub(crate) mod args;
 mod discover;
 mod envelope;
-mod prove;
 mod salvage;
 mod triage;
 
 pub use apply::{ApplyRequest, apply};
 pub use envelope::Usage;
-pub use prove::{ProveRequest, ProveResult, prove};
 pub use triage::{TriageRequest, TriageResult, triage};
 
 /// Tools a read-only review may use. An explicit allowlist rather than
@@ -113,8 +110,8 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
 }
 
 /// Everything one CLI invocation needs, independent of what it is being asked
-/// to do. Shared by sweeps and proof attempts, which differ only in prompt,
-/// output schema and tool policy.
+/// to do. Shared by sweeps, the severity triage pass and applying fixes, which
+/// differ only in prompt, output schema and tool policy.
 pub(crate) struct Run<'a> {
     pub(crate) repo: &'a Path,
     pub(crate) model: &'a str,
@@ -137,8 +134,8 @@ pub(crate) struct Run<'a> {
 ///
 /// The retry lives here rather than in each caller because every one of them
 /// has the same problem: the expensive work is done inside a conversation that
-/// then fails to answer. Sweeps, the severity triage pass and proof attempts
-/// all lost whole invocations to it — the triage pass most often, and it has no
+/// then fails to answer. Sweeps, the severity triage pass and applying fixes all
+/// lost whole invocations to it — the triage pass most often, and it has no
 /// repository to read at all.
 pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
     // Held before `run` is consumed: the salvage needs the same model, binary

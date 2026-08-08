@@ -22,10 +22,6 @@ pub struct Settings {
     pub models: Vec<ModelSetting>,
     /// `system`, `light` or `dark`.
     pub theme: String,
-    /// How many merged defects to attempt proof for. 0 disables proving.
-    pub prove_top: usize,
-    /// Command that runs the target's tests, needed only for proving.
-    pub test_command: String,
     /// Reuse sweeps already on disk for this repository instead of paying for
     /// them again.
     ///
@@ -36,6 +32,16 @@ pub struct Settings {
     /// time is the surprising outcome, not reusing them.
     #[serde(default = "yes")]
     pub reuse_completed: bool,
+    /// How many sweeps of one provider may run at once.
+    ///
+    /// Same-provider models used to run strictly one at a time — the guard
+    /// against a vendor's rate limit, after three CLIs at once overloaded one.
+    /// Three by default so several models of one provider overlap; 1 restores
+    /// the sequential behaviour. Clamped in Rust before a run, because settings
+    /// are a JSON file a person can edit and an unbounded burst is the exact
+    /// overload this used to prevent.
+    #[serde(default = "three")]
+    pub provider_concurrency: usize,
     /// Model that re-grades every severity once the sweeps are merged, with the
     /// whole list in view.
     ///
@@ -93,6 +99,13 @@ fn yes() -> bool {
     true
 }
 
+/// Serde needs a function; a bare `3` default is not expressible. The default
+/// per-provider concurrency: enough to overlap a few models of one provider
+/// without the burst that overloads a vendor.
+fn three() -> usize {
+    3
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelSetting {
     pub id: String,
@@ -145,9 +158,8 @@ impl Default for Settings {
                 },
             ],
             theme: "system".into(),
-            prove_top: 0,
-            test_command: String::new(),
             reuse_completed: true,
+            provider_concurrency: 3,
             triage_model: cheapest(),
             // Nothing by default: applying fixes writes to the user's own
             // checkout, and a model nobody chose is not something to default to.
@@ -233,13 +245,6 @@ mod tests {
         for lane in ["correctness", "security", "contract", "ux", "gate"] {
             assert!(covered.contains(&lane), "{lane} has no model by default");
         }
-    }
-
-    #[test]
-    fn the_default_does_not_prove_anything_until_asked() {
-        // Proving costs a model invocation and a full test run per defect, so
-        // it must never happen because someone pressed Run without reading.
-        assert_eq!(Settings::default().prove_top, 0);
     }
 
     #[test]

@@ -119,58 +119,22 @@
             <button id="preset-balanced" type="button">Balanced</button>
             <button id="preset-deep" type="button">Deep</button>
           </div>
+          <div class="row" style="margin-top: 12px">
+            <label class="field" style="flex: 0 0 240px">
+              <span>Parallel sweeps per provider</span>
+              <input id="provider-concurrency" type="number" min="1" max="10" step="1" value="3" />
+            </label>
+            <span class="hint" style="align-self: center">
+              How many of one provider's models run at once. More is faster but
+              leans harder on that provider's rate limit; 1 runs them one at a
+              time.
+            </span>
+          </div>
           <div class="warning-banner hidden" id="uncovered-warning" role="status"></div>
         </section>
 
         <section class="panel">
-          <h2>Proof</h2>
-          <p class="hint">
-            A finding is a model's claim, and a well-written wrong one reads
-            exactly like a real one. Proving is how a claim becomes evidence:
-            BugSleuth copies your repository to a throwaway checkout, records
-            which of your tests already pass, then asks a model to write a test
-            that <em>fails because of</em> the defect — not to fix it.
-          </p>
-          <p class="hint">
-            <strong>Then BugSleuth runs the tests itself and watches.</strong> It
-            calls a defect proved only when the new test fails, every test that
-            passed before still passes, and that named test fails on its own. A
-            model can describe a bug that is not there; it cannot write a test
-            that genuinely fails for a reason that does not exist. Requiring the
-            old tests to still pass is what stops it "proving" a defect by
-            quietly breaking your code.
-          </p>
-          <p class="hint">
-            It is the expensive part — one model call and up to three full test
-            runs <em>per defect</em> — which is why it is off unless you ask.
-          </p>
-         <p class="hint warning-banner">
-            Proving runs the reviewed repository's own build and test commands on
-            this machine, with your permissions and no sandbox. A build script or
-            test fixture in that code executes as you. The throwaway checkout stops
-            it changing the code under review and nothing else — so only ask for
-            proof on a repository you would already be willing to run.
-          </p>
-          <div class="row" style="margin-top: 12px">
-            <label class="checkline">
-              <input id="prove-enabled" type="checkbox" />
-              <span>
-                <strong>Attempt to prove the top defects.</strong> Off by default.
-                Leave it off and the review only reads code — nothing from the
-                repository is executed.
-              </span>
-            </label>
-          </div>
-          <div class="row hidden" id="prove-settings">
-            <label class="field" style="flex: 0 0 190px">
-              <span>How many to attempt</span>
-              <input id="prove-top" type="number" min="1" max="25" step="1" value="1" />
-            </label>
-            <label class="field">
-              <span>Test command</span>
-              <input id="test-command" type="text" spellcheck="false" placeholder="cargo test" />
-            </label>
-          </div>
+          <h2>Saved sweeps</h2>
           <div class="row" style="margin-top: 12px">
             <label class="checkline">
               <input id="reuse-completed" type="checkbox" checked />

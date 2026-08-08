@@ -5,10 +5,10 @@ the run lifecycle, or packaging. It takes about ten minutes and one cheap model
 invocation.
 
 `~/.agents/tauri.md` asks for one live acceptance task through the real webview.
-**The WebDriver harness does not currently satisfy that** — see `DECISIONS.md`
-3.10; it creates a session and launches the app but never sees its page. Until
-that is solved, this manual journey is the acceptance test, and it is the one
-that has actually caught things.
+**The WebDriver harness does not currently satisfy that**: it creates a session
+and launches the app but never sees its page. Until that is solved, this manual
+journey is the acceptance test, and it is the one that has actually caught
+things.
 
 ## Build the thing you are shipping
 
@@ -64,11 +64,12 @@ Step 7 is the one that matters most for trusting the run. Findings shown in the 
 principle come from anywhere; a sweep report on disk naming the model and
 carrying anchors that resolve to real lines could not.
 
-## Use the fixture
+## Use a small repository with known defects
 
-Point it at `fixtures/seeded-repo`. Six known defects, builds in seconds, and a
-sweep that returns none of them means the pipeline ran and did nothing useful —
-which a status check alone would not catch.
+Point it at a small repository you already understand — the tool's own repo, or
+any crate that builds in seconds. A sweep that returns nothing where you know a
+defect exists means the pipeline ran and did nothing useful, which a status
+check alone would not catch.
 
 Model: `haiku` is enough. The journey is about the app, not the model.
 

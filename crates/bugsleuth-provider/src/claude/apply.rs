@@ -18,11 +18,12 @@ use serde_json::Value;
 use super::{ProviderError, Run, invoke};
 
 /// Tools applying a fix needs. Writing the change and running the test it leaves
-/// behind is the entire task, so this is the proof attempt's list.
+/// behind is the entire task, so unlike a read-only sweep this list allows
+/// `Edit`, `Write` and `Bash`.
 ///
-/// As there, denying `WebFetch` and `WebSearch` beside `Bash` is not a network
-/// restriction and must not be read as one — `curl` is one command away. It
-/// removes the two most convenient paths and costs nothing.
+/// Denying `WebFetch` and `WebSearch` beside `Bash` is not a network restriction
+/// and must not be read as one — `curl` is one command away. It removes the two
+/// most convenient paths and costs nothing.
 const APPLY_TOOLS: &str = "Read,Glob,Grep,Edit,Write,Bash";
 const APPLY_DENIED: &str = "WebFetch,WebSearch";
 

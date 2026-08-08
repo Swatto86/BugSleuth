@@ -16,7 +16,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use bugsleuth_domain::{ProofClaim, RawFindings, finding_schema, proof_schema};
+use bugsleuth_domain::{RawFindings, finding_schema};
 
 use crate::error::ProviderError;
 use crate::process::{self, Invocation, preview};
@@ -50,9 +50,9 @@ pub struct CodexResult {
 /// What the sandbox is allowed to do.
 ///
 /// A sweep is read-only: the operating system refuses a write, which is a far
-/// stronger guarantee than asking the agent not to. A proof attempt genuinely
-/// has to write a test and run it, so it gets `workspace-write` - and is only
-/// ever pointed at a throwaway worktree, never a real checkout.
+/// stronger guarantee than asking the agent not to. Applying fixes genuinely has
+/// to write, so it gets `workspace-write` — and is only ever pointed at the
+/// user's own checkout, which they were shown and chose to hand over.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Sandbox {
     ReadOnly,
@@ -66,29 +66,6 @@ impl Sandbox {
             Sandbox::WorkspaceWrite => "workspace-write",
         }
     }
-}
-
-/// Ask Codex to demonstrate a defect with a failing test.
-///
-/// Takes a `worktree` rather than a `repo`, so the type makes the unsafe call
-/// impossible to write: this invocation can modify what it is pointed at.
-pub async fn prove(
-    worktree: &Path,
-    model: &str,
-    brief: &str,
-    timeout: Duration,
-) -> Result<ProofClaim, ProviderError> {
-    invoke(Invoke {
-        dir: worktree,
-        model,
-        effort: "",
-        brief,
-        timeout,
-        binary: None,
-        schema: proof_schema(),
-        sandbox: Sandbox::WorkspaceWrite,
-    })
-    .await
 }
 
 /// Run one read-only lane sweep through Codex.
@@ -133,8 +110,8 @@ pub(crate) async fn invoke_text(spec: Invoke<'_>) -> Result<String, ProviderErro
     // The accepted reasoning efforts belong to the model, not the CLI, so an
     // effort forwarded to `model_reasoning_effort` is validated against the
     // model's catalogue before anything is spent. Here rather than in one
-    // caller, so structured sweeps and prose apply calls are both covered;
-    // proof passes an empty effort and is unaffected.
+    // caller, so structured sweeps and prose apply calls are both covered; an
+    // apply passes an empty effort and is unaffected.
     crate::models::validate_effort(VENDOR, spec.model, spec.effort).await?;
 
     let binary = match spec.binary {
@@ -251,10 +228,6 @@ fn build_args(spec: &Invoke<'_>, schema: &Path, answer: &Path) -> Vec<String> {
     // says — and `-c sandbox_mode=…` and `-c approval_policy=…` do not restore
     // it either. So an invocation that has to write cannot also ignore the
     // machine's configuration, and the honest choice is to keep the writing.
-    //
-    // This was not introduced by applying fixes: it silently disabled every
-    // Codex *proof attempt* too, which is far worse, because a proof that
-    // cannot write reports the defect as unproven rather than as unattempted.
     //
     // `--ignore-rules` stays either way. That is the flag which keeps the
     // reviewed repository — untrusted input — from supplying its own execution
