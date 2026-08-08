@@ -15,16 +15,26 @@
 //! is a signal to stop awaiting rather than a message passed down to each
 //! adapter.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-
-use tokio::sync::Notify;
+use tokio::sync::watch;
 
 /// A shared "stop now" signal, cloneable and cheap.
-#[derive(Clone, Default)]
+///
+/// Backed by a `watch` channel rather than an `AtomicBool` plus a `Notify`. The
+/// pair had a lost-wakeup window: `cancelled` read the flag and only *then*
+/// registered for the notification, so a `stop` landing in that gap set the flag
+/// against no registered waiter and the wait then blocked forever on a second
+/// notification that never came. A `watch` receiver combines the retained latest
+/// value with the wakeup atomically, so there is no gap to lose.
+#[derive(Clone)]
 pub struct Cancel {
-    stopped: Arc<AtomicBool>,
-    woken: Arc<Notify>,
+    stopped: watch::Sender<bool>,
+}
+
+impl Default for Cancel {
+    fn default() -> Self {
+        let (stopped, _) = watch::channel(false);
+        Self { stopped }
+    }
 }
 
 impl Cancel {
@@ -35,26 +45,27 @@ impl Cancel {
 
     /// Ask the run to stop. Safe to call repeatedly and from any thread.
     pub fn stop(&self) {
-        self.stopped.store(true, Ordering::SeqCst);
-        // `notify_waiters` only wakes tasks already waiting, which is why the
-        // flag is set first: a task that starts waiting after this call sees
-        // the flag and never waits at all.
-        self.woken.notify_waiters();
+        self.stopped.send_replace(true);
     }
 
     #[must_use]
     pub fn stopped(&self) -> bool {
-        self.stopped.load(Ordering::SeqCst)
+        *self.stopped.borrow()
     }
 
     /// Resolves once cancellation is asked for, immediately if it already was.
-    ///
-    /// Loops on the notification rather than trusting a single wake: `Notify`
-    /// permits spurious wake-ups, and returning "cancelled" from one would
-    /// abandon a run nobody asked to stop.
     pub async fn cancelled(&self) {
-        while !self.stopped() {
-            self.woken.notified().await;
+        let mut stopped = self.stopped.subscribe();
+        loop {
+            // Subscribe, then check: a stop that already happened is visible
+            // here, and a stop that happens between this check and `changed`
+            // bumps the version so `changed` returns at once. No wakeup is lost.
+            if *stopped.borrow_and_update() {
+                return;
+            }
+            if stopped.changed().await.is_err() {
+                return;
+            }
         }
     }
 }
@@ -113,5 +124,45 @@ mod tests {
         cancel.stop();
         cancel.stop();
         assert!(cancel.stopped());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_stop_racing_the_wait_is_never_lost() {
+        // The lost-wakeup this type was rewritten to remove: a stop that lands
+        // in the instant between checking the flag and parking on the wake would
+        // hang the waiter forever. Racing the two many times on several threads
+        // hits that window; every waiter must still finish.
+        for _ in 0..3000 {
+            let cancel = Cancel::new();
+            let waiter = cancel.clone();
+            let task = tokio::spawn(async move { waiter.cancelled().await });
+            cancel.stop();
+            assert!(
+                tokio::time::timeout(Duration::from_secs(5), task)
+                    .await
+                    .is_ok(),
+                "a stop racing the wait was lost and the waiter hung"
+            );
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn one_stop_wakes_every_waiter() {
+        let cancel = Cancel::new();
+        let mut tasks = Vec::new();
+        for _ in 0..16 {
+            let waiter = cancel.clone();
+            tasks.push(tokio::spawn(async move { waiter.cancelled().await }));
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        cancel.stop();
+        for task in tasks {
+            assert!(
+                tokio::time::timeout(Duration::from_secs(5), task)
+                    .await
+                    .is_ok(),
+                "a simultaneous waiter was not woken by the single stop"
+            );
+        }
     }
 }
