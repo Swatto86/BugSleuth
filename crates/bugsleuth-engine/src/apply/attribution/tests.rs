@@ -65,7 +65,7 @@ fn the_format_string_is_the_one_git_actually_produces() {
     run(&["commit", "-qm", "fix: another\n\nNo trailer here."]);
 
     assert_eq!(
-        attributed_since(&dir, &Baseline::Commit(base.clone())),
+        attributed_since(&dir, &Baseline::Commit(base.clone())).expect("attributed"),
         ["fix: something real"],
         "only the credited commit, with its subject intact"
     );
@@ -123,7 +123,11 @@ fn stripping_removes_the_trailer_and_changes_nothing_else() {
     assert_eq!(stripped, ["fix: the real work"], "only the credited commit");
 
     // The trailer is gone and nothing else is.
-    assert!(attributed_since(&dir, &Baseline::Commit(base.clone())).is_empty());
+    assert!(
+        attributed_since(&dir, &Baseline::Commit(base.clone()))
+            .expect("attributed")
+            .is_empty()
+    );
     let log = git(&dir, &["log", "--format=%B", &format!("{base}..HEAD")]).expect("log");
     assert!(!log.contains("Co-Authored-By"), "{log}");
     assert!(log.contains("Why it was wrong."), "the body is kept: {log}");
@@ -207,7 +211,11 @@ fn an_unborn_repositorys_initial_commit_is_stripped_as_a_root() {
     let tree_before = git(&dir, &["rev-parse", "HEAD^{tree}"]).expect("tree");
     let stripped = strip_attribution(&dir, &Baseline::Unborn).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(stripped, ["feat: first"], "the initial commit was stripped");
-    assert!(attributed_since(&dir, &Baseline::Unborn).is_empty());
+    assert!(
+        attributed_since(&dir, &Baseline::Unborn)
+            .expect("attributed")
+            .is_empty()
+    );
     assert_eq!(
         commits_since(&dir, &Baseline::Unborn),
         1,
@@ -227,6 +235,66 @@ fn an_unborn_repositorys_initial_commit_is_stripped_as_a_root() {
         git(&dir, &["rev-parse", "HEAD^{tree}"]).expect("tree"),
         tree_before,
         "the code itself must be byte-identical"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn attribution_read_errors_fail_closed() {
+    // A failed history read must surface as an error, never as an empty message,
+    // an "unpublished" verdict or an empty attribution list — each of those lets
+    // a credited commit slip through, or lets published history be rewritten on
+    // the false belief that it is still local.
+    let dir =
+        std::env::temp_dir().join(format!("bugsleuth-attr-failclosed-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::create_dir_all(&dir);
+    let run = |args: &[&str]| {
+        Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    };
+    if !run(&["init", "-q"]) {
+        return; // no usable git here
+    }
+    let _ = run(&["config", "user.email", "t@example.com"]);
+    let _ = run(&["config", "user.name", "Tester"]);
+    let _ = std::fs::write(dir.join("a.txt"), "one");
+    let _ = run(&["add", "-A"]);
+    if !run(&["commit", "-qm", "base"]) {
+        return;
+    }
+
+    // A git object name that resolves to nothing. Every helper below must report
+    // the failure rather than swallow it.
+    let missing = "0".repeat(40);
+    assert!(
+        message_of(&dir, &missing).is_err(),
+        "reading a missing commit message must error, not return an empty string"
+    );
+    assert!(
+        refuse_if_published(&dir, &[missing.clone()]).is_err(),
+        "a failed publication query must error, not read as 'not published'"
+    );
+    assert!(
+        attributed_since(&dir, &Baseline::Commit(missing.clone())).is_err(),
+        "a failed attribution scan must error, not read as 'nothing attributed'"
+    );
+
+    // And through the front door: a base that cannot be resolved makes the whole
+    // strip fail closed and leaves HEAD exactly where it was.
+    let head = git(&dir, &["rev-parse", "HEAD"]).expect("head").trim().to_string();
+    assert!(
+        strip_attribution(&dir, &Baseline::Commit(missing.clone())).is_err(),
+        "strip_attribution must fail rather than proceed on an unreadable history"
+    );
+    assert_eq!(
+        git(&dir, &["rev-parse", "HEAD"]).expect("head").trim(),
+        head,
+        "HEAD must be untouched when history could not be inspected"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

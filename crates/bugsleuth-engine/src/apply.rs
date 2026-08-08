@@ -20,6 +20,8 @@
 use std::path::Path;
 use std::time::Duration;
 
+use anyhow::Context;
+
 use crate::sweep::Vendor;
 
 mod attribution;
@@ -201,7 +203,18 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     // initial commit must not escape both the stripping and the report.
     let (stripped, attributed) = match strip_attribution(repo, &base) {
         Ok(stripped) => (stripped, vec![]),
-        Err(_) => (vec![], attributed_since(repo, &base)),
+        // Stripping was refused (published history, or a detached HEAD) — report
+        // what it could not reach. But if the rescan itself cannot read history,
+        // that is not "nothing to report": it means the check never ran, so fail
+        // closed rather than push and tag on an unverified repository.
+        Err(_) => {
+            let attributed = attributed_since(repo, &base).with_context(|| {
+                "the model's fixes are committed to your repository, but BugSleuth could not read \
+                 its history to check them for AI attribution — so nothing was pushed or tagged. \
+                 Inspect it with `git log` before publishing."
+            })?;
+            (vec![], attributed)
+        }
     };
 
     // After stripping, deliberately: the trailers come off before anything is

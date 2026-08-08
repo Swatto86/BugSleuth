@@ -12,7 +12,7 @@
 use std::path::Path;
 
 use super::Baseline;
-use super::observed::{git, git_with_env};
+use super::observed::{git, git_with_env, range_since};
 
 /// Rewrite the commits this apply created, without their tool trailers.
 ///
@@ -38,10 +38,11 @@ pub(super) fn strip_attribution(repo: &Path, base: &Baseline) -> anyhow::Result<
 
     // The commits this apply created. Past a real base that is `base..HEAD`;
     // from an unborn start it is the whole of HEAD, whose first commit is a
-    // root with no parent.
-    let range = match base {
-        Baseline::Commit(base) => format!("{base}..HEAD"),
-        Baseline::Unborn => "HEAD".to_string(),
+    // root with no parent. An unborn start that committed nothing has no range
+    // and nothing to strip — and any failure to establish that is an error, not
+    // an empty range that would quietly skip the whole guard.
+    let Some(range) = range_since(repo, base)? else {
+        return Ok(vec![]);
     };
     let ids: Vec<String> = git(repo, &["rev-list", "--reverse", &range])?
         .lines()
@@ -53,10 +54,16 @@ pub(super) fn strip_attribution(repo: &Path, base: &Baseline) -> anyhow::Result<
 
     // Nothing to do is the common case, and it must cost nothing: rewriting the
     // range unconditionally would give every commit of every apply a new hash
-    // for no reason - churn the user would notice and could not explain.
-    let any_credited = ids
-        .iter()
-        .any(|id| message_of(repo, id).lines().any(credits_a_tool));
+    // for no reason - churn the user would notice and could not explain. A
+    // message that cannot be read is an error, never an uncredited commit: a
+    // credited commit missed here would be pushed with its trailer intact.
+    let mut any_credited = false;
+    for id in &ids {
+        if message_of(repo, id)?.lines().any(credits_a_tool) {
+            any_credited = true;
+            break;
+        }
+    }
     if !any_credited {
         return Ok(vec![]);
     }
@@ -103,7 +110,7 @@ pub(super) fn strip_attribution(repo: &Path, base: &Baseline) -> anyhow::Result<
 /// trailer, so this is where the guarantee stops and the report takes over.
 fn refuse_if_published(repo: &Path, ids: &[String]) -> anyhow::Result<()> {
     for id in ids {
-        let published = git(repo, &["branch", "-r", "--contains", id]).unwrap_or_default();
+        let published = git(repo, &["branch", "-r", "--contains", id])?;
         if !published.trim().is_empty() {
             anyhow::bail!(
                 "commit {} is already on a remote branch, so its message cannot be rewritten \
@@ -115,8 +122,8 @@ fn refuse_if_published(repo: &Path, ids: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn message_of(repo: &Path, id: &str) -> String {
-    git(repo, &["log", "-1", "--format=%B", id]).unwrap_or_default()
+fn message_of(repo: &Path, id: &str) -> anyhow::Result<String> {
+    git(repo, &["log", "-1", "--format=%B", id])
 }
 
 /// Re-commit one commit onto `parent` without its trailers, or as a root commit
@@ -129,7 +136,7 @@ fn rewrite_one(
     id: &str,
     parent: Option<&str>,
 ) -> anyhow::Result<(String, Option<String>)> {
-    let message = git(repo, &["log", "-1", "--format=%B", id])?;
+    let message = message_of(repo, id)?;
     let cleaned = without_trailers(&message);
     let tree = git(repo, &["rev-parse", &format!("{id}^{{tree}}")])?
         .trim()
@@ -207,14 +214,12 @@ fn without_trailers(message: &str) -> String {
 /// `%x1e` between commits and `%x00` between the subject and the body, because
 /// a commit message contains blank lines and any separator that occurs in prose
 /// eventually splits one in half.
-pub(super) fn attributed_since(repo: &Path, base: &Baseline) -> Vec<String> {
-    let range = match base {
-        Baseline::Commit(base) => format!("{base}..HEAD"),
-        Baseline::Unborn => "HEAD".to_string(),
+pub(super) fn attributed_since(repo: &Path, base: &Baseline) -> anyhow::Result<Vec<String>> {
+    let Some(range) = range_since(repo, base)? else {
+        return Ok(vec![]);
     };
-    git(repo, &["log", "--format=%s%x00%b%x1e", &range])
-        .map(|log| attributed(&log))
-        .unwrap_or_default()
+    let log = git(repo, &["log", "--format=%s%x00%b%x1e", &range])?;
+    Ok(attributed(&log))
 }
 
 /// The subjects of commits that credit a tool for the work.

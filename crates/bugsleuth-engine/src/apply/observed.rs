@@ -51,6 +51,28 @@ pub(super) fn changed_since(repo: &Path, base: &Baseline) -> Vec<String> {
     theirs(files)
 }
 
+/// The `base..HEAD` revision range, or `None` when an unborn baseline still has
+/// no commits — the model committed nothing, which is a genuine empty result
+/// rather than a failure to inspect.
+///
+/// The two are told apart the way [`super::baseline`] tells them apart:
+/// `rev-list --all --count` is `0` only when the repository truly has no
+/// commits. Any other Git failure is propagated, never read as "nothing here" —
+/// a damaged `.git` must not masquerade as a clean, empty history.
+pub(super) fn range_since(repo: &Path, base: &Baseline) -> anyhow::Result<Option<String>> {
+    match base {
+        Baseline::Commit(base) => Ok(Some(format!("{base}..HEAD"))),
+        Baseline::Unborn => {
+            let all = git(repo, &["rev-list", "--all", "--count"])?;
+            if all.trim() == "0" {
+                Ok(None)
+            } else {
+                Ok(Some("HEAD".to_string()))
+            }
+        }
+    }
+}
+
 pub(super) fn commits_since(repo: &Path, base: &Baseline) -> usize {
     // Against a real commit, count the range past it. Against an unborn start,
     // every commit is new, so the whole of HEAD is the count — or the command
