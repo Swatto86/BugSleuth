@@ -203,13 +203,15 @@ mod tests {
         // has the same leaf name. Sharing a run directory means resume hands
         // one of them the other's sweeps and the report states the wrong
         // provenance - the same lossy-key defect as the report filenames.
-        let a = run_output_dir(std::path::Path::new("C:/work/bugsleuth"));
-        let b = run_output_dir(std::path::Path::new("C:/scratch/bugsleuth"));
+        let dir =
+            |p: &str| run_output_dir(std::path::Path::new(p)).unwrap_or_else(|e| panic!("{e}"));
+        let a = dir("C:/work/bugsleuth");
+        let b = dir("C:/scratch/bugsleuth");
         assert_ne!(a, b);
         // The leaf stays visible so a person can still tell which is which.
         assert!(a.to_string_lossy().contains("bugsleuth"));
         // And the same path always resolves to the same directory, or resume
         // would never find anything.
-        assert_eq!(a, run_output_dir(std::path::Path::new("C:/work/bugsleuth")));
+        assert_eq!(a, dir("C:/work/bugsleuth"));
     }
 }

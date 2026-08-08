@@ -59,7 +59,7 @@ pub async fn clear_saved(
 /// checked by reading it.
 fn clear(settings: &Settings) -> Result<Cleared, String> {
     let repo = checked_repo(&settings.repo)?;
-    let dir = run_output_dir(&repo);
+    let dir = run_output_dir(&repo)?;
 
     // Belt and braces on a delete. `run_output_dir` builds this path itself, so
     // it is already inside the app's own data directory — but a future change to
@@ -105,7 +105,7 @@ mod tests {
         // The guard above compares against this prefix, so if the two ever
         // disagree the command either refuses everything or deletes somewhere
         // it should not.
-        let dir = run_output_dir(Path::new("C:/work/some-repo"));
+        let dir = run_output_dir(Path::new("C:/work/some-repo")).unwrap_or_else(|e| panic!("{e}"));
         assert!(
             dir.starts_with(settings::data_dir().join("runs")),
             "{dir:?}"
@@ -125,7 +125,7 @@ mod tests {
         // is concerned. Both sides going through one function is what makes
         // them agree.
         let resolved = checked_repo(&repo.display().to_string()).unwrap_or_else(|e| panic!("{e}"));
-        let stored = run_output_dir(&resolved);
+        let stored = run_output_dir(&resolved).unwrap_or_else(|e| panic!("{e}"));
         let _ = std::fs::create_dir_all(&stored);
         for name in [
             "correctness-haiku.json",

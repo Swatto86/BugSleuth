@@ -44,7 +44,7 @@ pub async fn apply_fixes(
     }
 
     let effort = settings.apply_effort.trim().to_string();
-    let prompt_path = run_output_dir(&repo).join("fix-prompt.md");
+    let prompt_path = run_output_dir(&repo)?.join("fix-prompt.md");
     let prompt = std::fs::read_to_string(&prompt_path).map_err(|e| {
         format!(
             "no fix prompt for this repository at {}: {e}. Run a review first.",
