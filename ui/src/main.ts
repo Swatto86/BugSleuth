@@ -210,11 +210,20 @@ function setStatus(text: string, kind: "" | "running" | "error" = ""): void {
   ui.spinner.classList.toggle("hidden", kind !== "running");
 }
 
+/**
+ * The settings-save error has its own region, separate from the status bar, so
+ * a run's transient messages can never erase it and it survives until a later
+ * save succeeds.
+ */
+function setSettingsError(text: string): void {
+  ui.settingsError.textContent = text;
+  ui.settingsError.classList.toggle("hidden", text === "");
+}
+
 /** Save settings, reporting a failure the user would otherwise never see. */
 const persist = savingSettings({
   settings: () => settings,
-  setStatus,
-  quiet: () => isRunning(),
+  setError: setSettingsError,
 });
 
 const runDeps = (): RunDeps => ({

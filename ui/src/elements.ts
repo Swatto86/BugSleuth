@@ -38,6 +38,7 @@ const ui = {
   output: el<HTMLPreElement>("output"),
   findings: el<HTMLDivElement>("findings"),
   status: el<HTMLSpanElement>("status"),
+  settingsError: el<HTMLSpanElement>("settings-error"),
   spinner: el<HTMLSpanElement>("spinner"),
   planSummary: el<HTMLSpanElement>("plan-summary"),
   run: el<HTMLButtonElement>("run"),

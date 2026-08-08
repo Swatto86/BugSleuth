@@ -18,18 +18,18 @@ import type { Settings } from "./model";
 
 export interface PersistDeps {
   settings: () => Settings;
-  setStatus: (text: string, kind?: "" | "running" | "error") => void;
-  /** True while something more important is on the status bar - a run. */
-  quiet: () => boolean;
+  /** Show a save failure in its own persistent region, or clear it with "". */
+  setError: (text: string) => void;
 }
 
 /**
  * A save function, coalesced so typing does not write on every keystroke.
  *
- * The failure is reported in the status bar rather than a dialog, because it
- * must not interrupt a run in progress, and only while nothing else is being
- * said. Recovery is reported too: a status line stuck on an error that has
- * since cleared is its own small lie.
+ * The failure goes to its own persistent live region, not the transient status
+ * bar. The status bar was suppressed whenever a run was in progress — the exact
+ * time a save is most likely to be attempted and to fail — so a whole run's
+ * worth of configuration could be lost with nothing ever said. This region only
+ * ever carries the save state, and is cleared only by a later successful save.
  */
 export function savingSettings(deps: PersistDeps): () => void {
   let timer: number | undefined;
@@ -42,16 +42,11 @@ export function savingSettings(deps: PersistDeps): () => void {
         .then(() => {
           if (!failed) return;
           failed = false;
-          if (!deps.quiet()) deps.setStatus("Ready");
+          deps.setError("");
         })
         .catch((error: unknown) => {
           failed = true;
-          if (!deps.quiet()) {
-            deps.setStatus(
-              `Settings are not being saved: ${String(error)}`,
-              "error",
-            );
-          }
+          deps.setError(`Settings are not being saved: ${String(error)}`);
         });
     }, 400);
   };
