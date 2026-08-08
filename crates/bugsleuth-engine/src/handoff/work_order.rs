@@ -26,14 +26,17 @@ pub fn work_order(
         finding.title
     ));
     out.push_str(&format!("- **Where:** `{}`:{}\n", anchor.file, anchor.line));
-    // Reported, but no longer called confidence and no longer ranked on.
-    // Measured cross-vendor agreement is near zero — 0 of 7 pairs in an
-    // experiment built to produce it — so "1 of 7" says almost nothing about
-    // whether a defect is real. It mostly says the other sweeps were reading
-    // something else. Labelling that "confidence" invited exactly the wrong
-    // inference.
+    // Two independent counts, never a fraction. `agreement` is how many distinct
+    // models reported this defect; `sources` is how many sweeps ran across every
+    // lane. Printed as "1 of 7" they compare different populations — most of
+    // those seven sweeps were never asked to look for this defect — which made
+    // agreement read as far weaker than it is. Measured cross-vendor agreement is
+    // near zero anyway, so it is reported plainly rather than dressed up as a
+    // fraction that implies confidence.
+    let model_noun = if agreement == 1 { "model" } else { "models" };
     out.push_str(&format!(
-        "- **Reported by:** {agreement} of {sources} sweeps that ran\n"
+        "- **Reported by:** {agreement} distinct {model_noun}\n\
+         - **Review coverage:** {sources} sweeps ran overall\n"
     ));
     if anchor.was_corrected() {
         // Worth saying: the model's own line number was wrong, so an implementer
@@ -179,11 +182,30 @@ mod tests {
             "items.is_empty()",
             "cargo test average_price_of_empty",
             "checked both callers",
-            "2 of 3 sweeps",
+            "2 distinct models",
+            "3 sweeps ran overall",
             "src/price.rs",
         ] {
             assert!(text.contains(expected), "missing {expected:?} in\n{text}");
         }
+    }
+
+    #[test]
+    fn handoff_does_not_compare_models_with_sweeps() {
+        // `agreement` counts distinct reporting models; `sources` counts every
+        // sweep across every lane. A fraction "1 of 7" compares two different
+        // populations and understates agreement, so the two are reported apart.
+        let one = work_order(1, &finding(Default::default()), Severity::High, 1, 7);
+        assert!(one.contains("1 distinct model"), "{one}");
+        assert!(one.contains("7 sweeps ran overall"), "{one}");
+        assert!(
+            !one.contains("1 of 7"),
+            "the misleading fraction is still there: {one}"
+        );
+
+        // The noun agrees with the count when more than one model reported it.
+        let many = work_order(1, &finding(Default::default()), Severity::High, 3, 7);
+        assert!(many.contains("3 distinct models"), "{many}");
     }
 
     #[test]
