@@ -63,6 +63,40 @@ fn a_failed_write_destroys_nothing_and_leaves_no_debris() {
 }
 
 #[test]
+fn failed_stage_write_leaves_no_debris() {
+    // The other failure test forces the rename to fail; this forces the staging
+    // write itself to fail after it has created and partially filled the file —
+    // a full disk. The `.writing` file must be cleaned, and the existing target
+    // left untouched.
+    let dir = scratch("stage-failure");
+    let target = dir.join("report.json");
+    std::fs::write(&target, "PREVIOUS GOOD").expect("seed the target");
+
+    let result = write_with(&target, |staged| {
+        std::fs::write(staged, b"partial").expect("partial stage write");
+        Err(io::Error::new(io::ErrorKind::Other, "disk full"))
+    });
+    assert!(result.is_err(), "the staging write should have failed");
+    assert_eq!(
+        std::fs::read_to_string(&target).expect("read"),
+        "PREVIOUS GOOD",
+        "a failed staging write destroyed the existing file"
+    );
+
+    let debris: Vec<String> = std::fs::read_dir(&dir)
+        .expect("read dir")
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|name| is_staged(name))
+        .collect();
+    assert!(
+        debris.is_empty(),
+        "a failed staging write left {debris:?} behind"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_staging_file_is_a_sibling_so_the_rename_cannot_cross_a_filesystem() {
     let path = Path::new("/tmp/reports/run.json");
     let staged = staged_path(path).expect("staged path");

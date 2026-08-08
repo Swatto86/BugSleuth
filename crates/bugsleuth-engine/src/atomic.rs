@@ -36,8 +36,26 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 /// leaving a `.writing` file beside the real ones for the next reader to
 /// puzzle over.
 pub fn write(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
+    write_with(path, |staged| std::fs::write(staged, contents))
+}
+
+/// The body of [`write`] with the staging write injected, so a test can force a
+/// write that creates and partially fills the file before it fails.
+fn write_with<W>(path: &Path, stage: W) -> io::Result<()>
+where
+    W: FnOnce(&Path) -> io::Result<()>,
+{
     let staged = staged_path(path)?;
-    std::fs::write(&staged, contents)?;
+    // The staging file is cleaned on *every* exit after it is named, the failed
+    // staging write included: `fs::write` may create and partially fill the file
+    // before it fails, and returning straight through `?` used to leave that
+    // unique `.writing` file behind for good — one more every time the disk was
+    // near full. The original error is preserved; a cleanup that also fails is
+    // ignored rather than allowed to mask it.
+    if let Err(error) = stage(&staged) {
+        let _ = std::fs::remove_file(&staged);
+        return Err(error);
+    }
     if let Err(error) = std::fs::rename(&staged, path) {
         let _ = std::fs::remove_file(&staged);
         return Err(error);
