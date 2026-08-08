@@ -131,6 +131,7 @@ fn a_completed_push_names_where_it_went_and_that_it_is_permanent() {
     let text = describe_push(&PushOutcome::Pushed {
         branch: "master".into(),
         upstream: "origin/master".into(),
+        remote: "origin".into(),
     });
     assert!(text.contains("Pushed master to origin/master"), "{text}");
     assert!(text.contains("published"), "{text}");
@@ -152,6 +153,7 @@ fn the_push_outcome_reaches_the_text_the_window_shows() {
         push: PushOutcome::Pushed {
             branch: "main".into(),
             upstream: "origin/main".into(),
+            remote: "origin".into(),
         },
         tag: TagOutcome::Tagged {
             tag: "v1.4.2".into(),

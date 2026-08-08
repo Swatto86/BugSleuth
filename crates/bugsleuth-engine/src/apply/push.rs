@@ -34,6 +34,10 @@ pub enum PushOutcome {
     Pushed {
         branch: String,
         upstream: String,
+        /// The exact remote the push used. Carried so a later tag goes to the
+        /// same place, rather than being re-derived from `upstream` by splitting
+        /// on '/', which truncates a remote name that itself contains a slash.
+        remote: String,
     },
     /// git ran and the remote is confirmed still unchanged: a genuine rejection.
     /// Left for the user: the fix is a fetch and a rebase, or a force-push, and
@@ -220,7 +224,11 @@ pub(super) fn push(
     };
 
     match git(repo, &["-c", "push.default=upstream", "push"]) {
-        Ok(_) => PushOutcome::Pushed { branch, upstream },
+        Ok(_) => PushOutcome::Pushed {
+            branch,
+            upstream,
+            remote,
+        },
         Err(error) => {
             // A push error only means the client got no success reply. The
             // update may already be on the remote, so re-read the ref before
@@ -228,7 +236,11 @@ pub(super) fn push(
             let before = Ok(Some(live_upstream_tip));
             let after = super::remote::remote_oid(repo, &remote, &reference);
             match super::remote::classify(&before, &desired, &after) {
-                super::remote::UpdateAfterError::Landed => PushOutcome::Pushed { branch, upstream },
+                super::remote::UpdateAfterError::Landed => PushOutcome::Pushed {
+                    branch,
+                    upstream,
+                    remote,
+                },
                 super::remote::UpdateAfterError::Rejected => PushOutcome::Failed(error.to_string()),
                 super::remote::UpdateAfterError::Unknown => PushOutcome::Unknown {
                     branch,

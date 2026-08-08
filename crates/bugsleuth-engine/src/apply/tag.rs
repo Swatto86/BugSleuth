@@ -86,22 +86,20 @@ fn blocked(pushed: bool) -> Option<TagOutcome> {
 
 /// Tag the pushed commits and publish the tag, if it may be published.
 ///
-/// `remote` is the upstream the push actually used, in `remote/branch` form, so
-/// the tag goes to the same place the commits did rather than to a remote picked
-/// here.
-pub(super) fn tag(repo: &Path, pushed: bool, upstream: &str) -> TagOutcome {
+/// `remote` is the exact remote the push used, threaded through from the push
+/// itself rather than re-derived by splitting an `upstream` display string on
+/// '/' — a remote name may itself contain a slash, and splitting sent the tag to
+/// the wrong place. If the commits went to a fork, so does the tag.
+pub(super) fn tag(repo: &Path, pushed: bool, remote: &str) -> TagOutcome {
     if let Some(stop) = blocked(pushed) {
         return stop;
     }
 
-    // The remote half of `origin/main`. Taken from the push's own upstream so
-    // there is no second guess about where this belongs — if the commits went
-    // to a fork, so does the tag that releases them.
-    let Some(remote) = upstream.split('/').next().filter(|r| !r.is_empty()) else {
-        return TagOutcome::Refused(format!(
-            "could not tell which remote {upstream} refers to, so nothing was tagged."
-        ));
-    };
+    if remote.is_empty() {
+        return TagOutcome::Refused(
+            "the push did not report which remote it used, so nothing was tagged.".to_string(),
+        );
+    }
 
     // `--sort=-v:refname` orders by version rather than by string, so v1.10.0
     // sorts after v1.9.0 instead of before it. `--merged HEAD` keeps it to tags

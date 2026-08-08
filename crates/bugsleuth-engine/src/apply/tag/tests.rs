@@ -35,6 +35,10 @@ fn scratch(tag: &str) -> std::path::PathBuf {
 
 /// A repository with one commit and a bare remote it already pushes to — the
 /// state this code only ever runs in, since it runs after a successful push.
+///
+/// Returns the exact remote name (`origin`), which is what `tag` now receives —
+/// the push threads the real remote through rather than a `remote/branch`
+/// display string for `tag` to split.
 fn published(tag: &str) -> (std::path::PathBuf, std::path::PathBuf, String) {
     let repo = scratch(tag);
     git_ok(&repo, &["init", "-q"]);
@@ -52,7 +56,7 @@ fn published(tag: &str) -> (std::path::PathBuf, std::path::PathBuf, String) {
     );
     let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
     git_ok(&repo, &["push", "-q", "-u", "origin", &branch]);
-    (repo, remote, format!("origin/{branch}"))
+    (repo, remote, "origin".to_string())
 }
 
 /// Every tag the remote actually has.
@@ -104,9 +108,9 @@ fn nothing_is_tagged_when_the_commits_were_never_published() {
 
 #[test]
 fn a_branch_with_no_release_tag_has_no_scheme_to_follow() {
-    let (repo, remote, upstream) = published("unversioned");
+    let (repo, remote, remote_name) = published("unversioned");
 
-    let outcome = tag(&repo, true, &upstream);
+    let outcome = tag(&repo, true, &remote_name);
     let TagOutcome::Refused(reason) = &outcome else {
         panic!("a repository with no tags invented a version: {outcome:?}");
     };
@@ -128,7 +132,7 @@ fn a_tag_on_another_branch_is_never_moved() {
     // contain is invisible when the next version is worked out — and the name
     // it lands on is already taken. Reusing it means moving a tag a published
     // release was built from, onto a different commit.
-    let (repo, remote, upstream) = published("collision");
+    let (repo, remote, remote_name) = published("collision");
     git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "one"]);
     git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
     let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
@@ -150,7 +154,7 @@ fn a_tag_on_another_branch_is_never_moved() {
     git_ok(&repo, &["commit", "-qm", "the fix"]);
     git_ok(&repo, &["push", "-q"]);
 
-    let outcome = tag(&repo, true, &upstream);
+    let outcome = tag(&repo, true, &remote_name);
     let TagOutcome::Refused(reason) = &outcome else {
         panic!("an existing tag was reused: {outcome:?}");
     };
@@ -176,7 +180,7 @@ fn the_tag_reaches_the_remote_and_points_at_the_fixes() {
     // The wiring test. Everything above proves a decision; this proves the tag
     // actually lands on the remote, on the right commit — which is the only
     // thing that makes CI build a release at all.
-    let (repo, remote, upstream) = published("reaches");
+    let (repo, remote, remote_name) = published("reaches");
     git_ok(&repo, &["tag", "-a", "v2.4.7", "-m", "the last release"]);
     git_ok(&repo, &["push", "-q", "origin", "v2.4.7"]);
 
@@ -186,7 +190,7 @@ fn the_tag_reaches_the_remote_and_points_at_the_fixes() {
     git_ok(&repo, &["push", "-q"]);
     let head = git_ok(&repo, &["rev-parse", "HEAD"]);
 
-    let outcome = tag(&repo, true, &upstream);
+    let outcome = tag(&repo, true, &remote_name);
     assert_eq!(
         outcome,
         TagOutcome::Tagged {
@@ -213,11 +217,72 @@ fn the_tag_reaches_the_remote_and_points_at_the_fixes() {
 }
 
 #[test]
+fn slash_in_remote_name_does_not_redirect_release_tag() {
+    // Git allows a remote named `team/origin` (though not alongside a sibling
+    // `team` — it refuses that as a superset). The tag path used to split the
+    // upstream `team/origin/branch` on '/', deriving the wrong remote `team`, so
+    // `git push team <tag>` went to a remote that does not exist and the release
+    // never fired. The exact remote the push used must reach the tag instead.
+    let repo = scratch("slash-repo");
+    git_ok(&repo, &["init", "-q"]);
+    git_ok(&repo, &["config", "user.email", "t@example.com"]);
+    git_ok(&repo, &["config", "user.name", "Tester"]);
+    std::fs::write(repo.join("a.txt"), "one\n").expect("write");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "first"]);
+    let base = git_ok(&repo, &["rev-parse", "HEAD"]);
+
+    let remote = scratch("slash-remote");
+    git_ok(&remote, &["init", "-q", "--bare"]);
+    git_ok(
+        &repo,
+        &["remote", "add", "team/origin", &remote.to_string_lossy()],
+    );
+    let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
+    git_ok(&repo, &["push", "-q", "-u", "team/origin", &branch]);
+    // A release scheme to follow, published on the same slash-named remote.
+    git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
+    git_ok(&repo, &["push", "-q", "team/origin", "v1.0.0"]);
+
+    // The fix, then the real push — which must report `team/origin` verbatim.
+    std::fs::write(repo.join("b.txt"), "the fix\n").expect("write");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "fix: the defect"]);
+
+    let pushed = super::super::push::push(&repo, &super::super::Baseline::Commit(base), 1, &[]);
+    let super::super::PushOutcome::Pushed { remote: pushed_remote, .. } = &pushed else {
+        panic!("the fix was not pushed, so nothing proves the remote: {pushed:?}");
+    };
+    assert_eq!(pushed_remote, "team/origin", "the push lost the exact remote");
+
+    // Tag with exactly what the push reported. A split would have sent it to
+    // `team`, which is not a remote here at all.
+    let outcome = tag(&repo, true, pushed_remote);
+    assert_eq!(
+        outcome,
+        TagOutcome::Tagged {
+            tag: "v1.0.1".to_string(),
+            remote: "team/origin".to_string(),
+        },
+        "{outcome:?}"
+    );
+    assert!(
+        remote_tags(&remote).contains(&"v1.0.1".to_string()),
+        "the release tag did not reach the slash-named remote: {:?}",
+        remote_tags(&remote)
+    );
+
+    for dir in [&repo, &remote] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[test]
 fn only_the_release_tag_is_published() {
     // `git push --tags` sends every local tag, including private backup tags
     // that were deliberately never pushed. One bulk push republished history
     // that had been squashed away on purpose.
-    let (repo, remote, upstream) = published("named-only");
+    let (repo, remote, remote_name) = published("named-only");
     git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
     git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
     git_ok(
@@ -230,7 +295,7 @@ fn only_the_release_tag_is_published() {
     git_ok(&repo, &["commit", "-qm", "fix: the defect"]);
     git_ok(&repo, &["push", "-q"]);
 
-    let outcome = tag(&repo, true, &upstream);
+    let outcome = tag(&repo, true, &remote_name);
     assert!(
         matches!(outcome, TagOutcome::Tagged { .. }),
         "the tag was not published: {outcome:?}"
@@ -257,14 +322,14 @@ fn an_unreadable_remote_after_a_failed_tag_push_is_unknown_and_keeps_the_tag() {
     // then cannot be read, whether the tag — and the release — landed is
     // genuinely unknown, so the local tag is kept rather than deleted and the
     // outcome is never reported as a definite failure.
-    let (repo, remote, upstream) = published("unreadable");
+    let (repo, remote, remote_name) = published("unreadable");
     git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
     git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
 
     // The remote goes away, so both the push and the reconciliation read fail.
     std::fs::remove_dir_all(&remote).expect("remove the remote");
 
-    let outcome = tag(&repo, true, &upstream);
+    let outcome = tag(&repo, true, &remote_name);
     let TagOutcome::Unknown { tag, .. } = &outcome else {
         panic!("an unconfirmable tag push was not reported as unknown: {outcome:?}");
     };
@@ -283,7 +348,7 @@ fn a_confirmed_rejection_reports_failure_and_removes_the_local_tag() {
     // When the remote is readable and the tag is confirmed still absent after a
     // failed push, that is a genuine rejection: reported as failed, and the
     // local tag removed so a retry is not blocked by the collision check.
-    let (repo, remote, upstream) = published("denied");
+    let (repo, remote, remote_name) = published("denied");
     git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
     git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
 
@@ -298,7 +363,7 @@ fn a_confirmed_rejection_reports_failure_and_removes_the_local_tag() {
         std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).expect("chmod");
     }
 
-    let outcome = tag(&repo, true, &upstream);
+    let outcome = tag(&repo, true, &remote_name);
     let TagOutcome::Failed(reason) = &outcome else {
         panic!("a confirmed rejection was not reported as failed: {outcome:?}");
     };
@@ -323,7 +388,7 @@ fn a_tag_already_on_the_remote_is_refused_even_when_absent_locally() {
     // Another machine may have published the next version. Tagging over it would
     // repoint a release, so a name already on the remote is refused even when
     // this checkout has never seen it.
-    let (repo, remote, upstream) = published("remote-collision");
+    let (repo, remote, remote_name) = published("remote-collision");
     git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
     git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
 
@@ -333,7 +398,7 @@ fn a_tag_already_on_the_remote_is_refused_even_when_absent_locally() {
     git_ok(&repo, &["push", "-q", "origin", "v1.0.1"]);
     git_ok(&repo, &["tag", "-d", "v1.0.1"]);
 
-    let outcome = tag(&repo, true, &upstream);
+    let outcome = tag(&repo, true, &remote_name);
     let TagOutcome::Refused(reason) = &outcome else {
         panic!("a remote tag collision was not refused: {outcome:?}");
     };

@@ -159,6 +159,7 @@ fn the_commits_actually_reach_the_remote() {
         PushOutcome::Pushed {
             branch: branch.clone(),
             upstream: format!("origin/{branch}"),
+            remote: "origin".to_string(),
         },
         "{outcome:?}"
     );

@@ -103,7 +103,9 @@ fn describe_push(outcome: &bugsleuth_engine::apply::PushOutcome) -> String {
                 .to_string()
         }
         P::Refused(reason) => format!("Not pushed. {reason}\n\n"),
-        P::Pushed { branch, upstream } => {
+        P::Pushed {
+            branch, upstream, ..
+        } => {
             format!(
                 "Pushed {branch} to {upstream}. These commits are published now — a later \
                      rewrite does not recall them, so read the diff there before anyone builds \

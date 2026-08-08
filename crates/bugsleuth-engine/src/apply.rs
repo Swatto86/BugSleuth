@@ -243,7 +243,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     };
 
     let tagged = match to_tag(request.tag, &pushed) {
-        Some(upstream) => tag::tag(repo, true, upstream),
+        Some(remote) => tag::tag(repo, true, remote),
         None if request.tag => tag::tag(repo, false, ""),
         None => TagOutcome::NotRequested,
     };
@@ -274,7 +274,10 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
 /// crediting a tool) is a reason not to release, not merely a reason not to push.
 fn to_tag(requested: bool, pushed: &PushOutcome) -> Option<&str> {
     match (requested, pushed) {
-        (true, PushOutcome::Pushed { upstream, .. }) => Some(upstream),
+        // The exact remote the push used, never re-derived from the `upstream`
+        // display string: a remote name may itself contain a '/', so splitting
+        // it would send the release tag somewhere the commits never went.
+        (true, PushOutcome::Pushed { remote, .. }) => Some(remote),
         _ => None,
     }
 }
@@ -384,8 +387,11 @@ mod tests {
         let pushed = PushOutcome::Pushed {
             branch: "main".into(),
             upstream: "origin/main".into(),
+            remote: "origin".into(),
         };
-        assert_eq!(to_tag(true, &pushed), Some("origin/main"));
+        // The exact remote, not the `origin/main` display string, so a remote
+        // whose own name contains a slash is not truncated on the way to the tag.
+        assert_eq!(to_tag(true, &pushed), Some("origin"));
 
         // Every other outcome means the commits are not on the remote, so a tag
         // would start a build of a ref the runner cannot fetch.
