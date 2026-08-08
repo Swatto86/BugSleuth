@@ -6,6 +6,28 @@ fn a_bare_model_name_means_claude_so_the_common_case_stays_short() {
 }
 
 #[test]
+fn a_failed_sweeps_reason_is_scrubbed_of_credentials_before_it_is_stored() {
+    // A vendor CLI can print its own OAuth tokens in an error — Kilo dumped a
+    // refresh and access token on a credential-store failure — and that error
+    // becomes the report's stored, displayed "NOT SWEPT" reason. The provider's
+    // `redact_secrets` is unit-tested; this is the wiring test that the error
+    // arm actually applies it, so a token cannot reach a report whichever stream
+    // the CLI put it on. A source scan because the alternative is a real failing
+    // CLI, and the anchor below is known-present so the scan cannot go vacuous.
+    let source = include_str!("../sweep.rs");
+    // The known-present anchor keeps the scan honest: if `not_swept` is gone the
+    // check fails loudly rather than passing on nothing.
+    assert!(
+        source.contains("not_swept("),
+        "the sweep no longer builds a NOT SWEPT reason; this check needs rewriting"
+    );
+    assert!(
+        source.contains("not_swept(redact_secrets("),
+        "a failed sweep's reason is stored without redacting credentials from it"
+    );
+}
+
+#[test]
 fn a_vendor_prefix_selects_that_vendor() {
     assert_eq!(
         Vendor::parse("codex:gpt-5.6-codex"),

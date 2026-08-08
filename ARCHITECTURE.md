@@ -90,7 +90,9 @@ passed everything. Both are fixed; both had been read over many times.
    run at once, *N* being the per-provider concurrency setting (default 3). With
    CLI subscriptions the binding constraint is rate limits, not money, so the
    fan-out per vendor is bounded and chosen rather than "all at once"; *N* of 1
-   restores strictly sequential per-vendor behaviour.
+   restores strictly sequential per-vendor behaviour. A vendor's slots go to
+   *different models first*: two models you picked run together rather than one
+   model's lanes filling the round while the other waits.
 3. **Sweep** — each unit runs its vendor against the repository. Failure is a
    *reported state*, never an exception that vanishes.
 4. **Verify** — every finding's quoted snippet must exist in the file it names,

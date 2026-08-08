@@ -199,6 +199,54 @@ fn a_zero_concurrency_is_treated_as_one_and_does_not_loop_forever() {
 }
 
 #[test]
+fn a_vendors_concurrent_slots_go_to_different_models_before_doubling_up() {
+    // The regression a user caught: two Codex models on five lanes each, at two
+    // per round, spent both slots on the FIRST model's lanes — so the second
+    // model they chose did not start until the first was nearly done. Picking
+    // two models means wanting them run together; the first round must contain
+    // both models, not one model twice.
+    let plan = plan(&config(&[
+        (
+            "codex:gpt-a",
+            &["correctness", "security", "contract", "ux", "gate"],
+        ),
+        (
+            "codex:gpt-b",
+            &["correctness", "security", "contract", "ux", "gate"],
+        ),
+    ]))
+    .unwrap_or_else(|e| panic!("plan failed: {e}"));
+
+    let first = &plan.batches(2)[0];
+    let models: BTreeSet<&str> = first.iter().map(|u| u.model.as_str()).collect();
+    assert_eq!(
+        models,
+        BTreeSet::from(["codex:gpt-a", "codex:gpt-b"]),
+        "the first round ran one model twice instead of both models: {first:?}"
+    );
+}
+
+#[test]
+fn one_models_extra_passes_still_fill_the_concurrency_when_it_is_alone() {
+    // The diversity rule must not starve the single-model case: two passes of
+    // one model with room for two should still run at once, or asking for more
+    // passes would silently serialise them.
+    let two_passes = Config {
+        models: vec![ModelPlan {
+            id: "sonnet".to_string(),
+            lanes: vec!["correctness".to_string()],
+            effort: String::new(),
+            passes: 2,
+        }],
+    };
+    let plan = plan(&two_passes).unwrap_or_else(|e| panic!("plan failed: {e}"));
+    assert_eq!(plan.units.len(), 2, "two passes should be two units");
+    let batches = plan.batches(2);
+    assert_eq!(batches.len(), 1, "both passes should share one round");
+    assert_eq!(batches[0].len(), 2);
+}
+
+#[test]
 fn batching_runs_every_unit_exactly_once() {
     let plan = plan(&config(&[
         ("sonnet", &["correctness", "security", "ux"]),

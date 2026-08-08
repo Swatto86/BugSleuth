@@ -11,7 +11,7 @@
 //! always enumerated, and one with no model assigned is carried through the
 //! whole run as an explicit "not swept".
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result};
 use bugsleuth_domain::Lane;
@@ -87,23 +87,59 @@ impl Plan {
     /// per-vendor behaviour, and a higher value trades rate-limit headroom for
     /// speed. Zero is treated as one — a batch that took no units would spin the
     /// loop forever.
+    ///
+    /// A vendor's concurrent slots go to **distinct models first**. Picking one
+    /// model twice — a run had two Codex models on five lanes each and, at two
+    /// per round, spent both slots on the first model's lanes while the second
+    /// model you chose sat idle until round three — defeats the point of picking
+    /// two models: you want them running together, and a run stopped early to
+    /// have partial results from both, not all of one and none of the other. So
+    /// each batch takes as many different models of a vendor as its budget
+    /// allows, and only doubles up on one model (its other lanes, or extra
+    /// passes) once every model of that vendor is already running this round.
     pub fn batches(&self, per_vendor: usize) -> Vec<Vec<Unit>> {
         let per_vendor = per_vendor.max(1);
         let mut remaining = self.units.clone();
         let mut batches = Vec::new();
 
         while !remaining.is_empty() {
-            let mut batch: Vec<Unit> = Vec::new();
+            let mut taken = vec![false; remaining.len()];
             let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-            remaining.retain(|unit| {
-                let seen = counts.entry(vendor_of(&unit.model)).or_insert(0);
-                if *seen >= per_vendor {
-                    return true;
+            let mut models: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+
+            // Two passes: the first fills each vendor's slots with models it is
+            // not already running this round; the second uses any budget still
+            // left on repeats (a model's other lanes, or its extra passes), so
+            // one model does not lie idle and concurrency is never wasted.
+            for require_new_model in [true, false] {
+                for (index, unit) in remaining.iter().enumerate() {
+                    if taken[index] {
+                        continue;
+                    }
+                    let vendor = vendor_of(&unit.model);
+                    if counts.get(&vendor).copied().unwrap_or(0) >= per_vendor {
+                        continue;
+                    }
+                    let running = models.get(&vendor);
+                    if require_new_model && running.is_some_and(|set| set.contains(&unit.model)) {
+                        continue;
+                    }
+                    taken[index] = true;
+                    *counts.entry(vendor.clone()).or_insert(0) += 1;
+                    models.entry(vendor).or_default().insert(unit.model.clone());
                 }
-                *seen += 1;
-                batch.push(unit.clone());
-                false
-            });
+            }
+
+            let mut batch = Vec::new();
+            let mut rest = Vec::new();
+            for (unit, was_taken) in remaining.into_iter().zip(taken) {
+                if was_taken {
+                    batch.push(unit);
+                } else {
+                    rest.push(unit);
+                }
+            }
+            remaining = rest;
             batches.push(batch);
         }
         batches

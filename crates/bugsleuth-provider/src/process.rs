@@ -278,10 +278,72 @@ async fn read_capped<R: tokio::io::AsyncRead + Unpin>(stream: Option<R>) -> Vec<
     out
 }
 
-/// First `max_chars` characters of `s`, sliced by character so a multi-byte
-/// codepoint straddling the limit cannot panic.
+/// First `max_chars` characters of `s`, with credential-shaped tokens removed,
+/// sliced by character so a multi-byte codepoint straddling the limit cannot panic.
+///
+/// This is the one place a vendor's raw stdout/stderr is turned into text that
+/// gets stored and shown — a failed sweep's "NOT SWEPT" reason is built from it.
+/// A CLI can print its own secrets there: Kilo dumped an OAuth refresh and access
+/// token into stderr on a credential-store error, and that would have persisted
+/// in a report on disk. Redaction happens *before* truncation, so a token cannot
+/// leak as a surviving prefix.
 pub fn preview(s: &str, max_chars: usize) -> String {
-    s.chars().take(max_chars).collect()
+    redact_secrets(s).chars().take(max_chars).collect()
+}
+
+/// Replace anything shaped like a JSON Web Token with a placeholder.
+///
+/// JWTs have a distinctive shape — three runs of base64url characters joined by
+/// dots, the first beginning `eyJ` (base64 for `{"`) — so the OAuth access and
+/// refresh tokens these CLIs carry can be found and blanked without a regex
+/// dependency. It catches the token shape, not every conceivable secret; that is
+/// the shape that actually leaked, and erring toward redaction of anything that
+/// matches is the safe direction for output that is stored and displayed.
+pub fn redact_secrets(text: &str) -> String {
+    let is_b64url = |b: u8| b.is_ascii_alphanumeric() || b == b'-' || b == b'_';
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while !rest.is_empty() {
+        if rest.starts_with("eyJ")
+            && let Some(len) = jwt_len(rest.as_bytes(), &is_b64url)
+        {
+            out.push_str("<redacted-credential>");
+            rest = &rest[len..];
+            continue;
+        }
+        // Advance exactly one character, keeping UTF-8 boundaries intact.
+        let step = rest.chars().next().map_or(1, char::len_utf8);
+        out.push_str(&rest[..step]);
+        rest = &rest[step..];
+    }
+    out
+}
+
+/// The byte length of a JWT at the start of `bytes`, or `None` if it is not one.
+///
+/// A JWT is `segment.segment.segment`, each segment one or more base64url bytes.
+/// All of it is ASCII, so scanning bytes is safe and cannot split a codepoint.
+fn jwt_len(bytes: &[u8], is_b64url: &impl Fn(u8) -> bool) -> Option<usize> {
+    let segment = |start: usize| -> usize {
+        let mut end = start;
+        while end < bytes.len() && is_b64url(bytes[end]) {
+            end += 1;
+        }
+        end
+    };
+    let first = segment(0);
+    if first == 0 || bytes.get(first) != Some(&b'.') {
+        return None;
+    }
+    let second = segment(first + 1);
+    if second == first + 1 || bytes.get(second) != Some(&b'.') {
+        return None;
+    }
+    let third = segment(second + 1);
+    if third == second + 1 {
+        return None;
+    }
+    Some(third)
 }
 
 #[cfg(test)]

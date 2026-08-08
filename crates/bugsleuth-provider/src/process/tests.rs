@@ -199,6 +199,34 @@ async fn abandoning_the_call_kills_the_tree_rather_than_just_the_child() {
     );
 }
 
+#[test]
+fn a_vendors_own_credential_dump_is_redacted_from_previewed_output() {
+    // The defect a user hit: Kilo's CLI printed its OAuth refresh and access
+    // tokens into stderr on a credential-store error, and that stderr becomes a
+    // report's "NOT SWEPT" reason — shown in the window and written to disk under
+    // runs/. A JWT-shaped token must never survive into any previewed output.
+    let leak = "Error: Unexpected error\n\
+         \"refresh\":\"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.s3cr3t_sig-Value\",\
+         \"access\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6NDJ9.another-Sig_here\"";
+    let safe = preview(leak, 2000);
+    assert!(!safe.contains("eyJhbGci"), "a JWT header survived: {safe}");
+    assert!(!safe.contains("eyJ0eXAi"), "a JWT header survived: {safe}");
+    assert!(
+        !safe.contains("s3cr3t_sig-Value") && !safe.contains("another-Sig_here"),
+        "a token signature survived: {safe}"
+    );
+    // The non-secret context is kept, so the failure is still diagnosable, and
+    // the redaction is visible rather than a silent gap.
+    assert!(
+        safe.contains("Unexpected error"),
+        "context was lost: {safe}"
+    );
+    assert!(
+        safe.contains("redacted"),
+        "nothing marks the redaction: {safe}"
+    );
+}
+
 /// A prompt that never reached the child must not be reported as a sweep.
 ///
 /// The defect: `let _ = stdin.write_all(&bytes).await`. A failed write was

@@ -483,6 +483,7 @@ rust plan::tests::a_higher_concurrency_lets_several_sweeps_of_one_vendor_share_a
 rust plan::tests::a_huge_pass_count_is_refused_rather_than_enumerated_forever
 rust plan::tests::a_lane_with_no_model_is_reported_rather_than_quietly_omitted
 rust plan::tests::a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed
+rust plan::tests::a_vendors_concurrent_slots_go_to_different_models_before_doubling_up
 rust plan::tests::a_zero_concurrency_is_treated_as_one_and_does_not_loop_forever
 rust plan::tests::an_effort_the_vendor_does_not_accept_is_refused_before_anything_is_paid_for
 rust plan::tests::an_unknown_lane_name_is_rejected_rather_than_silently_skipped
@@ -491,9 +492,11 @@ rust plan::tests::batching_runs_every_unit_exactly_once
 rust plan::tests::canonical_spec_collapses_claude_but_keeps_the_default_and_other_vendors
 rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
 rust plan::tests::every_effort_the_vendor_documents_is_accepted
+rust plan::tests::one_models_extra_passes_still_fill_the_concurrency_when_it_is_alone
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
 rust process::tests::a_timeout_kills_what_the_child_started_and_not_only_the_child
+rust process::tests::a_vendors_own_credential_dump_is_redacted_from_previewed_output
 rust process::tests::abandoning_the_call_kills_the_tree_rather_than_just_the_child
 rust process::tests::captures_stdout_and_a_zero_exit_code
 rust process::tests::kills_a_child_that_outlives_its_timeout
@@ -533,6 +536,7 @@ rust sweep::isolate::tests::instruction_files_go_and_code_stays
 rust sweep::isolate::tests::matching_ignores_case_because_windows_does
 rust sweep::isolate::tests::the_git_directory_is_never_touched
 rust sweep::tests::a_bare_model_name_means_claude_so_the_common_case_stays_short
+rust sweep::tests::a_failed_sweeps_reason_is_scrubbed_of_credentials_before_it_is_stored
 rust sweep::tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
 rust sweep::tests::a_vendor_prefix_selects_that_vendor
 rust sweep::tests::an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped

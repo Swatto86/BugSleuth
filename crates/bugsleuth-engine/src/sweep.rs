@@ -10,6 +10,7 @@ use bugsleuth_domain::{Finding, FindingId, Lane, ModelId, RawFinding};
 use bugsleuth_provider::claude::{self, ClaudeSweep};
 use bugsleuth_provider::codex::{self, CodexSweep};
 use bugsleuth_provider::kilo::{self, KiloSweep};
+use bugsleuth_provider::process::redact_secrets;
 use bugsleuth_verify::{Worktree, verify_anchor};
 
 use crate::brief;
@@ -248,7 +249,10 @@ pub async fn run(request: Request<'_>) -> LaneReport {
 
     let (raw, turns, salvaged, usage) = match outcome {
         Ok(outcome) => outcome,
-        Err(error) => return not_swept(error.to_string()),
+        // A CLI can leak its OAuth tokens in an error (Kilo did, on a
+        // credential-store failure), and this is the last boundary before that
+        // text is stored and shown — so scrub anything token-shaped from it.
+        Err(error) => return not_swept(redact_secrets(&error.to_string())),
     };
 
     let (findings, rejected) = verify_all(reviewed, request.lane, &ModelId::new(&model_label), raw);
