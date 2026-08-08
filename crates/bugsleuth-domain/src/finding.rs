@@ -287,6 +287,7 @@ pub fn finding_schema() -> Value {
                         "line": {
                             "type": "integer",
                             "minimum": 1,
+                            "maximum": u32::MAX,
                             "description": "1-indexed line on which the offending code starts."
                         },
                         "snippet": {

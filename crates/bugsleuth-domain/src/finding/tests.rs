@@ -60,6 +60,41 @@ fn schema_and_type_agree_on_required_field_names() {
 }
 
 #[test]
+fn schema_line_range_fits_raw_finding_u32() {
+    // The schema admitted any positive integer while the Rust consumer stores
+    // `line` as u32, so a schema-conforming value above u32::MAX failed to
+    // deserialize and threw away the whole paid response. The schema's maximum
+    // must match the consumer's width.
+    let schema = finding_schema();
+    let line = &schema["properties"]["findings"]["items"]["properties"]["line"];
+    assert_eq!(line["maximum"].as_u64(), Some(u64::from(u32::MAX)));
+
+    let required = schema["properties"]["findings"]["items"]["required"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let mut object = serde_json::Map::new();
+    for name in required.iter().filter_map(Value::as_str) {
+        let value = match name {
+            "line" => json!(u32::MAX),
+            "severity" => json!("high"),
+            "fix" => required_shape(&fix_schema()),
+            _ => json!("x"),
+        };
+        object.insert(name.to_string(), value);
+    }
+    assert!(
+        serde_json::from_value::<RawFinding>(Value::Object(object.clone())).is_ok(),
+        "a line at u32::MAX — the new schema maximum — did not deserialize"
+    );
+    object.insert("line".to_string(), json!(u64::from(u32::MAX) + 1));
+    assert!(
+        serde_json::from_value::<RawFinding>(Value::Object(object)).is_err(),
+        "a line past u32::MAX deserialized despite the schema maximum"
+    );
+}
+
+#[test]
 fn empty_findings_array_parses_as_a_clean_sweep() {
     let parsed: RawFindings = serde_json::from_str(r#"{"findings":[]}"#).unwrap_or(RawFindings {
         findings: vec![RawFinding {
