@@ -202,11 +202,26 @@ function renderRows(): void {
   refresh();
 }
 
+// A render triggered by boot or a catalogue load must not write settings back:
+// if the saved file was unreadable the app is showing defaults, and persisting
+// them would overwrite the recoverable file. Only a user edit persists.
+let suppressPersistence = false;
+
+/** Render without letting the render persist — for boot and catalogue loads. */
+function renderWithoutPersisting(): void {
+  suppressPersistence = true;
+  try {
+    render();
+  } finally {
+    suppressPersistence = false;
+  }
+}
+
 /** Re-render everything that depends on state but not on the table's identity. */
 function refresh(): void {
   renderCoverage();
   renderPlanSummary();
-  persist();
+  if (!suppressPersistence) persist();
 }
 
 function setStatus(text: string, kind: "" | "running" | "error" = ""): void {
@@ -295,7 +310,7 @@ async function loadCatalogue(): Promise<string> {
   try {
     const vendors = await invoke<VendorModels[]>("available_models");
     catalogue = Object.fromEntries(vendors.map((v) => [v.vendor, v]));
-    render();
+    renderWithoutPersisting();
     // The apply panel has its own model box, outside the table, so a redraw of
     // the table alone would leave it offering no suggestions for the session.
     redrawApply();
@@ -335,7 +350,7 @@ async function boot(): Promise<void> {
   ui.testCommand.value = settings.test_command;
   ui.reuseCompleted.checked = settings.reuse_completed;
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
-  render();
+  renderWithoutPersisting();
   // The panel was bound before the stored settings arrived, so it is showing
   // the defaults until told otherwise.
   redrawApply();

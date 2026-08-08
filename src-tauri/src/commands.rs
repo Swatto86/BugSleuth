@@ -73,8 +73,8 @@ pub async fn check_signin() -> Vec<VendorStatus> {
 }
 
 #[tauri::command]
-pub fn load_settings() -> Settings {
-    settings::load()
+pub fn load_settings() -> CommandResult<Settings> {
+    settings::load().map_err(|error| error.to_string())
 }
 
 #[tauri::command]

@@ -6,8 +6,9 @@
 //! your theme preference. Findings are not cached here — they live in the run
 //! output directory, which is the thing you would actually want to keep.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,19 +175,32 @@ fn path() -> Option<PathBuf> {
     Some(data_dir().join("settings.json"))
 }
 
-/// Read stored settings, falling back to the default.
+/// Read stored settings.
 ///
-/// A missing or unreadable file is not an error worth surfacing: the app is
-/// perfectly usable with defaults, and refusing to start because a preferences
-/// file was corrupted would be a worse outcome than losing the preferences.
-pub fn load() -> Settings {
-    let Some(path) = path() else {
-        return Settings::default();
+/// Only a *missing* file is first-launch and yields the defaults. A file that
+/// cannot be read or does not parse is an error, propagated so the app can tell
+/// the user rather than silently rendering defaults — which the frontend then
+/// persists, overwriting the recoverable file and losing the configuration for
+/// good.
+fn load_from(path: &Path) -> anyhow::Result<Settings> {
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Settings::default());
+        }
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("cannot read saved settings from {}", path.display()));
+        }
     };
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+
+    serde_json::from_str(&text)
+        .with_context(|| format!("saved settings at {} are not valid JSON", path.display()))
+}
+
+pub fn load() -> anyhow::Result<Settings> {
+    let path = path().ok_or_else(|| anyhow::anyhow!("no config directory on this platform"))?;
+    load_from(&path)
 }
 
 pub fn save(settings: &Settings) -> anyhow::Result<()> {
@@ -247,4 +261,56 @@ mod tests {
     // `save` now goes through `bugsleuth_engine::atomic::write`, and that module
     // tests the real behaviour: a write that fails leaves the previous file
     // intact and no debris beside it.
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-settings-tests")
+            .join(format!("{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    #[test]
+    fn malformed_settings_are_reported_and_left_in_place() {
+        // The defect: a corrupt file was silently replaced with defaults, which
+        // the frontend then persisted over it — the configuration gone with no
+        // warning. Loading must error instead, and must not touch the file.
+        let dir = scratch("malformed");
+        let path = dir.join("settings.json");
+        let original = "{ this is not json";
+        std::fs::write(&path, original).expect("write");
+
+        assert!(
+            load_from(&path).is_err(),
+            "a corrupt settings file was accepted as defaults"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read"),
+            original,
+            "the corrupt file was overwritten by a mere load"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_read_error_that_is_not_a_missing_file_is_surfaced() {
+        // A path that is a directory is readable-but-not-a-file: the read fails
+        // with something other than NotFound, and that must propagate rather
+        // than be read as first-launch.
+        let dir = scratch("read-error");
+        assert!(
+            load_from(&dir).is_err(),
+            "a non-NotFound read error was swallowed as defaults"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_settings_file_is_first_launch_and_yields_defaults() {
+        let dir = scratch("missing");
+        let settings = load_from(&dir.join("settings.json")).expect("missing file is not an error");
+        assert!(!settings.models.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
