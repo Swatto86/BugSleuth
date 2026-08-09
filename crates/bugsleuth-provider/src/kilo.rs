@@ -151,9 +151,27 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
     .await;
 
     let (text, salvaged) = match output {
+        Ok(output) if output.code == Some(124) => {
+            let session = events::session_id(&output.stdout);
+            let error = ProviderError::Failed {
+                vendor: VENDOR,
+                code: 124,
+                message: "its autonomous run timed out".to_string(),
+            };
+            (
+                recover::timeout(error, session, &spec, &binary).await?,
+                true,
+            )
+        }
         Ok(output) => (assistant_text_or_error(&output)?, false),
         Err(error @ process::ProcessError::Timeout { .. }) => {
-            (recover::timeout(error, &spec, &binary).await?, true)
+            let session = error
+                .output()
+                .and_then(|output| events::session_id(&output.stdout));
+            (
+                recover::timeout(error.into(), session, &spec, &binary).await?,
+                true,
+            )
         }
         Err(error) => return Err(error.into()),
     };

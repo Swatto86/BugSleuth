@@ -172,3 +172,36 @@ async fn a_timed_out_sweep_resumes_the_session_reported_by_kilo() {
     assert!(result.salvaged);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[cfg(windows)]
+#[tokio::test]
+async fn kilos_native_timeout_exit_resumes_the_session_it_reported() {
+    let dir = scratch("native-timeout-recovery");
+    let stub = dir.join("kilo.cmd");
+    std::fs::write(
+        &stub,
+        "@echo off\r\n\
+         echo %* | findstr /c:\"--session kilo-session-native\" > nul && goto resumed\r\n\
+         echo {\"type\":\"step_start\",\"sessionID\":\"kilo-session-native\"}\r\n\
+         exit /b 124\r\n\
+         :resumed\r\n\
+         echo {\"type\":\"text\",\"sessionID\":\"kilo-session-native\",\"part\":{\"messageID\":\"m1\",\"text\":\"{\\\"findings\\\":[]}\"}}\r\n",
+    )
+    .expect("write CLI stub");
+    let binary = stub.to_string_lossy().into_owned();
+
+    let result = sweep(KiloSweep {
+        worktree: &dir,
+        model: "",
+        effort: "",
+        brief: "review",
+        timeout: Duration::from_secs(5),
+        binary: Some(&binary),
+    })
+    .await
+    .expect("resume should recover the answer");
+
+    assert!(result.findings.findings.is_empty());
+    assert!(result.salvaged);
+    let _ = std::fs::remove_dir_all(&dir);
+}

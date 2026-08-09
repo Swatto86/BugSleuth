@@ -1,24 +1,22 @@
-//! Resume a Kilo sweep whose process timed out.
+//! Resume a Kilo sweep whose run timed out.
 
 use std::path::Path;
 use std::time::Duration;
 
-use super::{KiloSweep, VENDOR, assistant_text_or_error, build_args, events};
+use super::{KiloSweep, VENDOR, assistant_text_or_error, build_args};
 use crate::error::ProviderError;
-use crate::process::{self, Invocation, ProcessError};
+use crate::process::{self, Invocation};
 
 const ASK: &str = "The previous CLI run timed out. Return only the final JSON answer from work already completed in this conversation. Do not inspect any files, continue the review, or invent findings.";
 
 pub(super) async fn timeout(
-    error: ProcessError,
+    error: ProviderError,
+    session: Option<String>,
     spec: &KiloSweep<'_>,
     binary: &Path,
 ) -> Result<String, ProviderError> {
-    let Some(session) = error
-        .output()
-        .and_then(|out| events::session_id(&out.stdout))
-    else {
-        return Err(error.into());
+    let Some(session) = session else {
+        return Err(error);
     };
     let original = error.to_string();
     let recovery: Result<String, ProviderError> = async {
