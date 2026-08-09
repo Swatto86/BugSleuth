@@ -127,6 +127,11 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Whether the window has been revealed yet this process. The maximize below
+/// emulates a startup `maximized` config, so it must run once — re-running it
+/// on every reveal discards the size the user has since chosen.
+static FIRST_REVEAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 /// Show the window, wherever the request came from.
 ///
 /// One implementation. There were two — this and a near-copy in `lib.rs` that
@@ -140,7 +145,9 @@ pub(crate) fn reveal<R: Runtime>(app: &AppHandle<R>) {
         // not honoured for a window that starts invisible — so it is asked for
         // here, where the window is actually being shown. The report is a wide
         // document and the default size made it a column.
-        let _ = window.maximize();
+        if FIRST_REVEAL.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            let _ = window.maximize();
+        }
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
