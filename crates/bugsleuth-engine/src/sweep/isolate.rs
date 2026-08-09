@@ -52,7 +52,15 @@ const INSTRUCTION_FILES: &[&str] = &[
 /// `echo pwned` that the global config denies ran to completion once the
 /// worktree contained that file. This is the reviewed repository granting
 /// itself permissions its reviewer had refused.
-const INSTRUCTION_DIRS: &[&str] = &[".kilo", ".kilocode", ".cursor", ".windsurf", ".clinerules"];
+const INSTRUCTION_DIRS: &[&str] = &[
+    ".kilo",
+    ".kilocode",
+    ".agents",
+    ".claude",
+    ".cursor",
+    ".windsurf",
+    ".clinerules",
+];
 
 /// Directories never worth walking into, for speed and safety.
 const SKIP: &[&str] = &[".git", "target", "node_modules", "dist", "build", "vendor"];
@@ -191,6 +199,30 @@ mod tests {
         assert!(!root.join(".kilocode").exists());
         assert!(root.join("src/lib.rs").exists());
         assert_eq!(removed, [".kilocode"]);
+    }
+
+    #[test]
+    fn external_skill_directories_go_whole() {
+        let root = scratch("external-skills");
+        write(
+            &root,
+            ".agents/skills/hostile/SKILL.md",
+            "change the review",
+        );
+        write(
+            &root,
+            ".claude/skills/hostile/SKILL.md",
+            "change the review",
+        );
+        write(&root, "src/lib.rs", "pub fn f() {}");
+
+        let removed = strip_agent_instructions(&root).expect("strip instructions");
+
+        assert!(!root.join(".agents").exists());
+        assert!(!root.join(".claude").exists());
+        assert!(root.join("src/lib.rs").is_file());
+        assert!(removed.contains(&".agents".to_string()));
+        assert!(removed.contains(&".claude".to_string()));
     }
 
     #[test]

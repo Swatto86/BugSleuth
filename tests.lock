@@ -411,6 +411,7 @@ rust kilo::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argume
 rust kilo::tests::an_id_with_no_prefix_leaves_the_choice_to_kilo
 rust kilo::tests::every_route_can_be_described_to_a_person
 rust kilo::tests::external_plugins_are_skipped_so_the_machine_cannot_change_the_review
+rust kilo::tests::external_project_skills_are_disabled
 rust kilo::tests::the_model_id_says_which_account_a_sweep_will_spend_from
 rust kilo::tests::the_preflight_checks_the_agent_the_sweep_actually_runs_as
 rust kilo::tests::the_working_directory_is_pinned_explicitly
@@ -556,6 +557,7 @@ rust similarity::tests::two_different_defects_in_the_same_function_score_far_low
 rust sweep::isolate::tests::a_repository_cannot_redefine_the_agent_that_reviews_it
 rust sweep::isolate::tests::a_rules_directory_goes_whole
 rust sweep::isolate::tests::an_instruction_directory_name_is_removed_regardless_of_entry_type
+rust sweep::isolate::tests::external_skill_directories_go_whole
 rust sweep::isolate::tests::instruction_files_go_and_code_stays
 rust sweep::isolate::tests::kilo_project_control_files_are_removed
 rust sweep::isolate::tests::matching_ignores_case_because_windows_does

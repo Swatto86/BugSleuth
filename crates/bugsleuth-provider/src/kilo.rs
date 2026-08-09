@@ -15,9 +15,9 @@
 //!
 //! That is a difference in *where* the limit lives, not whether one exists.
 //! Measured against the CLI: `--auto` overrides `ask` but never `deny`, so the
-//! `ask` agent's rules do hold during a sweep. What no config can supply is the
-//! network, so [`preflight`] refuses a sweep unless one is configured to deny
-//! it, and the check demands an explicit `deny` — an absent rule fails closed.
+//! `ask` agent's rules do hold during a sweep. [`preflight`] therefore requires
+//! that agent to deny every host capability by default and allow only the
+//! read/search tools a review needs.
 //!
 //! So a Kilo sweep is never pointed at the repository under review. It is given
 //! a throwaway git worktree, which the caller deletes afterwards. That is
@@ -137,12 +137,13 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
     };
 
     let args = build_args(&spec);
+    let env = sweep_environment();
     let output = process::run(Invocation {
         binary: &binary.to_string_lossy(),
         args: &args,
         cwd: spec.worktree,
         stdin: Some(spec.brief.as_bytes()),
-        env: &[],
+        env: &env,
         timeout: spec.timeout,
         what: "kilo CLI",
     })
@@ -226,6 +227,13 @@ pub(crate) fn assistant_text_or_error(
 /// check or a second entry point that invokes the CLI differently from the work
 /// is not exercising the work.
 pub(crate) const BASE_FLAGS: [&str; 5] = ["run", "--auto", "--pure", "--format", "json"];
+
+fn sweep_environment() -> [(String, String); 1] {
+    [(
+        "KILO_DISABLE_EXTERNAL_SKILLS".to_string(),
+        "true".to_string(),
+    )]
+}
 
 /// Build the non-interactive argv for a sweep.
 ///

@@ -112,6 +112,18 @@ fn external_plugins_are_skipped_so_the_machine_cannot_change_the_review() {
 }
 
 #[test]
+fn external_project_skills_are_disabled() {
+    let env = sweep_environment();
+    assert_eq!(
+        env.as_slice(),
+        &[(
+            "KILO_DISABLE_EXTERNAL_SKILLS".to_string(),
+            "true".to_string()
+        )]
+    );
+}
+
+#[test]
 fn the_working_directory_is_pinned_explicitly() {
     let args = build_args(&spec(""));
     let dir = args
