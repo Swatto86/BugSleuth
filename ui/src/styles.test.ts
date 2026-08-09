@@ -313,7 +313,7 @@ test("every control the matrix rebuilds can be found again afterwards", () => {
 
   const keyed = [...source.matchAll(/dataset\["focusKey"\]/g)].length;
   assert.ok(
-    keyed >= created - 1,
+    keyed >= created,
     `${created} focusable controls are rebuilt and only ${keyed} carry a focus key, ` +
       `so the rest drop keyboard focus to the top of the page on every rebuild`,
   );
