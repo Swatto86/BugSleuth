@@ -40,18 +40,16 @@ fn an_effort_the_vendor_does_not_accept_is_refused_before_anything_is_paid_for()
 }
 
 #[test]
-fn every_effort_the_vendor_documents_is_accepted() {
-    // Claude's levels are CLI-wide and validated here. Codex is deliberately
-    // not asserted: its levels are model-specific and are checked against the
-    // per-model catalogue by the provider before invocation, not by the
-    // planner — see the provider's `effort_not_supported_by_codex_model`.
-    for level in ["low", "medium", "high", "xhigh", "max"] {
+fn claude_effort_is_validated_per_model() {
+    for level in ["low", "medium", "high", "max"] {
         assert!(
             plan(&with_effort("sonnet", level)).is_ok(),
             "{level} refused"
         );
     }
-    // And no effort at all is the ordinary case.
+    assert!(plan(&with_effort("opus", "xhigh")).is_ok());
+    assert!(plan(&with_effort("sonnet", "xhigh")).is_err());
+    assert!(plan(&with_effort("haiku", "high")).is_err());
     assert!(plan(&with_effort("sonnet", "")).is_ok());
     assert!(plan(&with_effort("sonnet", "  ")).is_ok());
 }

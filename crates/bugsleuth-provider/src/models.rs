@@ -13,8 +13,8 @@
 //!   efforts that model accepts — which is not uniform and is not always a
 //!   graded scale. See `kilo_catalogue`.
 //! - **Claude and Codex** have no list command. Their aliases are few, stable
-//!   and documented in `--help`, so they are named here, and their effort
-//!   levels belong to the CLI rather than to any one model.
+//!   and documented in `--help`, so they are named here. Their effort levels
+//!   vary by model and are recorded alongside those known models.
 //!
 //! Every list is a *suggestion*. A model id that is not on it must still be
 //! usable, because a curated list goes stale and a tool that refuses a valid
@@ -46,9 +46,8 @@ pub struct VendorCatalogue {
     pub groups: Vec<ModelGroup>,
     /// Efforts a *particular* model accepts, where the vendor says so.
     ///
-    /// Empty for vendors whose effort levels belong to the CLI rather than the
-    /// model. A model absent from this map has no per-model answer, which is
-    /// not the same as accepting none — see [`efforts`].
+    /// A model absent from this map has no per-model answer, which is not the
+    /// same as accepting none — see [`efforts`].
     pub efforts_by_model: BTreeMap<String, Vec<String>>,
 }
 
@@ -59,22 +58,21 @@ pub struct VendorCatalogue {
 /// [`VendorCatalogue::efforts_by_model`]. Either way an empty result must show
 /// as unavailable rather than as a control that silently does nothing.
 #[must_use]
-pub fn efforts(vendor: &str) -> &'static [&'static str] {
-    match vendor {
-        // `claude --effort <level>` — the CLI's own flag, same for every model.
-        "claude" => &["low", "medium", "high", "xhigh", "max"],
-        // Codex takes `-c model_reasoning_effort=<level>`, but which levels are
-        // accepted belongs to the model, not the CLI: `gpt-5.6-sol` takes
-        // `ultra` and `gpt-5.5` stops at `xhigh`. The vendor-wide list that
-        // used to be here offered `max` on models that reject it and hid
-        // `ultra` entirely — and it took precedence over the per-model answer,
-        // so returning it would make the catalogue's detail dead data.
-        "codex" => &[],
-        // Kilo passes `--variant` straight through to whichever provider is
-        // behind the model, so there is no vendor-wide set — most of its models
-        // accept none at all, and some accept `instant`/`thinking` rather than a
-        // ladder. Answered per model.
-        _ => &[],
+pub fn efforts(_vendor: &str) -> &'static [&'static str] {
+    &[]
+}
+
+const CLAUDE_OPUS_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
+const CLAUDE_SONNET_EFFORTS: &[&str] = &["low", "medium", "high", "max"];
+const NO_EFFORTS: &[&str] = &[];
+
+#[must_use]
+pub fn efforts_for(vendor: &str, model: &str) -> Option<&'static [&'static str]> {
+    match (vendor, model.trim()) {
+        ("claude", "opus") => Some(CLAUDE_OPUS_EFFORTS),
+        ("claude", "sonnet") => Some(CLAUDE_SONNET_EFFORTS),
+        ("claude", "haiku") => Some(NO_EFFORTS),
+        _ => None,
     }
 }
 
@@ -91,10 +89,29 @@ pub(crate) async fn validate_effort(
     model: &str,
     effort: &str,
 ) -> Result<(), ProviderError> {
-    // Nothing to fetch when there is nothing to check: an empty effort is the
-    // CLI's own default, and only Codex is gated here — Claude's levels are
-    // CLI-wide and checked by the planner, Kilo's variants are provider-specific.
-    if effort.trim().is_empty() || vendor != "codex" {
+    let effort = effort.trim();
+    if effort.is_empty() {
+        return Ok(());
+    }
+    if vendor == "claude" {
+        let Some(accepted) = efforts_for(vendor, model) else {
+            return Ok(());
+        };
+        if accepted.contains(&effort) {
+            return Ok(());
+        }
+        return Err(ProviderError::InvalidEffort {
+            vendor,
+            model: model.trim().to_string(),
+            effort: effort.to_string(),
+            accepted: if accepted.is_empty() {
+                "leave effort at its default".to_string()
+            } else {
+                accepted.join(", ")
+            },
+        });
+    }
+    if vendor != "codex" {
         return Ok(());
     }
     let catalogue = available(vendor).await?;
@@ -142,6 +159,19 @@ pub(crate) fn effort_ok(
 /// Claude's documented aliases. Each always points at the newest of its family.
 const CLAUDE_MODELS: &[&str] = &["fable", "opus", "sonnet", "haiku"];
 
+fn claude_models() -> VendorCatalogue {
+    let mut catalogue = fixed("Claude", CLAUDE_MODELS);
+    for model in CLAUDE_MODELS {
+        if let Some(levels) = efforts_for("claude", model) {
+            catalogue.efforts_by_model.insert(
+                (*model).to_string(),
+                levels.iter().map(|level| (*level).to_string()).collect(),
+            );
+        }
+    }
+    catalogue
+}
+
 /// Codex model ids. There is no list command, so this is what the CLI's own
 /// help and defaults name.
 const CODEX_MODELS: &[&str] = &["gpt-5.6-codex", "gpt-5.6-sol"];
@@ -152,7 +182,7 @@ const CODEX_MODELS: &[&str] = &["gpt-5.6-codex", "gpt-5.6-sol"];
 /// models` reads a cached catalogue.
 pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
     match vendor {
-        "claude" => Ok(fixed("Claude", CLAUDE_MODELS)),
+        "claude" => Ok(claude_models()),
         "codex" => Ok(codex_models().await),
         "kilo" => kilo_models().await,
         _ => Err(ProviderError::NotFound {

@@ -154,24 +154,36 @@ impl Plan {
 /// the run completes, the report looks normal, and nothing says the depth you
 /// asked for was never applied.
 ///
-/// Claude is checked here from its CLI-wide list. Codex is checked against its
-/// per-model catalogue by the provider before invocation — its accepted levels
-/// vary by model, so a synchronous vendor-wide list here would either reject
-/// valid depths or wave through invalid ones. Kilo passes `--variant` through to
-/// whichever provider is behind the model, so its accepted values are a property
-/// of that model and are discovered at runtime; refusing what we cannot
-/// enumerate would block valid configurations.
+/// Claude's known aliases are checked here from their model-specific lists.
+/// Codex is checked against its live per-model catalogue by the provider before
+/// invocation. Kilo passes `--variant` through to whichever provider is behind
+/// the model, so its accepted values are discovered at runtime; refusing what
+/// we cannot enumerate would block valid configurations.
 pub fn check_effort(id: &str, effort: &str) -> Result<()> {
     if effort.is_empty() {
         return Ok(());
     }
-    let accepted = bugsleuth_provider::models::efforts(&vendor_of(id));
+    let vendor = vendor_of(id);
+    let model = canonical_spec(id);
+    if let Some(accepted) = bugsleuth_provider::models::efforts_for(&vendor, &model) {
+        if accepted.contains(&effort) {
+            return Ok(());
+        }
+        let choices = if accepted.is_empty() {
+            "leave effort at its default".to_string()
+        } else {
+            accepted.join(", ")
+        };
+        anyhow::bail!(
+            "model `{id}` asks for effort `{effort}`, which {vendor} does not accept (try: {choices})"
+        );
+    }
+    let accepted = bugsleuth_provider::models::efforts(&vendor);
     if accepted.is_empty() || accepted.contains(&effort) {
         return Ok(());
     }
     anyhow::bail!(
-        "model `{id}` asks for effort `{effort}`, which {} does not accept (try: {})",
-        vendor_of(id),
+        "model `{id}` asks for effort `{effort}`, which {vendor} does not accept (try: {})",
         accepted.join(", ")
     )
 }

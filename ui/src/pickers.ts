@@ -138,12 +138,12 @@ export function modelPicker(opts: {
 /**
  * Which effort levels apply to one row, and why there may be none.
  *
- * One vendor answers this about itself and two answer about each model.
- * Claude takes a CLI flag that means the same whatever model is chosen. Kilo
- * forwards `--variant` to whichever provider is behind the model, so the levels
- * are the model's: most accept none at all, and some accept `instant`/`thinking`
- * rather than a ladder. Codex is per-model too — `codex debug models` reports
- * `ultra` for `gpt-5.6-sol` and stops at `xhigh` for `gpt-5.5`.
+ * All current vendors answer this per model. Claude supports effort only on
+ * particular model families. Kilo forwards `--variant` to whichever provider
+ * is behind the model, so most accept none and some accept
+ * `instant`/`thinking` rather than a ladder. Codex's catalogue reports its own
+ * model-specific levels. `menu.efforts` remains for a future genuinely
+ * vendor-wide capability.
  *
  * Offering a vendor-wide list where the answer is per model puts levels in the
  * menu that the provider rejects, and hides the ones it actually takes. This

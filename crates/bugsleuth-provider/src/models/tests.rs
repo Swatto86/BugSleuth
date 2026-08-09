@@ -160,19 +160,39 @@ fn effort_not_supported_by_codex_model_is_rejected() {
     assert!(effort_ok("claude", &catalogue, "opus", "max").is_ok());
 }
 
-#[test]
-fn only_claude_has_a_vendor_wide_effort_list() {
-    // This test used to assert that Codex had one too, which was wrong.
-    // `codex debug models` reports the accepted levels per model and they
-    // differ: `gpt-5.6-sol` takes `ultra`, `gpt-5.5` stops at `xhigh`. A
-    // vendor-wide list offered levels some models reject, hid `ultra`
-    // entirely, and — because the window prefers the vendor-wide answer —
-    // would have made the per-model catalogue dead data.
-    assert!(!efforts("claude").is_empty());
+#[tokio::test]
+async fn claude_effort_is_recorded_per_model() {
+    assert!(efforts("claude").is_empty());
+    let catalogue = available("claude").await.expect("Claude catalogue");
+    assert_eq!(
+        catalogue.efforts_by_model.get("opus"),
+        Some(
+            &vec!["low", "medium", "high", "xhigh", "max"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        )
+    );
+    assert_eq!(
+        catalogue.efforts_by_model.get("sonnet"),
+        Some(
+            &vec!["low", "medium", "high", "max"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        )
+    );
+    assert!(
+        catalogue
+            .efforts_by_model
+            .get("haiku")
+            .is_some_and(Vec::is_empty)
+    );
+}
 
-    // Both of these answer per model instead, in `efforts_by_model`.
-    assert!(efforts("codex").is_empty());
-    assert!(efforts("kilo").is_empty());
-
-    assert!(efforts("nonesuch").is_empty());
+#[tokio::test]
+async fn claude_effort_is_rejected_when_the_model_cannot_apply_it() {
+    assert!(validate_effort("claude", "opus", "xhigh").await.is_ok());
+    assert!(validate_effort("claude", "sonnet", "xhigh").await.is_err());
+    assert!(validate_effort("claude", "haiku", "high").await.is_err());
 }

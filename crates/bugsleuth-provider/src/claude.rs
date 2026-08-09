@@ -141,6 +141,7 @@ pub(crate) struct Run<'a> {
 /// lost whole invocations to it — the triage pass most often, and it has no
 /// repository to read at all.
 pub(crate) async fn invoke(mut run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
+    crate::models::validate_effort(VENDOR, run.model, run.effort).await?;
     if run.resume.is_none() && run.session_id.is_none() {
         run.session_id = Some(salvage::new_session_id());
     }
