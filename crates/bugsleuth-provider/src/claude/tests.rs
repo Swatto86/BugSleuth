@@ -35,14 +35,14 @@ fn read_only_sweeps_cannot_be_granted_write_tools() {
 }
 
 #[test]
-fn agent_enabled_sweeps_only_add_the_delegation_tool() {
+fn agent_enabled_sweeps_only_add_read_only_delegation_tools() {
     let mut spec = run("sonnet");
     spec.allowed = READ_ONLY_AGENT_TOOLS;
     let args = build_args(&spec);
     let index = args.iter().position(|a| a == "--allowedTools");
     assert_eq!(
         index.and_then(|i| args.get(i + 1)).map(String::as_str),
-        Some("Read,Glob,Grep,Agent")
+        Some("Read,Glob,Grep,Agent,Workflow")
     );
     assert_eq!(
         args.iter()

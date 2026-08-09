@@ -243,6 +243,23 @@ export function supportsAgents(modelId: string): boolean {
   return vendorOf(modelId) !== "kilo";
 }
 
+/** Whether this Claude selection can use the CLI's Ultracode workflow mode. */
+export function usesUltracode(modelId: string): boolean {
+  const { vendor, model } = splitId(modelId);
+  if (vendor !== "claude") return false;
+  const id = model.trim().toLowerCase();
+  return (
+    ["", "fable", "opus", "sonnet"].includes(id) ||
+    [
+      "claude-fable-5",
+      "claude-opus-5",
+      "claude-opus-4-8",
+      "claude-opus-4-7",
+      "claude-sonnet-5",
+    ].some((family) => id.includes(family))
+  );
+}
+
 /**
  * How many rounds a run takes.
  *
@@ -271,6 +288,9 @@ export function canRun(settings: Settings): boolean {
       (model) =>
         model.id.trim() !== "" &&
         (!model.use_agents || supportsAgents(model.id)) &&
+        (!model.use_agents ||
+          !usesUltracode(model.id) ||
+          model.effort.trim() === "") &&
         model.lanes.every((lane) =>
           (LANES as readonly string[]).includes(lane),
         ) &&

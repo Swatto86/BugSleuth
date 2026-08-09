@@ -7,7 +7,12 @@
  * before it is lost.
  */
 
-import { supportsAgents, type Settings, toggleLane } from "./model";
+import {
+  supportsAgents,
+  type Settings,
+  toggleLane,
+  usesUltracode,
+} from "./model";
 import { confirmDialog } from "./dialog";
 import type { MatrixHandlers } from "./view";
 
@@ -48,8 +53,14 @@ export function matrixHandlers({
     onAgents: (index, useAgents) => {
       const models = settings().models;
       const existing = models[index];
-      if (existing) models[index] = { ...existing, use_agents: useAgents };
-      refresh();
+      if (existing)
+        models[index] = {
+          ...existing,
+          effort:
+            useAgents && usesUltracode(existing.id) ? "" : existing.effort,
+          use_agents: useAgents,
+        };
+      render();
     },
     onPasses: (index, passes) => {
       const models = settings().models;

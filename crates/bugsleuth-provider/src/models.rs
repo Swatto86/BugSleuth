@@ -63,12 +63,14 @@ pub fn efforts(_vendor: &str) -> &'static [&'static str] {
 }
 
 const CLAUDE_OPUS_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
-const CLAUDE_SONNET_EFFORTS: &[&str] = &["low", "medium", "high", "max"];
+const CLAUDE_FABLE_EFFORTS: &[&str] = CLAUDE_OPUS_EFFORTS;
+const CLAUDE_SONNET_EFFORTS: &[&str] = CLAUDE_OPUS_EFFORTS;
 const NO_EFFORTS: &[&str] = &[];
 
 #[must_use]
 pub fn efforts_for(vendor: &str, model: &str) -> Option<&'static [&'static str]> {
     match (vendor, model.trim()) {
+        ("claude", "fable") => Some(CLAUDE_FABLE_EFFORTS),
         ("claude", "opus") => Some(CLAUDE_OPUS_EFFORTS),
         ("claude", "sonnet") => Some(CLAUDE_SONNET_EFFORTS),
         ("claude", "haiku") => Some(NO_EFFORTS),
@@ -94,6 +96,9 @@ pub(crate) async fn validate_effort(
         return Ok(());
     }
     if vendor == "claude" {
+        if effort == "ultracode" && supports_ultracode(model) {
+            return Ok(());
+        }
         let Some(accepted) = efforts_for(vendor, model) else {
             return Ok(());
         };
@@ -157,7 +162,23 @@ pub(crate) fn effort_ok(
 }
 
 /// Claude's documented aliases. Each always points at the newest of its family.
-const CLAUDE_MODELS: &[&str] = &["opus", "sonnet", "haiku"];
+const CLAUDE_MODELS: &[&str] = &["fable", "opus", "sonnet", "haiku"];
+
+/// Whether Claude Code documents Ultracode for this model selection.
+#[must_use]
+pub fn supports_ultracode(model: &str) -> bool {
+    let model = model.trim().to_ascii_lowercase();
+    matches!(model.as_str(), "" | "fable" | "opus" | "sonnet")
+        || [
+            "claude-fable-5",
+            "claude-opus-5",
+            "claude-opus-4-8",
+            "claude-opus-4-7",
+            "claude-sonnet-5",
+        ]
+        .iter()
+        .any(|family| model.contains(family))
+}
 
 fn claude_models() -> VendorCatalogue {
     let mut catalogue = fixed("Claude", CLAUDE_MODELS);

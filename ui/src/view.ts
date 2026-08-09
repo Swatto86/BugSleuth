@@ -13,6 +13,7 @@ import {
   joinId,
   splitId,
   supportsAgents,
+  usesUltracode,
   type Lane,
   type ModelGroup,
   type ModelSetting,
@@ -150,25 +151,41 @@ export function matrixRows(
           ? `Use parallel review agents for ${name}, row ${index + 1}`
           : `Parallel review agents unavailable for ${name}, row ${index + 1}: Kilo Ask cannot delegate`,
       );
+      if (agentControl) {
+        const title = !agentsSupported
+          ? "Unavailable: BugSleuth uses Kilo's read-only Ask agent, which cannot delegate."
+          : selected.vendor === "claude" && usesUltracode(id)
+            ? "Use Claude Ultracode with two parallel agents for this lane (provider limit: 16 concurrent). Uses more tokens."
+            : `Ask ${selected.vendor === "claude" ? "Claude Code" : "Codex"} to delegate independent parts of this lane in parallel. Uses more tokens.`;
+        agentControl.title = title;
+        agentControl.parentElement?.setAttribute("title", title);
+      }
       removeControl?.setAttribute(
         "aria-label",
         `Remove ${name} from row ${index + 1}`,
       );
     };
     const drawEffort = () => {
-      effortCell.replaceChildren(
-        effortPicker({
-          key: `effort-${index}`,
-          label: `Effort for row ${index + 1}`,
-          id: live.id,
-          effort: live.effort,
-          catalogue,
-          onChange: (effort) => {
-            live = { ...live, effort };
-            handlers.onEffort(index, effort);
-          },
-        }),
-      );
+      const picker = effortPicker({
+        key: `effort-${index}`,
+        label: `Effort for row ${index + 1}`,
+        id: live.id,
+        effort: live.effort,
+        catalogue,
+        forced:
+          live.use_agents && usesUltracode(live.id)
+            ? {
+                label: "Ultracode",
+                title:
+                  "Claude agent mode uses Ultracode (xhigh reasoning plus a small dynamic workflow).",
+              }
+            : undefined,
+        onChange: (effort) => {
+          live = { ...live, effort };
+          handlers.onEffort(index, effort);
+        },
+      });
+      effortCell.replaceChildren(picker);
     };
     drawEffort();
 
@@ -216,7 +233,9 @@ export function matrixRows(
     agentBox.checked = agentsSupported && (model.use_agents ?? false);
     agentBox.disabled = !agentsSupported;
     agentBox.title = agentsSupported
-      ? `Ask ${vendor === "claude" ? "Claude Code" : "Codex"} to delegate independent parts of this lane in parallel. Uses more tokens.`
+      ? vendor === "claude" && usesUltracode(model.id)
+        ? "Use Claude Ultracode with two parallel agents for this lane (provider limit: 16 concurrent). Uses more tokens."
+        : `Ask ${vendor === "claude" ? "Claude Code" : "Codex"} to delegate independent parts of this lane in parallel. Uses more tokens.`
       : "Unavailable: BugSleuth uses Kilo's read-only Ask agent, which cannot delegate.";
     agentCell.title = agentBox.title;
     agentBox.addEventListener("change", () =>

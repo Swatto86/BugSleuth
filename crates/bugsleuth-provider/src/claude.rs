@@ -33,7 +33,7 @@ pub use triage::{TriageRequest, TriageResult, triage};
 pub(crate) const VENDOR: &str = "claude";
 
 pub(crate) const READ_ONLY_TOOLS: &str = "Read,Glob,Grep";
-pub(crate) const READ_ONLY_AGENT_TOOLS: &str = "Read,Glob,Grep,Agent";
+pub(crate) const READ_ONLY_AGENT_TOOLS: &str = "Read,Glob,Grep,Agent,Workflow";
 pub(crate) const READ_ONLY_DENIED: &str = "Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch";
 
 /// One (model x lane x repository) unit of work.
@@ -81,10 +81,11 @@ pub struct SweepResult {
 /// Run one lane sweep.
 pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> {
     let _ = spec.lane;
+    let ultracode = spec.use_agents && crate::models::supports_ultracode(spec.model);
     let first = invoke(Run {
         repo: spec.repo,
         model: spec.model,
-        effort: spec.effort,
+        effort: if ultracode { "ultracode" } else { spec.effort },
         prompt: spec.brief,
         schema: finding_schema(),
         allowed: if spec.use_agents {

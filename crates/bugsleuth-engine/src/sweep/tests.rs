@@ -91,12 +91,15 @@ fn only_kilo_needs_the_schema_spelled_out_in_its_prompt() {
 
 #[test]
 fn supported_vendors_get_their_own_agent_wording_and_kilo_gets_none() {
-    let claude = Vendor::Claude.agents_instruction().unwrap_or_default();
-    let codex = Vendor::Codex.agents_instruction().unwrap_or_default();
-    assert!(claude.contains("subagent_type=Explore"), "{claude}");
-    assert!(claude.contains("run_in_background=true"), "{claude}");
+    let claude = super::agents::instruction(Vendor::Claude, "sonnet").unwrap_or_default();
+    let codex = super::agents::instruction(Vendor::Codex, "").unwrap_or_default();
+    assert!(claude.contains("Ultracode dynamic workflow"), "{claude}");
+    assert!(
+        claude.contains("exactly two agent() calls total"),
+        "{claude}"
+    );
     assert!(codex.contains("Codex subagents"), "{codex}");
-    assert_eq!(Vendor::Kilo.agents_instruction(), None);
+    assert_eq!(super::agents::instruction(Vendor::Kilo, ""), None);
 }
 
 #[tokio::test]
@@ -151,7 +154,7 @@ fn echoing_stub(name: &str) -> String {
         let path = dir.join("stub.cmd");
         std::fs::write(
             &path,
-            "@echo off\r\nfindstr /C:\"subagent\" 1>&2\r\necho %* 1>&2\r\nexit /b 1\r\n",
+            "@echo off\r\nfindstr /C:\"subagent\" 1>&2\r\necho %* | findstr /C:\"--effort ultracode\" > nul && echo --effort ultracode 1>&2\r\necho %* 1>&2\r\nexit /b 1\r\n",
         )
         .expect("write stub");
         path
@@ -162,7 +165,7 @@ fn echoing_stub(name: &str) -> String {
         let path = dir.join("stub.sh");
         std::fs::write(
             &path,
-            "#!/bin/sh\ngrep subagent >&2\necho \"$@\" >&2\nexit 1\n",
+            "#!/bin/sh\ngrep subagent >&2\ncase \" $* \" in *\"--effort ultracode\"*) echo --effort ultracode >&2;; esac\necho \"$@\" >&2\nexit 1\n",
         )
         .expect("write stub");
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
@@ -219,7 +222,7 @@ async fn the_vendor_prefix_never_reaches_the_cli() {
 async fn agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_policy() {
     let stub = echoing_stub("agent-mode");
     for (model, wording) in [
-        ("sonnet", "subagent_type=Explore"),
+        ("sonnet", "Ultracode dynamic workflow"),
         ("codex:gpt-5.6-codex", "Codex subagents"),
     ] {
         let report = run_with_agents(
@@ -242,7 +245,8 @@ async fn agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_poli
         };
         assert!(reason.contains(wording), "{model}: {reason}");
         if model == "sonnet" {
-            assert!(reason.contains("Read,Glob,Grep,Agent"), "{reason}");
+            assert!(reason.contains("Read,Glob,Grep,Agent,Workflow"), "{reason}");
+            assert!(reason.contains("--effort ultracode"), "{reason}");
         }
     }
 }

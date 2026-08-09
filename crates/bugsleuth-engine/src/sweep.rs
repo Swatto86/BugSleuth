@@ -1,5 +1,6 @@
 //! One lane sweep, end to end: brief the model, run it, verify what comes back.
 
+mod agents;
 mod isolate;
 mod precheck;
 mod revision;
@@ -69,18 +70,6 @@ impl Vendor {
     /// the code it is reviewing is to give it a copy.
     pub fn needs_isolation(self) -> bool {
         matches!(self, Vendor::Kilo)
-    }
-
-    fn agents_instruction(self) -> Option<&'static str> {
-        match self {
-            Vendor::Claude => Some(
-                "Call the Agent tool at least twice with subagent_type=Explore and run_in_background=true before waiting for any result, dividing this lane into independent search areas. Keep every subagent inside this mandate, then verify and synthesize their evidence into your one required JSON response. If delegation is unavailable, continue alone.",
-            ),
-            Vendor::Codex => Some(
-                "Use multiple Codex subagents in parallel, dividing this lane into independent search areas. Keep every subagent read-only and inside this mandate, then verify and synthesize their evidence into your one required JSON response. If delegation is unavailable, continue alone.",
-            ),
-            Vendor::Kilo => None,
-        }
     }
 }
 
@@ -208,7 +197,7 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
     };
 
     let agents_instruction = if use_agents {
-        let Some(instruction) = vendor.agents_instruction() else {
+        let Some(instruction) = agents::instruction(vendor, model) else {
             return not_swept(format!(
                 "{}'s read-only Ask agent cannot delegate",
                 vendor.label()

@@ -176,7 +176,7 @@ async fn claude_effort_is_recorded_per_model() {
     assert_eq!(
         catalogue.efforts_by_model.get("sonnet"),
         Some(
-            &vec!["low", "medium", "high", "max"]
+            &vec!["low", "medium", "high", "xhigh", "max"]
                 .into_iter()
                 .map(String::from)
                 .collect()
@@ -192,13 +192,18 @@ async fn claude_effort_is_recorded_per_model() {
 
 #[tokio::test]
 async fn claude_effort_is_rejected_when_the_model_cannot_apply_it() {
+    assert!(
+        validate_effort("claude", "fable", "ultracode")
+            .await
+            .is_ok()
+    );
     assert!(validate_effort("claude", "opus", "xhigh").await.is_ok());
-    assert!(validate_effort("claude", "sonnet", "xhigh").await.is_err());
+    assert!(validate_effort("claude", "sonnet", "xhigh").await.is_ok());
     assert!(validate_effort("claude", "haiku", "high").await.is_err());
 }
 
 #[tokio::test]
-async fn claude_catalogue_does_not_offer_the_undocumented_fable_alias() {
+async fn claude_catalogue_offers_the_documented_fable_alias() {
     let catalogue = available("claude").await.expect("fixed Claude catalogue");
     let models: Vec<&str> = catalogue
         .groups
@@ -209,5 +214,17 @@ async fn claude_catalogue_does_not_offer_the_undocumented_fable_alias() {
         models.contains(&"sonnet"),
         "catalogue scan found no known alias"
     );
-    assert!(!models.contains(&"fable"), "the CLI has no fable alias");
+    assert!(
+        models.contains(&"fable"),
+        "the CLI documents the fable alias"
+    );
+    assert_eq!(
+        catalogue.efforts_by_model.get("fable"),
+        Some(
+            &vec!["low", "medium", "high", "xhigh", "max"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        )
+    );
 }

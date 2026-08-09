@@ -80,8 +80,10 @@ report — it just says NOT SWEPT — and that is easy to skim past. The lane ma
 marks the empty column and says so in as many words.
 Hover a lane heading for the defects that lane is assigned to hunt.
 The optional **Agents** box asks Claude or Codex to split that row's lane work
-across parallel subagents, which uses more tokens. It is unavailable for Kilo
-because BugSleuth's read-only Kilo Ask agent cannot delegate.
+across parallel subagents, which uses more tokens. Claude uses one small
+Ultracode workflow with two agents (the runtime allows at most 16 concurrently);
+Codex chooses its own fan-out. It is unavailable for Kilo because BugSleuth's
+read-only Kilo Ask agent cannot delegate.
 
 Finished results show expandable finding cards and a plain-text report split
 into coverage, summary, interpretation, limits, and actionable findings. **Copy

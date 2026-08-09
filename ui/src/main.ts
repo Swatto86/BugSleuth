@@ -11,6 +11,7 @@ import {
   isShippedConfiguration,
   preset,
   supportsAgents,
+  usesUltracode,
   uncoveredLanes,
   unitCount,
 } from "./model";
@@ -336,10 +337,14 @@ async function boot(): Promise<void> {
     // was saved. Say so instead.
     loadFailed = String(error);
   }
-  settings.models = settings.models.map((model) => ({
-    ...model,
-    use_agents: supportsAgents(model.id) && (model.use_agents ?? false),
-  }));
+  settings.models = settings.models.map((model) => {
+    const useAgents = supportsAgents(model.id) && (model.use_agents ?? false);
+    return {
+      ...model,
+      effort: useAgents && usesUltracode(model.id) ? "" : model.effort,
+      use_agents: useAgents,
+    };
+  });
 
   applyTheme(settings.theme);
   ui.theme.value = settings.theme;

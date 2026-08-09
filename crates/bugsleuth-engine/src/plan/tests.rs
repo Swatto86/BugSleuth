@@ -50,7 +50,7 @@ fn claude_effort_is_validated_per_model() {
         );
     }
     assert!(plan(&with_effort("opus", "xhigh")).is_ok());
-    assert!(plan(&with_effort("sonnet", "xhigh")).is_err());
+    assert!(plan(&with_effort("sonnet", "xhigh")).is_ok());
     assert!(plan(&with_effort("haiku", "high")).is_err());
     assert!(plan(&with_effort("sonnet", "")).is_ok());
     assert!(plan(&with_effort("sonnet", "  ")).is_ok());
@@ -68,11 +68,24 @@ fn a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed() {
 #[test]
 fn kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to() {
     let config: Config = serde_json::from_str(
-        r#"{"models":[{"id":"kilo:model","lanes":["security"],"use_agents":true}]}"#,
+        r#"{"models":[{"id":"kilo:anthropic/claude-sonnet-5","lanes":["security"],"effort":"thinking","use_agents":true}]}"#,
     )
     .expect("config parses");
     let message = plan(&config).map(|_| ()).unwrap_err().to_string();
     assert!(message.contains("cannot delegate"), "{message}");
+}
+
+#[test]
+fn claude_ultracode_replaces_a_separate_effort_setting() {
+    let mut config = with_effort("fable", "high");
+    config.models[0].use_agents = true;
+    let message = plan(&config).map(|_| ()).unwrap_err().to_string();
+    assert!(message.contains("leave effort at its default"), "{message}");
+
+    let mut default_model = with_effort("claude:", "high");
+    default_model.models[0].use_agents = true;
+    let message = plan(&default_model).map(|_| ()).unwrap_err().to_string();
+    assert!(message.contains("leave effort at its default"), "{message}");
 }
 
 #[test]

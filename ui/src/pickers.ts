@@ -192,11 +192,13 @@ export function effortPicker(opts: {
   /** The effort currently stored. Empty is the vendor's own default. */
   effort: string;
   catalogue: Catalogue;
+  /** A provider mode that replaces the ordinary effort selector. */
+  forced?: { label: string; title: string };
   onChange: (effort: string) => void;
 }): HTMLSelectElement {
   // Keyed like `modelPicker`, and for the same reason: the matrix is no longer
   // the only place a model and its effort are chosen.
-  const { key, label, effort, catalogue, onChange } = opts;
+  const { key, label, effort, catalogue, forced, onChange } = opts;
   const { vendor, model: current } = splitId(opts.id);
   const menu = catalogue[vendor];
   const { levels, unavailable } = effortsFor(menu, vendor, current);
@@ -215,9 +217,12 @@ export function effortPicker(opts: {
   if (effort !== "" && !levels.includes(effort)) {
     select.append(option(effort, effort, true));
   }
-  if (levels.length === 0) {
+  if (forced) {
+    select.replaceChildren(option("", forced.label, true));
+  }
+  if (forced || levels.length === 0) {
     select.disabled = true;
-    select.title = unavailable;
+    select.title = forced?.title ?? unavailable;
   }
   select.addEventListener("change", () => onChange(select.value));
   return select;

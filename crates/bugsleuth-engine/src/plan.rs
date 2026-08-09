@@ -196,7 +196,19 @@ pub fn plan(config: &Config) -> Result<Plan> {
         // `claude:sonnet` are one scheduled, charged, resumable unit.
         let model_id = canonical_spec(&model.id);
         check_effort(&model_id, model.effort.trim())?;
-        if model.use_agents && vendor_of(&model_id) == "kilo" {
+        let vendor = vendor_of(&model_id);
+        let claude_model = model_id.strip_prefix("claude:").unwrap_or(&model_id);
+        if model.use_agents
+            && vendor == "claude"
+            && bugsleuth_provider::models::supports_ultracode(claude_model)
+            && !model.effort.trim().is_empty()
+        {
+            anyhow::bail!(
+                "model `{}` uses Claude Ultracode when agents are enabled; leave effort at its default",
+                model.id
+            );
+        }
+        if model.use_agents && vendor == "kilo" {
             anyhow::bail!(
                 "model `{}` requests agents, but Kilo's read-only Ask agent cannot delegate",
                 model.id

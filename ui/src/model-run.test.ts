@@ -17,6 +17,7 @@ import {
   passChoices,
   preset,
   supportsAgents,
+  usesUltracode,
 } from "./model.ts";
 
 function row(id: string, lanes: string[]): ModelSetting {
@@ -80,6 +81,10 @@ test("agents are available for Claude and Codex but not Kilo Ask", () => {
   assert.equal(supportsAgents("sonnet"), true);
   assert.equal(supportsAgents("codex:"), true);
   assert.equal(supportsAgents("kilo:model"), false);
+  assert.equal(usesUltracode("fable"), true);
+  assert.equal(usesUltracode("sonnet"), true);
+  assert.equal(usesUltracode("haiku"), false);
+  assert.equal(usesUltracode("codex:gpt-5.6-codex"), false);
 
   const settings = {
     repo: "C:/x",
@@ -102,6 +107,15 @@ test("agents are available for Claude and Codex but not Kilo Ask", () => {
     tag_release_after_push: false,
   };
   assert.equal(canRun(settings), false);
+
+  settings.models[0] = {
+    id: "fable",
+    lanes: ["security"],
+    effort: "high",
+    use_agents: true,
+    passes: 1,
+  };
+  assert.equal(canRun(settings), false, "Ultracode replaces explicit effort");
 });
 
 test("a stored pass count outside the picker presets remains visible", () => {

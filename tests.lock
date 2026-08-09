@@ -302,7 +302,7 @@ rust claude::tests::a_salvage_is_never_itself_salvaged
 rust claude::tests::a_salvage_run_resumes_the_session_rather_than_starting_a_new_one
 rust claude::tests::a_timed_out_run_resumes_the_same_session_once
 rust claude::tests::a_turn_budget_exhaustion_is_reported_as_its_own_failure_not_a_generic_one
-rust claude::tests::agent_enabled_sweeps_only_add_the_delegation_tool
+rust claude::tests::agent_enabled_sweeps_only_add_read_only_delegation_tools
 rust claude::tests::an_empty_denylist_omits_the_flag_rather_than_passing_an_empty_value
 rust claude::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
 rust claude::tests::an_invocation_with_no_schema_asks_for_none_rather_than_for_null
@@ -493,7 +493,7 @@ rust models::kilo_catalogue::tests::the_byok_flag_is_read_per_record_and_does_no
 rust models::kilo_catalogue::tests::unknown_effort_names_sort_after_known_ones_rather_than_at_random
 rust models::tests::a_failed_kilo_listing_is_an_error_not_an_empty_catalogue
 rust models::tests::a_kilo_model_billed_to_your_own_plan_is_not_filed_under_the_subscription
-rust models::tests::claude_catalogue_does_not_offer_the_undocumented_fable_alias
+rust models::tests::claude_catalogue_offers_the_documented_fable_alias
 rust models::tests::claude_effort_is_recorded_per_model
 rust models::tests::claude_effort_is_rejected_when_the_model_cannot_apply_it
 rust models::tests::effort_not_supported_by_codex_model_is_rejected
@@ -562,6 +562,7 @@ rust plan::tests::an_unknown_lane_name_is_rejected_rather_than_silently_skipped
 rust plan::tests::batching_runs_every_unit_exactly_once
 rust plan::tests::canonical_spec_collapses_claude_but_keeps_the_default_and_other_vendors
 rust plan::tests::claude_effort_is_validated_per_model
+rust plan::tests::claude_ultracode_replaces_a_separate_effort_setting
 rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
 rust plan::tests::every_provider_runs_at_most_one_sweep_per_batch
 rust plan::tests::kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to

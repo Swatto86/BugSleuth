@@ -13,11 +13,25 @@ describe("parallel review agents", () => {
       $("#matrix-body tr:first-child td:first-child select");
     const agents = () =>
       $("#matrix-body tr:first-child td.agent-cell input[type=checkbox]");
+    const effort = () =>
+      $("#matrix-body tr:first-child td.effort-cell select");
 
     await provider().selectByAttribute("value", "claude");
+    await browser.waitUntil(
+      async () =>
+        await $(
+          "#matrix-body tr:first-child datalist option[value=fable]",
+        ).isExisting(),
+      {
+        timeout: 70_000,
+        timeoutMsg: "the Claude catalogue never offered Fable",
+      },
+    );
     await expect(agents()).toBeEnabled();
     await agents().click();
     await expect(agents()).toBeSelected();
+    await expect(effort()).toBeDisabled();
+    assert.equal(await effort().getText(), "Ultracode");
 
     await provider().selectByAttribute("value", "kilo");
     await expect(agents()).toBeDisabled();
