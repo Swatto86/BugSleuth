@@ -141,7 +141,7 @@ jobs:
       # release publishes an update every client then rejects, which looks
       # exactly like a working release until someone tries to install it.
       - name: Build the app
-        run: npx --yes @tauri-apps/cli@^2 build
+        run: npx --no-install tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}

@@ -183,3 +183,15 @@ test("the documentation does not point at files that no longer exist", () => {
     "the documentation tells a reader to run these and they are not in the repository",
   );
 });
+
+test("the release uses the lockfile's Tauri CLI", () => {
+  const pkg = JSON.parse(read("package.json"));
+  const lock = JSON.parse(read("package-lock.json"));
+  assert.equal(pkg.devDependencies["@tauri-apps/cli"], "2.11.4");
+  assert.equal(
+    lock.packages["node_modules/@tauri-apps/cli"].version,
+    "2.11.4",
+  );
+  assert.ok(workflow().includes("npx --no-install tauri build"));
+  assert.ok(!workflow().includes("npx --yes @tauri-apps/cli"));
+});

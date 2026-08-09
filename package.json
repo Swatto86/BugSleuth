@@ -16,6 +16,7 @@
     "@tauri-apps/plugin-dialog": "^2"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
     "@wdio/cli": "^9.30.0",
     "@wdio/globals": "^9.29.1",
     "@wdio/local-runner": "^9.30.0",
