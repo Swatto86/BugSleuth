@@ -246,7 +246,8 @@ async fn agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_poli
         assert!(reason.contains(wording), "{model}: {reason}");
         if model == "sonnet" {
             assert!(
-                reason.contains("--tools \"Read,Glob,Grep,Agent\""),
+                reason.contains("--tools Read,Glob,Grep,Agent")
+                    || reason.contains("--tools \"Read,Glob,Grep,Agent\""),
                 "{reason}"
             );
             assert!(reason.contains("--effort ultracode"), "{reason}");
