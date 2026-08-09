@@ -25,7 +25,6 @@ struct SweepFile {
     #[serde(default)]
     commit: Option<String>,
     status: SweepStatus,
-    #[serde(default)]
     findings: Vec<Finding>,
 }
 

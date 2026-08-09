@@ -87,6 +87,21 @@ fn an_unreadable_report_is_an_error_rather_than_a_silently_empty_merge() {
 }
 
 #[test]
+fn a_swept_report_without_findings_is_rejected_instead_of_counted_as_clean() {
+    let dir = scratch("missing-findings");
+    let path = write(
+        &dir,
+        "missing.json",
+        r#"{"lane":"Correctness","model":"claude:sonnet","status":{"state":"swept"}}"#,
+    );
+
+    assert!(
+        merge(&[path]).is_err(),
+        "a swept report with no findings field was counted as a clean sweep"
+    );
+}
+
+#[test]
 fn sweeps_of_two_different_commits_are_called_out_in_the_merged_report() {
     // A set of correct findings was once re-graded against a different
     // checkout and condemned as fabricated - the cited code genuinely was
