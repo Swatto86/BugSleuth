@@ -179,11 +179,12 @@ describe("BugSleuth desktop app", () => {
       "run completion dropped keyboard focus to the document body",
     );
 
-    // Effect one: the window shows a merged report naming the defects.
+    // Effect one: the window shows the complete run report and its summary.
     const output = await $("#output").getText();
     assert.ok(
-      output.includes("distinct defect"),
-      `no merged report in output:\n${output}`,
+      output.includes("BUGSLEUTH RUN REPORT") &&
+        output.includes("Distinct defects:"),
+      `no complete run report in output:\n${output}`,
     );
     const reportText = await browser.execute(
       () => document.getElementById("output")?.textContent ?? "",
