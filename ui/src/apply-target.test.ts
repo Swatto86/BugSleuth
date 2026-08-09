@@ -16,7 +16,6 @@ test("applying uses the repository that produced the displayed prompt", () => {
     models: [],
     theme: "system",
     reuse_completed: true,
-    provider_concurrency: 3,
     triage_model: "",
     apply_model: "sonnet",
     apply_effort: "",

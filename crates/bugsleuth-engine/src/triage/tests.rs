@@ -107,7 +107,6 @@ async fn cancelled_run_does_not_start_or_wait_for_triage() {
         // Nonempty, so the "no triage model" guard does not short-circuit and
         // hide the cancellation path being exercised.
         triage_model: "claude:sonnet",
-        per_vendor_concurrency: 1,
     };
     let mut clusters = vec![
         cluster_at(Severity::Low, "first"),

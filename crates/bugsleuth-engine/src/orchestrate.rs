@@ -37,8 +37,8 @@ use persist::{reusable, write_report};
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RunEvent {
-    /// A round of sweeps is starting. Up to the per-provider concurrency limit
-    /// per vendor, so `units` is what will run concurrently.
+    /// A round of sweeps is starting. One per vendor at most, so `units` is
+    /// what will run concurrently.
     BatchStarted {
         index: usize,
         total: usize,
@@ -106,11 +106,6 @@ pub struct RunOptions<'a> {
     /// Empty turns the pass off, leaving each severity as whichever model found
     /// the defect graded it — in isolation, which is measurably unreliable.
     pub triage_model: &'a str,
-    /// How many sweeps of one vendor may run concurrently. Same-provider models
-    /// used to run strictly one at a time — the guard against a vendor's rate
-    /// limit. A value above one lets several models of one provider overlap; one
-    /// restores the sequential behaviour. Zero is treated as one by `batches`.
-    pub per_vendor_concurrency: usize,
 }
 
 pub struct RunReport {
@@ -171,7 +166,7 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
     // Kept so a cancelled run can name what it never got to. Sweeps remove
     // themselves as they land.
     let mut remaining_units: Vec<Unit> = remaining.units.clone();
-    let batches = remaining.batches(options.per_vendor_concurrency);
+    let batches = remaining.batches();
     for (index, batch) in batches.iter().enumerate() {
         emit(
             &options.progress,

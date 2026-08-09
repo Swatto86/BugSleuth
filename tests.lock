@@ -90,7 +90,6 @@ node an unknown prefix is treated as a Claude model, colon and all
 node applying uses the repository that produced the displayed prompt
 node both sides are actually being read
 node both themes define the same set of colours
-node concurrency collapses a busy vendor's rounds
 node dark theme meets WCAG AA everywhere the UI uses it
 node editing a model refreshes its row action labels
 node every active control hands focus off before it disables or hides itself
@@ -134,9 +133,6 @@ node no command is exposed to the page that the page never calls
 node no element asks for a class the stylesheet does not define
 node one vendor doing everything is one round per lane
 node only a complete shipped preset bypasses replacement confirmation
-node provider concurrency is always an integer the backend can deserialize
-node provider concurrency is clamped to the cap the field advertises
-node provider concurrency never drops below one
 node quit flushes pending settings before it can invoke exit
 node release tag matches version embedded in the app
 node removing a configured model row is guarded by a confirmation
@@ -144,19 +140,18 @@ node render redirects focus when the focused row was just removed
 node rounds are driven by the busiest vendor, not the total
 node run-directory documentation includes the backend path hash
 node safety docs describe the triage exception to lane-relative grades
+node same-provider rounds stay serial
 node settings saved before passes existed still estimate as one pass each
 node splitId agrees with vendorOf on every shape
 node splitting a model spec and rejoining it settles on one spelling
 node starting a run moves focus off the disabled Run button to Stop
 node startup renders do not persist settings back over the saved file
-node stored provider concurrency is clamped at boot
 node the E2E build uses the locked local Tauri CLI
 node the E2E harness waits for its driver cleanup and rejects a stale port
 node the E2E stop check observes a real provider before and after cancellation
 node the README still promises a single file that runs with nothing installed
 node the README's download table names assets the workflow builds
 node the acceptance journey accounts for the provider pre-check
-node the advertised concurrency cap and the enforced cap are the same number
 node the clear handler disables its button and re-enables it on both outcomes
 node the clear handler shows a running status while the delete is in flight
 node the clearing flag is set before the clear and released on both outcomes
@@ -168,7 +163,6 @@ node the live E2E review replaces saved configuration deterministically
 node the packaged gate cannot download a Tauri CLI
 node the precise scan sees each of the three ways a class is set
 node the preset handler guards on the whole configuration, not per row
-node the provider-concurrency cap is the same number in the window, the markup and Rust
 node the quit guard consults the clearing state, like the tray does
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
@@ -555,20 +549,16 @@ rust plan::effort_gate_tests::the_sweep_command_checks_effort_the_same_way_run_d
 rust plan::tests::a_bare_model_name_is_treated_as_the_claude_vendor_for_batching
 rust plan::tests::a_configuration_that_would_run_nothing_is_an_error_not_an_empty_report
 rust plan::tests::a_fully_covered_run_reports_no_gaps
-rust plan::tests::a_higher_concurrency_lets_several_sweeps_of_one_vendor_share_a_batch
 rust plan::tests::a_huge_pass_count_is_refused_rather_than_enumerated_forever
 rust plan::tests::a_lane_with_no_model_is_reported_rather_than_quietly_omitted
 rust plan::tests::a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed
-rust plan::tests::a_vendors_concurrent_slots_go_to_different_models_before_doubling_up
-rust plan::tests::a_zero_concurrency_is_treated_as_one_and_does_not_loop_forever
 rust plan::tests::an_effort_the_vendor_does_not_accept_is_refused_before_anything_is_paid_for
 rust plan::tests::an_unknown_lane_name_is_rejected_rather_than_silently_skipped
-rust plan::tests::at_concurrency_one_no_two_sweeps_of_the_same_vendor_share_a_batch
 rust plan::tests::batching_runs_every_unit_exactly_once
 rust plan::tests::canonical_spec_collapses_claude_but_keeps_the_default_and_other_vendors
 rust plan::tests::claude_effort_is_validated_per_model
 rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
-rust plan::tests::one_models_extra_passes_still_fill_the_concurrency_when_it_is_alone
+rust plan::tests::every_provider_runs_at_most_one_sweep_per_batch
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
 rust process::tests::a_timeout_keeps_output_written_before_the_cutoff
@@ -592,6 +582,7 @@ rust report::tests::findings_rank_most_severe_first
 rust settings::tests::a_missing_settings_file_is_first_launch_and_yields_defaults
 rust settings::tests::a_read_error_that_is_not_a_missing_file_is_surfaced
 rust settings::tests::malformed_settings_are_reported_and_left_in_place
+rust settings::tests::retired_provider_concurrency_is_removed_when_settings_load
 rust settings::tests::the_default_covers_every_lane_so_a_first_run_has_no_silent_holes
 rust settings::tests::unknown_fields_and_missing_fields_both_survive_a_round_trip
 rust signin::tests::a_failure_keeps_the_reason_the_vendor_gave

@@ -51,7 +51,6 @@ test("flushing writes the latest pending settings exactly once", async () => {
     models: [],
     theme: "system",
     reuse_completed: true,
-    provider_concurrency: 3,
     triage_model: "haiku",
     apply_model: "",
     apply_effort: "",

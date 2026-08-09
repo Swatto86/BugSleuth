@@ -281,27 +281,3 @@ test("every event has both an emitter and a listener", () => {
     "Rust sends these and nothing is listening, so whatever they report is lost",
   );
 });
-
-test("the provider-concurrency cap is the same number in the window, the markup and Rust", () => {
-  // Three places carry this: the TypeScript constant, the input's `max`
-  // attribute, and the Rust that clamps what it is sent. A bound enforced only
-  // by the sender is not a bound — and three copies of a number is exactly how
-  // they drift, so this compares all three.
-  const model = fs.readFileSync(path.join(here, "model.ts"), "utf8");
-  const inTs = /MAX_PROVIDER_CONCURRENCY\s*=\s*(\d+)/.exec(model);
-  assert.ok(inTs, "no MAX_PROVIDER_CONCURRENCY in model.ts");
-
-  const html = fs.readFileSync(path.join(here, "..", "index.html"), "utf8");
-  const inHtml = /id="provider-concurrency"[^>]*max="(\d+)"/.exec(html);
-  assert.ok(inHtml, "the provider-concurrency input has no max attribute");
-
-  const run = fs.readFileSync(path.join(rustDir, "commands", "run.rs"), "utf8");
-  const inRust = /const MAX_PROVIDER_CONCURRENCY: usize = (\d+);/.exec(run);
-  assert.ok(
-    inRust,
-    "Rust does not define a concurrency cap; it is trusting the window again",
-  );
-
-  assert.equal(inHtml![1], inTs![1], "the markup and the window disagree");
-  assert.equal(inRust![1], inTs![1], "Rust and the window disagree");
-});

@@ -45,7 +45,6 @@ async fn run_all(args: RunArgs) -> Result<()> {
             out_dir: args.out_dir.as_deref(),
             resume: args.resume,
             triage_model: &args.triage_model,
-            per_vendor_concurrency: args.per_provider,
             cancel: Default::default(),
             progress: Some(progress),
         },

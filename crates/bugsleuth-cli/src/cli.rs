@@ -67,11 +67,6 @@ pub(crate) struct RunArgs {
     /// skip the pass and keep each model's own grade.
     #[arg(long, default_value = "haiku")]
     pub(crate) triage_model: String,
-    /// How many sweeps of one provider may run at once. More is faster but leans
-    /// harder on that vendor's rate limit; the historical overload was around
-    /// three CLIs at once. 1 runs each provider's sweeps strictly one at a time.
-    #[arg(long, default_value_t = 3)]
-    pub(crate) per_provider: usize,
     /// Directory to write fix prompts into: `fix-prompt.md` with everything,
     /// plus `fix-prompt-01.md` onward, one self-contained prompt per defect for
     /// a model that cannot hold the whole thing.

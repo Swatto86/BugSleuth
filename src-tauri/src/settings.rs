@@ -33,16 +33,6 @@ pub struct Settings {
     /// time is the surprising outcome, not reusing them.
     #[serde(default = "yes")]
     pub reuse_completed: bool,
-    /// How many sweeps of one provider may run at once.
-    ///
-    /// Same-provider models used to run strictly one at a time — the guard
-    /// against a vendor's rate limit, after three CLIs at once overloaded one.
-    /// Three by default so several models of one provider overlap; 1 restores
-    /// the sequential behaviour. Clamped in Rust before a run, because settings
-    /// are a JSON file a person can edit and an unbounded burst is the exact
-    /// overload this used to prevent.
-    #[serde(default = "three")]
-    pub provider_concurrency: usize,
     /// Model that re-grades every severity once the sweeps are merged, with the
     /// whole list in view.
     ///
@@ -102,13 +92,6 @@ fn yes() -> bool {
     true
 }
 
-/// Serde needs a function; a bare `3` default is not expressible. The default
-/// per-provider concurrency: enough to overlap a few models of one provider
-/// without the burst that overloads a vendor.
-fn three() -> usize {
-    3
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelSetting {
     pub id: String,
@@ -166,7 +149,6 @@ impl Default for Settings {
             ],
             theme: "system".into(),
             reuse_completed: true,
-            provider_concurrency: 3,
             triage_model: cheapest(),
             // Nothing by default: applying fixes writes to the user's own
             // checkout, and a model nobody chose is not something to default to.
@@ -214,8 +196,14 @@ fn load_from(path: &Path) -> anyhow::Result<Settings> {
         }
     };
 
-    serde_json::from_str(&text)
-        .with_context(|| format!("saved settings at {} are not valid JSON", path.display()))
+    let mut settings: Settings = serde_json::from_str(&text)
+        .with_context(|| format!("saved settings at {} are not valid JSON", path.display()))?;
+    // Parallel same-provider sweeps were removed after two Kilo processes
+    // collided in their shared credential store. Drop the retired setting so
+    // the next ordinary save completes the migration instead of preserving a
+    // control that no longer does anything.
+    settings.extra.remove("provider_concurrency");
+    Ok(settings)
 }
 
 pub fn load() -> anyhow::Result<Settings> {
@@ -273,6 +261,18 @@ mod tests {
         let saved = serde_json::to_value(parsed).expect("settings serialize");
         assert_eq!(saved["future_setting"]["enabled"], true);
         assert_eq!(saved["models"][0]["future_model_setting"], 7);
+    }
+
+    #[test]
+    fn retired_provider_concurrency_is_removed_when_settings_load() {
+        let dir = scratch("retired-provider-concurrency");
+        let path = dir.join("settings.json");
+        std::fs::write(&path, r#"{"provider_concurrency":10}"#).expect("write settings");
+
+        let loaded = load_from(&path).expect("load settings");
+        let saved = serde_json::to_value(loaded).expect("serialize settings");
+        assert!(saved.get("provider_concurrency").is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // The "a failed save leaves the settings worse than they were" test used to

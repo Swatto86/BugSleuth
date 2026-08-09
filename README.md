@@ -112,9 +112,10 @@ cargo run -p bugsleuth-cli -- run --repo <path> --config bugsleuth.example.json 
 ```
 
 Runs every configured (model x lane) pair and merges the result. Models are
-configured once and assigned the lanes they cover. Each sweep is written out as
-it lands, so `--resume` picks up a run that died without paying for the sweeps
-it already completed.
+configured once and assigned the lanes they cover. Different providers run
+together, but one provider's sweeps run sequentially because the CLIs publish no
+safe process limit. Each sweep is written out as it lands, so `--resume` picks
+up a run that died without paying for the sweeps it already completed.
 
 If an individual Claude, Codex, or Kilo process times out, BugSleuth keeps its
 partial CLI output and resumes that same session once for an answer-only pass.
@@ -123,14 +124,6 @@ interrupted resumed turn, Codex resumes a transient failed turn, and Kilo's exit
 code 124 is treated as its own timeout. Recovered findings are labelled as
 potentially incomplete; a run with no usable session id remains `NOT SWEPT`
 rather than silently restarting from scratch.
-
-```bash
-cargo run -p bugsleuth-cli -- run --repo <path> --config c.json --per-provider 1
-```
-
-The same, but runs each provider's sweeps strictly one at a time. `--per-provider`
-defaults to 3, so several models of one provider overlap; lower it when a
-vendor's rate limit bites, or raise it if your subscription has room.
 
 ```bash
 cargo run -p bugsleuth-cli -- judge run-a.json run-b.json run-c.json

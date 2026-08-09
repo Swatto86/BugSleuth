@@ -12,7 +12,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import ts from "typescript";
 
 const root = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -40,44 +39,5 @@ test("startup renders do not persist settings back over the saved file", () => {
   assert.ok(
     calls >= 2,
     `boot and loadCatalogue should render without persisting, found ${calls} call(s)`,
-  );
-});
-
-test("stored provider concurrency is clamped at boot", () => {
-  const main = ts.createSourceFile(
-    "main.ts",
-    read("ui", "src", "main.ts"),
-    ts.ScriptTarget.ESNext,
-    true,
-  );
-  let boot: ts.FunctionDeclaration | undefined;
-  const findBoot = (node: ts.Node): void => {
-    if (ts.isFunctionDeclaration(node) && node.name?.text === "boot")
-      boot = node;
-    node.forEachChild(findBoot);
-  };
-  findBoot(main);
-  assert.ok(boot, "boot() is gone from main.ts");
-
-  let clamps = false;
-  const inspect = (node: ts.Node): void => {
-    if (
-      ts.isBinaryExpression(node) &&
-      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-      ts.isPropertyAccessExpression(node.left) &&
-      node.left.expression.getText(main) === "settings" &&
-      node.left.name.text === "provider_concurrency" &&
-      ts.isCallExpression(node.right) &&
-      ts.isIdentifier(node.right.expression) &&
-      node.right.expression.text === "boundedProviderConcurrency"
-    ) {
-      clamps = true;
-    }
-    node.forEachChild(inspect);
-  };
-  inspect(boot);
-  assert.ok(
-    clamps,
-    "boot shows stored concurrency without the bound the run enforces",
   );
 });

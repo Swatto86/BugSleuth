@@ -14,31 +14,6 @@
  */
 export const MAX_PASSES = 25;
 
-/**
- * The most sweeps of one provider a run may fan out concurrently.
- *
- * Also written in `index.html` as the input's `max`, and Rust clamps the stored
- * value to the same ceiling before a run (`provider_concurrency.clamp(1, 10)` in
- * `src-tauri/src/commands/run.rs`). A bound expressed only by the sender is not
- * a bound — the point of the ceiling is to keep a hand-edited settings file from
- * spawning the burst that overloads a vendor.
- */
-export const MAX_PROVIDER_CONCURRENCY = 10;
-
-/**
- * Read a provider-concurrency the backend can actually accept.
- *
- * At least one, or a run would fan out to nothing and sweep nobody; at most the
- * shared ceiling; and always an integer, because a float reaches Tauri as JSON
- * and fails to deserialize into `usize`, which stopped settings saving and runs
- * starting for the old proof count. A blank or garbage field settles on one.
- */
-export function boundedProviderConcurrency(raw: string): number {
-  const parsed = Math.floor(Number(raw));
-  if (!Number.isFinite(parsed)) return 1;
-  return Math.min(MAX_PROVIDER_CONCURRENCY, Math.max(1, parsed));
-}
-
 export const LANES = [
   "correctness",
   "security",
@@ -117,15 +92,6 @@ export interface Settings {
   models: ModelSetting[];
   theme: "system" | "light" | "dark";
   reuse_completed: boolean;
-  /**
-   * How many sweeps of one provider may run at once.
-   *
-   * Same-provider models used to run strictly one at a time — the guard against
-   * a vendor's rate limit. Three by default so several models of one provider
-   * overlap; 1 restores the sequential behaviour. Rust clamps it to 1–10 before
-   * a run, so a value outside that is not a valid backend instruction.
-   */
-  provider_concurrency: number;
   /**
    * Model that re-grades every severity once the sweeps are merged, seeing the
    * whole list at once. Empty turns the pass off.
@@ -272,21 +238,16 @@ export function vendorOf(modelId: string): string {
 /**
  * How many rounds a run takes.
  *
- * The engine runs up to `concurrency` sweeps of one vendor at once, so a vendor
- * with N sweeps needs ceil(N / concurrency) rounds, and the run's rounds are the
- * most any single vendor needs. Worth showing before a run because it, not the
- * sweep count, is what decides how long someone waits — and it is what the
- * concurrency setting changes. Mirrors `Plan::batches` in plan.rs.
+ * The engine runs one sweep per vendor at once, so the run's rounds are the most
+ * any single vendor needs. Mirrors `Plan::batches` in plan.rs.
  */
-export function batchCount(models: ModelSetting[], concurrency = 1): number {
+export function batchCount(models: ModelSetting[]): number {
   const perVendor = new Map<string, number>();
   for (const key of unitKeys(models)) {
     const vendor = vendorOf(key.split(" ")[0] ?? "");
     perVendor.set(vendor, (perVendor.get(vendor) ?? 0) + 1);
   }
-  const perRound = Math.max(1, Math.floor(concurrency));
-  const rounds = [...perVendor.values()].map((n) => Math.ceil(n / perRound));
-  return rounds.length === 0 ? 0 : Math.max(...rounds);
+  return perVendor.size === 0 ? 0 : Math.max(...perVendor.values());
 }
 
 /** Whether a configuration could run at all. */

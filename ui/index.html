@@ -154,17 +154,6 @@
             <button id="preset-balanced" type="button">Balanced</button>
             <button id="preset-deep" type="button">Deep</button>
           </div>
-          <div class="row" style="margin-top: 12px">
-            <label class="field" style="flex: 0 0 240px">
-              <span>Parallel sweeps per provider</span>
-              <input id="provider-concurrency" type="number" min="1" max="10" step="1" value="3" />
-            </label>
-            <span class="hint" style="align-self: center">
-              How many of one provider's models run at once. More is faster but
-              leans harder on that provider's rate limit; 1 runs them one at a
-              time.
-            </span>
-          </div>
           <div class="warning-banner hidden" id="uncovered-warning" role="status"></div>
         </section>
 

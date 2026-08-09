@@ -98,13 +98,11 @@ passed everything. Both are fixed; both had been read over many times.
 2. **Desktop pre-check** — the app gives each selected provider one minimal real
    invocation, concurrently. Missing sessions, unhealthy CLIs and an unsafe
    Kilo `ask` policy stop the desktop run before any lane starts.
-3. **Batch** — units are grouped so that at most *N* invocations of one vendor
-   run at once, *N* being the per-provider concurrency setting (default 3). With
-   CLI subscriptions the binding constraint is rate limits, not money, so the
-   fan-out per vendor is bounded and chosen rather than "all at once"; *N* of 1
-   restores strictly sequential per-vendor behaviour. A vendor's slots go to
-   *different models first*: two models you picked run together rather than one
-   model's lanes filling the round while the other waits.
+3. **Batch** — different vendors run together, but each vendor's sweeps run one
+   at a time. Claude, Codex and Kilo all support parallel agents in some product
+   surfaces, but none publishes a safe maximum for independent authenticated
+   CLI processes. Two Kilo processes were observed colliding while updating its
+   shared credential database, so BugSleuth does not guess a limit.
 4. **Sweep** — each unit runs its vendor against the repository. Failure is a
    *reported state*, never an exception that vanishes.
 5. **Verify** — every finding's quoted snippet must exist in the file it names,
@@ -173,8 +171,8 @@ These are the ones to protect when changing anything:
   expressions. Six defects in one day were a regex over source that matched less
   than existed and returned a smaller answer instead of an error.
 - **Names that cross the JavaScript/Rust boundary are compared**: commands,
-  events, settings fields, lane titles, the per-provider concurrency cap. Each is
-  a string on both sides with no compiler spanning them.
+  events, settings fields and lane titles. Each is a string on both sides with
+  no compiler spanning them.
 - **Shared prose lives in one function.** The review limits, the unsandboxed
   caution and the cut-short note are each written once and asserted to appear in
   every document that reports findings.

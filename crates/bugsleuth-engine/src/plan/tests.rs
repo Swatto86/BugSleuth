@@ -126,122 +126,22 @@ fn an_unknown_lane_name_is_rejected_rather_than_silently_skipped() {
 }
 
 #[test]
-fn at_concurrency_one_no_two_sweeps_of_the_same_vendor_share_a_batch() {
-    // Concurrency of one is the old strictly-sequential-per-vendor behaviour,
-    // and it must still be reachable: it is the guard someone dials to when a
-    // vendor's rate limit bites.
+fn every_provider_runs_at_most_one_sweep_per_batch() {
+    // No provider publishes a safe maximum for independent authenticated CLI
+    // processes, and two real Kilo processes collided in its credential store.
+    // Different providers may overlap, but one provider must stay serial.
     let plan = plan(&config(&[
-        ("sonnet", &["correctness", "security"]),
-        ("claude:opus", &["contract"]),
-        ("codex:", &["correctness"]),
-        ("kilo:", &["ux"]),
+        ("sonnet", &["security", "ux"]),
+        ("codex:model", &["security", "ux"]),
+        ("kilo:model", &["security", "ux"]),
     ]))
     .unwrap_or_else(|e| panic!("plan failed: {e}"));
 
-    for batch in plan.batches(1) {
-        let mut vendors: Vec<String> = batch.iter().map(|u| vendor_of(&u.model)).collect();
-        let before = vendors.len();
-        vendors.sort();
-        vendors.dedup();
-        assert_eq!(
-            before,
-            vendors.len(),
-            "a batch ran one vendor twice at once"
-        );
+    for batch in plan.batches() {
+        let vendors: Vec<String> = batch.iter().map(|unit| vendor_of(&unit.model)).collect();
+        let unique: BTreeSet<&str> = vendors.iter().map(String::as_str).collect();
+        assert_eq!(vendors.len(), unique.len(), "provider overlap: {batch:?}");
     }
-}
-
-#[test]
-fn a_higher_concurrency_lets_several_sweeps_of_one_vendor_share_a_batch() {
-    // The whole point of the setting: three Claude models on one lane should be
-    // able to run at once, so five Claude sweeps at concurrency three take two
-    // rounds rather than five. No batch may exceed the limit for any vendor.
-    let plan = plan(&config(&[(
-        "sonnet",
-        &["correctness", "security", "contract", "ux", "gate"],
-    )]))
-    .unwrap_or_else(|e| panic!("plan failed: {e}"));
-    assert_eq!(plan.units.len(), 5);
-
-    let batches = plan.batches(3);
-    assert_eq!(
-        batches.len(),
-        2,
-        "five sweeps at three-per-round is two rounds"
-    );
-    for batch in &batches {
-        let mut per_vendor = std::collections::BTreeMap::<String, usize>::new();
-        for unit in batch {
-            *per_vendor.entry(vendor_of(&unit.model)).or_insert(0) += 1;
-        }
-        assert!(
-            per_vendor.values().all(|&n| n <= 3),
-            "a batch ran a vendor more than the limit"
-        );
-    }
-    let scheduled: usize = batches.iter().map(Vec::len).sum();
-    assert_eq!(
-        scheduled,
-        plan.units.len(),
-        "a unit was dropped or duplicated"
-    );
-}
-
-#[test]
-fn a_zero_concurrency_is_treated_as_one_and_does_not_loop_forever() {
-    // A hand-edited settings file could carry zero; taking no units per batch
-    // would spin the loop forever. It must behave exactly like one.
-    let plan = plan(&config(&[("sonnet", &["correctness", "security"])]))
-        .unwrap_or_else(|e| panic!("plan failed: {e}"));
-    assert_eq!(plan.batches(0).len(), plan.batches(1).len());
-}
-
-#[test]
-fn a_vendors_concurrent_slots_go_to_different_models_before_doubling_up() {
-    // The regression a user caught: two Codex models on five lanes each, at two
-    // per round, spent both slots on the FIRST model's lanes — so the second
-    // model they chose did not start until the first was nearly done. Picking
-    // two models means wanting them run together; the first round must contain
-    // both models, not one model twice.
-    let plan = plan(&config(&[
-        (
-            "codex:gpt-a",
-            &["correctness", "security", "contract", "ux", "gate"],
-        ),
-        (
-            "codex:gpt-b",
-            &["correctness", "security", "contract", "ux", "gate"],
-        ),
-    ]))
-    .unwrap_or_else(|e| panic!("plan failed: {e}"));
-
-    let first = &plan.batches(2)[0];
-    let models: BTreeSet<&str> = first.iter().map(|u| u.model.as_str()).collect();
-    assert_eq!(
-        models,
-        BTreeSet::from(["codex:gpt-a", "codex:gpt-b"]),
-        "the first round ran one model twice instead of both models: {first:?}"
-    );
-}
-
-#[test]
-fn one_models_extra_passes_still_fill_the_concurrency_when_it_is_alone() {
-    // The diversity rule must not starve the single-model case: two passes of
-    // one model with room for two should still run at once, or asking for more
-    // passes would silently serialise them.
-    let two_passes = Config {
-        models: vec![ModelPlan {
-            id: "sonnet".to_string(),
-            lanes: vec!["correctness".to_string()],
-            effort: String::new(),
-            passes: 2,
-        }],
-    };
-    let plan = plan(&two_passes).unwrap_or_else(|e| panic!("plan failed: {e}"));
-    assert_eq!(plan.units.len(), 2, "two passes should be two units");
-    let batches = plan.batches(2);
-    assert_eq!(batches.len(), 1, "both passes should share one round");
-    assert_eq!(batches[0].len(), 2);
 }
 
 #[test]
@@ -252,12 +152,8 @@ fn batching_runs_every_unit_exactly_once() {
     ]))
     .unwrap_or_else(|e| panic!("plan failed: {e}"));
 
-    // The count is invariant to how far the fan-out goes: every unit runs once
-    // whether the vendor is serialised or fully parallel.
-    for concurrency in [1, 2, 5] {
-        let scheduled: usize = plan.batches(concurrency).iter().map(Vec::len).sum();
-        assert_eq!(scheduled, plan.units.len(), "at concurrency {concurrency}");
-    }
+    let scheduled: usize = plan.batches().iter().map(Vec::len).sum();
+    assert_eq!(scheduled, plan.units.len());
 }
 
 #[test]

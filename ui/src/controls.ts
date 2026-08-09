@@ -13,7 +13,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import { type Settings, boundedProviderConcurrency } from "./model";
+import type { Settings } from "./model";
 import { signinPills } from "./view";
 
 /** The elements these handlers touch, and what they do to the rest. */
@@ -22,7 +22,6 @@ export interface ControlDeps {
     theme: HTMLSelectElement;
     repo: HTMLInputElement;
     scope: HTMLInputElement;
-    providerConcurrency: HTMLInputElement;
     reuseCompleted: HTMLInputElement;
     triageSeverities: HTMLInputElement;
     browse: HTMLButtonElement;
@@ -83,22 +82,6 @@ export function bindControls(deps: ControlDeps): void {
   });
   ui.scope.addEventListener("input", () => {
     settings().scope = ui.scope.value;
-    refresh();
-  });
-  ui.providerConcurrency.addEventListener("input", () => {
-    settings().provider_concurrency = boundedProviderConcurrency(
-      ui.providerConcurrency.value,
-    );
-    refresh();
-  });
-  // On commit, snap the field to the value the run will actually use: the input
-  // handler clamps but never writes the clamp back, so the box could show 50
-  // while the run fans out to 10. max="10" does not clamp typed input, so
-  // reconcile on `change` (blur), not `input`, so it does not fight typing.
-  ui.providerConcurrency.addEventListener("change", () => {
-    const bounded = boundedProviderConcurrency(ui.providerConcurrency.value);
-    ui.providerConcurrency.value = String(bounded);
-    settings().provider_concurrency = bounded;
     refresh();
   });
   ui.reuseCompleted.addEventListener("change", () => {

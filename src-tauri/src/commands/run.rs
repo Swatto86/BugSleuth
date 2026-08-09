@@ -22,15 +22,6 @@ mod control;
 /// this file at the hard line cap, it did not change hands.
 pub use control::RunControl;
 
-/// The most sweeps of one provider a run may fan out at once.
-///
-/// The same number the window puts in the input's `max` and its `model.ts`
-/// constant, and a test compares all three — a bound enforced only by the sender
-/// is not a bound, and three copies of a number is exactly how they drift.
-/// Clamped here because settings are a JSON file a person can edit, and an
-/// unbounded value is the burst that overloads a vendor.
-const MAX_PROVIDER_CONCURRENCY: usize = 10;
-
 #[tauri::command]
 pub fn cancel_run(control: tauri::State<'_, RunControl>) {
     control.cancel_run();
@@ -90,12 +81,6 @@ pub async fn start_run(
                         out_dir: Some(&out_dir),
                         resume: settings.reuse_completed,
                         triage_model: &settings.triage_model,
-                        // Clamped here, not trusted: settings are a JSON file a person
-                        // can edit, and an unbounded value is the burst that overloads a
-                        // vendor. `batches` floors it at one; the window offers 1–10.
-                        per_vendor_concurrency: settings
-                            .provider_concurrency
-                            .clamp(1, MAX_PROVIDER_CONCURRENCY),
                         cancel: cancel.clone(),
                         progress: Some(progress),
                     },

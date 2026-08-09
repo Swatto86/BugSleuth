@@ -19,10 +19,8 @@ import {
   type ModelSetting,
   LANES,
   LANE_TITLES,
-  MAX_PROVIDER_CONCURRENCY,
   applyStatus,
   batchCount,
-  boundedProviderConcurrency,
   isShippedConfiguration,
   joinId,
   preset,
@@ -314,59 +312,10 @@ test("an identical duplicate row adds nothing, exactly like the engine", () => {
   assert.equal(unitCount(models), 1);
 });
 
-test("provider concurrency is clamped to the cap the field advertises", () => {
-  // Typing (rather than spinning) past the max only marks the field invalid;
-  // the value still reads straight through, and an unbounded value is the burst
-  // that overloads a vendor.
-  assert.equal(boundedProviderConcurrency("500"), MAX_PROVIDER_CONCURRENCY);
-  assert.equal(boundedProviderConcurrency("7"), 7);
-});
-
-test("provider concurrency never drops below one", () => {
-  // Zero or a negative would fan a run out to nothing and sweep nobody, so it
-  // must floor at one rather than at zero the way the old proof count did.
-  assert.equal(boundedProviderConcurrency("0"), 1);
-  assert.equal(boundedProviderConcurrency("-3"), 1);
-});
-
-test("provider concurrency is always an integer the backend can deserialize", () => {
-  // It is a usize in Rust. A float reached Tauri as JSON and failed to
-  // deserialize, which stopped settings saving and runs starting — with a raw
-  // deserialization error rather than anything a user could act on.
-  assert.equal(boundedProviderConcurrency("1.5"), 1);
-  assert.equal(boundedProviderConcurrency("3.9"), 3);
-  assert.equal(boundedProviderConcurrency(""), 1);
-  assert.equal(boundedProviderConcurrency("abc"), 1);
-  for (const raw of ["500", "-3", "1.5", "", "abc", "2e3"]) {
-    assert.ok(
-      Number.isInteger(boundedProviderConcurrency(raw)),
-      `${raw} produced a non-integer`,
-    );
+test("same-provider rounds stay serial", () => {
+  for (const model of ["sonnet", "codex:model", "kilo:model"]) {
+    assert.equal(batchCount([row(model, ["security", "ux"])]), 2, model);
   }
-});
-
-test("the advertised concurrency cap and the enforced cap are the same number", () => {
-  // The same rule written down on both sides of a boundary, with nothing making
-  // them agree, is the defect class this whole file exists to catch.
-  const html = fs.readFileSync(path.join(here, "..", "index.html"), "utf8");
-  const declared = /id="provider-concurrency"[^>]*max="(\d+)"/.exec(html);
-  assert.ok(
-    declared,
-    "the provider-concurrency input no longer declares a max",
-  );
-  assert.equal(Number(declared![1]), MAX_PROVIDER_CONCURRENCY);
-});
-
-test("concurrency collapses a busy vendor's rounds", () => {
-  // The whole point of the setting: one vendor doing five lanes is five rounds
-  // at one-at-a-time, but two rounds at three-at-once. Mirrors Plan::batches.
-  const busy = [row("sonnet", [...LANES])];
-  assert.equal(batchCount(busy, 1), LANES.length);
-  assert.equal(batchCount(busy, 3), Math.ceil(LANES.length / 3));
-  assert.equal(batchCount(busy, 99), 1);
-  // A missing or garbage concurrency behaves as one, never as zero rounds.
-  assert.equal(batchCount(busy), LANES.length);
-  assert.equal(batchCount([], 3), 0);
 });
 
 test("an apply that changed nothing does not claim to have applied anything", () => {
