@@ -55,11 +55,17 @@ absorbing them is most of that crate's job:
 | Codex | Schema as a **file** | `--sandbox read-only` | Final message to a file |
 | Kilo | **None** — described in the prompt | **None** — needs a worktree | NDJSON events, messages repeated |
 
-Two consequences worth knowing:
+Three consequences worth knowing:
 
 - **Kilo sweeps run in a throwaway git worktree**, because it is the only way to
   guarantee a review cannot modify the code it is reviewing. The adapter takes a
   `worktree`, not a `repo`, so the unsafe call does not compile.
+- **A timed-out provider process is resumed, not restarted.** The shared runner
+  kills the process tree but keeps its partial output. Claude receives a session
+  id before launch; Codex and Kilo expose theirs in early JSON events. Each
+  adapter gets one answer-only recovery capped at five minutes, and the report
+  marks that result as potentially incomplete. With no session id, the lane
+  remains `NOT SWEPT` rather than spending another full review from scratch.
 
 Vendor dispatch is an enum, not a trait. The set is closed and small, and the
 differences above are worth seeing rather than hiding behind one interface.

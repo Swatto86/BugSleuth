@@ -106,6 +106,11 @@ configured once and assigned the lanes they cover. Each sweep is written out as
 it lands, so `--resume` picks up a run that died without paying for the sweeps
 it already completed.
 
+If an individual Claude, Codex, or Kilo process times out, BugSleuth keeps its
+partial CLI output and resumes that same session once for an answer-only pass.
+Recovered findings are labelled as potentially incomplete; a run with no usable
+session id remains `NOT SWEPT` rather than silently restarting from scratch.
+
 ```bash
 cargo run -p bugsleuth-cli -- run --repo <path> --config c.json --per-provider 1
 ```
