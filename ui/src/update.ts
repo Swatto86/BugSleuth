@@ -24,6 +24,7 @@ interface Available {
 export interface UpdateDeps {
   button: HTMLButtonElement;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
+  focusStatus: () => void;
   /** True while work that an install-and-restart would interrupt is in flight. */
   busy: () => boolean;
 }
@@ -32,6 +33,8 @@ export function wireUpdate(deps: UpdateDeps): void {
   const { button, setStatus } = deps;
 
   button.addEventListener("click", () => {
+    setStatus("Checking for updates…", "running");
+    if (document.activeElement === button) deps.focusStatus();
     button.disabled = true;
     const previous = button.textContent;
     button.textContent = "Checking…";

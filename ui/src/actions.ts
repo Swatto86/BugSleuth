@@ -30,6 +30,7 @@ export interface ActionDeps {
   setSettings: (models: Settings["models"]) => void;
   render: () => void;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
+  focusStatus: () => void;
   runDeps: () => RunDeps;
   /** Whether the whole matrix is exactly one shipped preset. */
   isShippedConfiguration: (models: Settings["models"]) => boolean;
@@ -103,6 +104,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
       // left set on either path would warn about a clear that had finished.
       clearing = true;
       deps.setStatus("Deleting the saved sweeps…", "running");
+      if (document.activeElement === ui.clearSaved) deps.focusStatus();
       ui.clearSaved.disabled = true;
       invoke<{ removed: number }>("clear_saved", {
         settings: deps.settings(),
@@ -156,8 +158,9 @@ export function bindGuardedActions(deps: ActionDeps): void {
       // its own while it did — and this used to overwrite "Finished" and the
       // ranked defects' status with a permanent, false "Stopping…".
       if (!isRunning()) return;
-      ui.stop.disabled = true;
       deps.setStatus("Stopping — killing the sweeps in flight", "running");
+      if (document.activeElement === ui.stop) deps.focusStatus();
+      ui.stop.disabled = true;
       // A failed cancel must not leave the button dead and the status stuck on
       // "Stopping" forever, with a run still burning quota behind it. Offer the
       // button back and say what happened.

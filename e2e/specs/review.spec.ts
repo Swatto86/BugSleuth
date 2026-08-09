@@ -174,6 +174,11 @@ describe("BugSleuth desktop app", () => {
         timeoutMsg: `run never finished; last status: ${await $("#status").getText()}`,
       },
     );
+    assert.equal(
+      await browser.execute(() => document.activeElement?.id),
+      "status",
+      "run completion dropped keyboard focus to the document body",
+    );
 
     // Effect one: the window shows a merged report naming the defects.
     const output = await $("#output").getText();
@@ -182,10 +187,7 @@ describe("BugSleuth desktop app", () => {
       `no merged report in output:\n${output}`,
     );
 
-    // The handoff is offered, in the real window: a finished run reveals the
-    // panel that applies the fixes, and its controls are really there. The
-    // panel is the only route to a command that writes to the repository, and
-    // nothing outside this suite exercises it in the packaged app.
+    // The real window offers the only route to the repository-writing command.
     await expect($("#apply-panel")).toBeDisplayed();
     await expect($("#apply-vendor")).toBeExisting();
     await expect($("#apply-model input")).toBeExisting();

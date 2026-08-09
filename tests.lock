@@ -81,6 +81,7 @@ node both sides are actually being read
 node both themes define the same set of colours
 node concurrency collapses a busy vendor's rounds
 node dark theme meets WCAG AA everywhere the UI uses it
+node every active control hands focus off before it disables or hides itself
 node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first

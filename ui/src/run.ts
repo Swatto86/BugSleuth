@@ -26,6 +26,7 @@ export interface RunDeps {
   /** Where the fixes are handed to a model. Offered once there is a prompt. */
   applyPanel: HTMLDivElement;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
+  focusStatus: () => void;
   renderPlanSummary: () => void;
   settings: () => Settings;
 }
@@ -66,6 +67,7 @@ export async function startRun(deps: RunDeps): Promise<void> {
     running = false;
     deps.setStatus(String(error), "error");
     deps.output.textContent = String(error);
+    if (document.activeElement === deps.stop) deps.focusStatus();
     deps.renderPlanSummary();
   }
 }
@@ -135,6 +137,7 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     const path = event.payload.promptPath;
     deps.promptPath.classList.toggle("hidden", !path);
     deps.promptPath.textContent = path ? `Also saved to ${path}` : "";
+    if (document.activeElement === deps.stop) deps.focusStatus();
     deps.renderPlanSummary();
   });
 }

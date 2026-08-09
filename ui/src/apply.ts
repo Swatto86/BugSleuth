@@ -51,6 +51,7 @@ export interface ApplyDeps {
   /** Save settings and redraw whatever depends on them. */
   refresh: () => void;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
+  focusStatus: () => void;
 }
 
 let applying = false;
@@ -278,13 +279,14 @@ function start(deps: ApplyDeps): void {
   // re-enabled the button while the first was still editing the repository.
   if (applying) return;
   applying = true;
+  deps.setStatus("Applying the fixes — this edits your repository", "running");
+  if (document.activeElement === deps.ui.button) deps.focusStatus();
   deps.ui.button.disabled = true;
   // Redrawn, not just disabled here: the Run button is disabled from the same
   // flag, and without this it stayed live for the whole apply — every press
   // rejected by Rust with an error, which reads as the app being broken rather
   // than as a button that should not have been offered.
   deps.refresh();
-  deps.setStatus("Applying the fixes — this edits your repository", "running");
   append(deps.ui.output, "Applying the fixes…");
   invoke("apply_fixes", { settings: deps.settings() }).catch(
     (error: unknown) => {

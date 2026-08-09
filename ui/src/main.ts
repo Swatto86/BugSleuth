@@ -209,6 +209,10 @@ function setStatus(text: string, kind: "" | "running" | "error" = ""): void {
   ui.spinner.classList.toggle("hidden", kind !== "running");
 }
 
+function focusStatus(): void {
+  ui.status.focus();
+}
+
 /**
  * The settings-save error has its own region, separate from the status bar, so
  * a run's transient messages can never erase it and it survives until a later
@@ -233,6 +237,7 @@ const runDeps = (): RunDeps => ({
   promptPath: ui.promptPath,
   applyPanel: ui.applyPanel,
   setStatus,
+  focusStatus,
   renderPlanSummary,
   settings: () => settings,
 });
@@ -259,6 +264,7 @@ function bind(): void {
     busy: isRunning,
     refresh,
     setStatus,
+    focusStatus,
   });
 
   bindControls({
@@ -269,12 +275,14 @@ function bind(): void {
     refresh,
     render,
     setStatus,
+    focusStatus,
     fixPrompt: currentFixPrompt,
   });
 
   wireUpdate({
     button: ui.checkUpdate,
     setStatus,
+    focusStatus,
     // Installing restarts the process, so neither reviews nor repository edits
     // may be in flight.
     busy: () => isRunning() || isApplying(),
@@ -288,6 +296,7 @@ function bind(): void {
     },
     render,
     setStatus,
+    focusStatus,
     runDeps,
     isShippedConfiguration,
   });

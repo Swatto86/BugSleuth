@@ -40,6 +40,7 @@ export interface ControlDeps {
   /** Rebuild the model table. */
   render: () => void;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
+  focusStatus: () => void;
   fixPrompt: () => string;
 }
 
@@ -114,6 +115,8 @@ export function bindControls(deps: ControlDeps): void {
     // Disabled while it runs: each click is three real model calls, and a
     // second one started on top of the first would spend twice to learn once.
     // Eir guards its own provider test the same way, for the same reason.
+    deps.setStatus("Checking sign-in…", "running");
+    if (document.activeElement === ui.checkSignin) deps.focusStatus();
     ui.checkSignin.disabled = true;
     const previous = ui.checkSignin.textContent;
     ui.checkSignin.textContent = "Asking each vendor…";
