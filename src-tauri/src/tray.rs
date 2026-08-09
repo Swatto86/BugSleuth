@@ -161,26 +161,15 @@ fn toggle<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Quit, unless work is in flight — in which case ask first.
+/// Ask the frontend to flush settings, then quit or confirm what would be lost.
 ///
 /// The tray's Quit exited immediately while the window's Quit asked for
 /// confirmation, for the identical action. The README calls the tray item the
 /// only real exit, so it is the *more* likely of the two to be used, and it was
 /// the one that could throw away tens of minutes of paid sweeping in silence.
-/// Both go through the same question now: the window is revealed and asked to
-/// put it, which also keeps the wording in one place.
+/// Every tray quit goes through the frontend now: it owns pending settings and
+/// adds the busy-work confirmation when needed.
 pub(crate) fn quit_or_ask<R: Runtime>(app: &AppHandle<R>) {
-    // Any work in flight counts, not just sweeping. Applying is the worst to
-    // kill — a run loses sweeps that can be paid for again, an apply is killed
-    // part-way through editing the repository — and clearing is deleting on
-    // disk; none should be stopped in silence by the tray's Quit.
-    let busy = app
-        .try_state::<crate::commands::RunControl>()
-        .is_some_and(|control| control.running() || control.applying() || control.clearing());
-    if !busy {
-        app.exit(0);
-        return;
-    }
     reveal(app);
     // Best effort. If the window cannot be told, the safe outcome is that
     // nothing is thrown away and the in-window Quit still works.

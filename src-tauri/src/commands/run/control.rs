@@ -138,22 +138,24 @@ impl RunControl {
     }
 
     /// Whether a sweep is in flight. Present exactly while the task is alive.
-    pub fn running(&self) -> bool {
+    #[cfg(test)]
+    fn running(&self) -> bool {
         self.state
             .lock()
             .is_ok_and(|state| matches!(&*state, WorkState::Running(_)))
     }
 
     /// Whether a fix is being applied.
-    pub fn applying(&self) -> bool {
+    #[cfg(test)]
+    fn applying(&self) -> bool {
         self.state
             .lock()
             .is_ok_and(|state| matches!(&*state, WorkState::Applying))
     }
 
-    /// Whether stored sweeps are being deleted. Short-lived, but killing it
-    /// mid-delete is still worth a prompt, so the tray counts it as busy.
-    pub fn clearing(&self) -> bool {
+    /// Whether stored sweeps are being deleted.
+    #[cfg(test)]
+    fn clearing(&self) -> bool {
         self.state
             .lock()
             .is_ok_and(|state| matches!(&*state, WorkState::Clearing))

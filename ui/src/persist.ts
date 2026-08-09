@@ -20,6 +20,12 @@ export interface PersistDeps {
   settings: () => Settings;
   /** Show a save failure in its own persistent region, or clear it with "". */
   setError: (text: string) => void;
+  save?: (settings: Settings) => Promise<void>;
+}
+
+export interface SettingsSaver {
+  schedule: () => void;
+  flush: () => Promise<boolean>;
 }
 
 /**
@@ -31,23 +37,47 @@ export interface PersistDeps {
  * worth of configuration could be lost with nothing ever said. This region only
  * ever carries the save state, and is cleared only by a later successful save.
  */
-export function savingSettings(deps: PersistDeps): () => void {
-  let timer: number | undefined;
+export function savingSettings(deps: PersistDeps): SettingsSaver {
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let dirty = false;
   let failed = false;
+  let tail: Promise<boolean> = Promise.resolve(true);
 
-  return () => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      void invoke("save_settings", { settings: deps.settings() })
-        .then(() => {
-          if (!failed) return;
-          failed = false;
-          deps.setError("");
-        })
-        .catch((error: unknown) => {
-          failed = true;
-          deps.setError(`Settings are not being saved: ${String(error)}`);
-        });
-    }, 400);
+  const cancelTimer = (): void => {
+    if (timer !== undefined) globalThis.clearTimeout(timer);
+    timer = undefined;
+  };
+  const enqueue = (): Promise<boolean> => {
+    const snapshot = structuredClone(deps.settings());
+    dirty = false;
+    tail = tail.then(async () => {
+      try {
+        if (deps.save) await deps.save(snapshot);
+        else await invoke<void>("save_settings", { settings: snapshot });
+        if (failed) deps.setError("");
+        failed = false;
+        return true;
+      } catch (error) {
+        failed = true;
+        deps.setError(`Settings are not being saved: ${String(error)}`);
+        return false;
+      }
+    });
+    return tail;
+  };
+
+  return {
+    schedule: () => {
+      dirty = true;
+      cancelTimer();
+      timer = globalThis.setTimeout(() => {
+        timer = undefined;
+        void enqueue();
+      }, 400);
+    },
+    flush: () => {
+      cancelTimer();
+      return dirty ? enqueue() : tail;
+    },
   };
 }

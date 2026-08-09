@@ -224,10 +224,11 @@ function setSettingsError(text: string): void {
 }
 
 /** Save settings, reporting a failure the user would otherwise never see. */
-const persist = savingSettings({
+const settingsSaver = savingSettings({
   settings: () => settings,
   setError: setSettingsError,
 });
+const persist = (): void => settingsSaver.schedule();
 
 const runDeps = (): RunDeps => ({
   output: ui.output,
@@ -297,6 +298,7 @@ function bind(): void {
     render,
     setStatus,
     focusStatus,
+    flushSettings: () => settingsSaver.flush(),
     runDeps,
     isShippedConfiguration,
   });

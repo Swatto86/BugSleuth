@@ -31,6 +31,7 @@ export interface ActionDeps {
   render: () => void;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
   focusStatus: () => void;
+  flushSettings: () => Promise<boolean>;
   runDeps: () => RunDeps;
   /** Whether the whole matrix is exactly one shipped preset. */
   isShippedConfiguration: (models: Settings["models"]) => boolean;
@@ -50,6 +51,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
   // tray's, which routes through this window — exited mid-`remove_dir_all` with
   // no warning, leaving the runs directory half-deleted.
   let clearing = false;
+  let quitting = false;
 
   for (const name of ["cheap", "balanced", "deep"] as Preset[]) {
     el<HTMLButtonElement>(`preset-${name}`).addEventListener("click", () => {
@@ -191,8 +193,35 @@ export function bindGuardedActions(deps: ActionDeps): void {
   // Remaining visible is not feedback after someone pressed Quit: if the IPC
   // rejects, say so in the live status region rather than looking broken.
   function requestQuit(): void {
-    void invoke("quit").catch((error: unknown) => {
-      deps.setStatus(`Could not quit BugSleuth: ${String(error)}`, "error");
+    if (quitting) return;
+    quitting = true;
+    void (async () => {
+      if (!(await deps.flushSettings())) {
+        deps.setStatus("Latest settings could not be saved", "error");
+        const discard = await confirmDialog({
+          title: "Quit without saving settings?",
+          message:
+            "The latest settings could not be saved. Quitting now discards those changes.",
+          confirmLabel: "Quit without saving",
+          destructive: true,
+        });
+        if (!discard) {
+          quitting = false;
+          return;
+        }
+      }
+      try {
+        await invoke("quit");
+      } catch (error) {
+        quitting = false;
+        deps.setStatus(`Could not quit BugSleuth: ${String(error)}`, "error");
+      }
+    })().catch((error: unknown) => {
+      quitting = false;
+      deps.setStatus(
+        `Could not save settings before quitting: ${String(error)}`,
+        "error",
+      );
     });
   }
 

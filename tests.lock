@@ -100,6 +100,7 @@ node every platform the release builds for is offered in the README
 node every quit into Rust reports its failure rather than looking broken
 node every shipped preset covers every lane
 node every silent-failure opt-out gives a reason
+node flushing writes the latest pending settings exactly once
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
@@ -121,6 +122,7 @@ node only a complete shipped preset bypasses replacement confirmation
 node provider concurrency is always an integer the backend can deserialize
 node provider concurrency is clamped to the cap the field advertises
 node provider concurrency never drops below one
+node quit flushes pending settings before it can invoke exit
 node release tag matches version embedded in the app
 node removing a configured model row is guarded by a confirmation
 node render redirects focus when the focused row was just removed
