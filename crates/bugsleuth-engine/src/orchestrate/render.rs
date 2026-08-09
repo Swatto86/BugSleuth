@@ -159,18 +159,12 @@ impl RunReport {
         ));
         out.push_str(&crate::caveats::limits("  "));
 
-        // Findings the code already answers, moved out of the ranked list.
-        //
-        // Measured over two self-reviews, four of the five findings that did
-        // not survive scrutiny were accurate observations about deliberate
-        // trade-offs documented at the exact line named — the same two,
-        // reported twice each. Not hallucinations: the reviewer was right about
-        // the code and wrong that anyone needed telling. Left in the list they
-        // are indistinguishable from real work, and the reader has no way to
-        // know which is which.
-        //
-        // Each carries the code's own words, verified to be in the file, so
-        // this section can be audited rather than trusted.
+        out.push_str(&self.findings_text());
+        out
+    }
+
+    /// Actionable findings followed by observations the code already explains.
+    fn findings_text(&self) -> String {
         let known: Vec<_> = self
             .ranked
             .iter()
@@ -181,7 +175,7 @@ impl RunReport {
             .iter()
             .filter(|entry| entry.cluster.acknowledged.is_none())
             .collect();
-        out.push_str("\nACTIONABLE FINDINGS\n-------------------\n");
+        let mut out = String::from("\nACTIONABLE FINDINGS\n-------------------\n");
         if !known.is_empty() {
             out.push_str(&format!(
                 "\n  {} additional observations are documented in the code as deliberate\n  \
