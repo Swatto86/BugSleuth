@@ -1,4 +1,4 @@
-//! Resume a read-only Codex sweep whose process timed out.
+//! Resume an interrupted read-only Codex sweep.
 
 use std::path::Path;
 use std::time::Duration;
@@ -7,7 +7,7 @@ use super::{Invoke, Sandbox, VENDOR, build_args, finish};
 use crate::error::ProviderError;
 use crate::process::{self, CliOutput, Invocation, ProcessError};
 
-const ASK: &str = "The previous CLI run timed out. Return only the final answer from work already completed in this conversation. Do not inspect or change anything else.";
+const ASK: &str = "The previous CLI run was interrupted. Return only the final answer from work already completed in this conversation. Do not inspect or change anything else.";
 
 pub(super) async fn finish_or_resume(
     output: Result<CliOutput, ProcessError>,
@@ -16,12 +16,26 @@ pub(super) async fn finish_or_resume(
     schema: &Path,
     answer: &Path,
 ) -> Result<(String, bool), ProviderError> {
-    let error = match output {
-        Err(error @ ProcessError::Timeout { .. }) if spec.sandbox == Sandbox::ReadOnly => error,
+    let (error, session) = match output {
+        Err(error @ ProcessError::Timeout { .. }) if spec.sandbox == Sandbox::ReadOnly => {
+            let session = error.output().and_then(|out| thread_id(&out.stdout));
+            (ProviderError::from(error), session)
+        }
+        Ok(output) if spec.sandbox == Sandbox::ReadOnly && !output.succeeded() => {
+            let session = thread_id(&output.stdout);
+            let error = match finish(Ok(output), answer) {
+                Err(error) => error,
+                Ok(answer) => return Ok((answer, false)),
+            };
+            if !error.is_transient() {
+                return Err(error);
+            }
+            (error, session)
+        }
         other => return finish(other, answer).map(|answer| (answer, false)),
     };
-    let Some(session) = error.output().and_then(|out| thread_id(&out.stdout)) else {
-        return Err(error.into());
+    let Some(session) = session else {
+        return Err(error);
     };
     let original = error.to_string();
     if let Err(error) = std::fs::remove_file(answer)

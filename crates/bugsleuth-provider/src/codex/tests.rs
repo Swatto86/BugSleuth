@@ -159,6 +159,56 @@ async fn a_timed_out_sweep_resumes_the_thread_reported_by_the_cli() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[cfg(windows)]
+#[tokio::test]
+async fn a_transient_failed_turn_resumes_the_thread_reported_by_the_cli() {
+    let dir =
+        std::env::temp_dir().join(format!("bugsleuth-codex-transient-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch directory");
+    let stub = dir.join("codex.cmd");
+    std::fs::write(
+        &stub,
+        "@echo off\r\n\
+         echo %* | findstr /c:\"resume codex-thread-transient\" > nul && goto resumed\r\n\
+         echo {\"type\":\"thread.started\",\"thread_id\":\"codex-thread-transient\"}\r\n\
+         echo {\"type\":\"turn.failed\",\"error\":{\"message\":\"server overloaded\"}}\r\n\
+         exit /b 1\r\n\
+         :resumed\r\n\
+         echo %* > resumed.txt\r\n\
+         :args\r\n\
+         if \"%~1\"==\"\" exit /b 2\r\n\
+         if \"%~1\"==\"--output-last-message\" goto answer\r\n\
+         shift\r\n\
+         goto args\r\n\
+         :answer\r\n\
+         >\"%~2\" echo {\"findings\":[]}\r\n\
+         echo {\"type\":\"turn.completed\"}\r\n",
+    )
+    .expect("write CLI stub");
+    let binary = stub.to_string_lossy().into_owned();
+
+    let result = sweep(CodexSweep {
+        repo: &dir,
+        model: "",
+        effort: "",
+        brief: "review",
+        timeout: Duration::from_secs(5),
+        binary: Some(&binary),
+    })
+    .await
+    .expect("resume should recover the answer");
+
+    assert!(result.findings.findings.is_empty());
+    assert!(result.salvaged);
+    let resumed = std::fs::read_to_string(dir.join("resumed.txt")).expect("resume argv");
+    assert!(
+        resumed.contains("resume codex-thread-transient"),
+        "{resumed}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn cleanup_guard_removes_the_directory_on_drop() {
     // The scratch guard's whole job: whatever exit path invoke_text takes — a
