@@ -181,14 +181,46 @@ fn a_turn_budget_exhaustion_is_reported_as_its_own_failure_not_a_generic_one() {
     assert!(!exhausted.is_transient());
 }
 
-#[test]
-fn a_salvage_is_never_itself_salvaged() {
+#[cfg(windows)]
+#[tokio::test]
+async fn a_salvage_is_never_itself_salvaged() {
     // The guard that stops a cycle: a resumed run that also runs out of
     // turns has said the conversation cannot answer, and a third attempt
-    // would only spend more budget hearing it again.
-    let mut spec = run("sonnet");
-    spec.resume = Some("abc");
-    assert!(spec.resume.is_some(), "the wrapper keys off exactly this");
+    // would only spend more budget hearing it again. Exercised for real: a
+    // stub CLI that always exhausts its turns, invoked with `resume` set,
+    // must fail once and must not be resumed again.
+    let dir = std::env::temp_dir().join(format!("bugsleuth-claude-salvage-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch directory");
+    let stub = dir.join("claude.cmd");
+    std::fs::write(
+        &stub,
+        "@echo off\r\n\
+         echo call >> calls.txt\r\n\
+         echo {\"is_error\":true,\"subtype\":\"error_max_turns\",\"session_id\":\"same-session\"}\r\n\
+         exit /b 1\r\n",
+    )
+    .expect("write CLI stub");
+    let binary = stub.to_string_lossy().into_owned();
+
+    let mut request = run("");
+    request.repo = &dir;
+    request.schema = serde_json::Value::Null;
+    request.binary = Some(&binary);
+    request.resume = Some("earlier-session");
+    let outcome = invoke(request).await;
+
+    assert!(
+        matches!(outcome, Err(ProviderError::TurnsExhausted { .. })),
+        "an already-resuming run was salvaged again instead of failing plainly: {outcome:?}"
+    );
+    let calls = std::fs::read_to_string(dir.join("calls.txt")).expect("call log");
+    assert_eq!(
+        calls.lines().count(),
+        1,
+        "the CLI ran more than once, so the salvage was itself salvaged"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
