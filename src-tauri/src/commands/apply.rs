@@ -57,10 +57,11 @@ pub async fn apply_fixes(
     // it, so the two must never overlap — and a single check-then-set could let
     // a run start in the gap. Every early return before here has reserved
     // nothing, so none leaks the state.
-    control.try_start_apply()?;
+    let cancel = bugsleuth_engine::cancel::Cancel::new();
+    control.try_start_apply(cancel.clone())?;
     crate::tray::work_started(&app, crate::tray::BackgroundWork::Apply);
     tauri::async_runtime::spawn(async move {
-        let report = bugsleuth_engine::apply::apply(bugsleuth_engine::apply::ApplyRequest {
+        let request = bugsleuth_engine::apply::apply(bugsleuth_engine::apply::ApplyRequest {
             repo: &repo,
             model: &model,
             effort: &effort,
@@ -69,8 +70,15 @@ pub async fn apply_fixes(
             max_turns: APPLY_MAX_TURNS,
             push: settings.push_after_apply,
             tag: settings.tag_release_after_push,
-        })
-        .await;
+        });
+        let report = tokio::select! {
+            biased;
+            () = cancel.cancelled() => Err(anyhow::anyhow!(
+                "the apply was stopped. The model was killed part-way through editing the \
+                 repository — check `git status` and `git log` to see what it had already changed."
+            )),
+            report = request => report,
+        };
 
         let payload = match report {
             Ok(report) => serde_json::json!({
@@ -98,4 +106,11 @@ pub async fn apply_fixes(
     });
 
     Ok(())
+}
+
+/// Stop the apply in flight. The provider process is killed; commits it had
+/// already made stay in git, and the `apply-finished` event says it was stopped.
+#[tauri::command]
+pub fn cancel_apply(control: tauri::State<'_, RunControl>) {
+    control.cancel_apply();
 }

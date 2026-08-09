@@ -129,7 +129,7 @@ function renderPlanSummary(): void {
   ui.clearSaved.disabled = isRunning() || isApplying();
   // Offered only while there is something to stop, so it is never a button
   // that does nothing.
-  ui.stop.classList.toggle("hidden", !isRunning());
+  ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
 }
 
 /**
@@ -256,6 +256,7 @@ function bind(): void {
       model: ui.applyModel,
       effort: ui.applyEffort,
       button: ui.applyFixes,
+      stop: ui.stop,
       push: ui.pushAfterApply,
       tag: ui.tagReleaseAfterPush,
       output: ui.output,

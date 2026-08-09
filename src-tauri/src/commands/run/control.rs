@@ -22,7 +22,7 @@
 enum WorkState {
     Idle,
     Running(bugsleuth_engine::cancel::Cancel),
-    Applying,
+    Applying(bugsleuth_engine::cancel::Cancel),
     Clearing,
 }
 
@@ -58,7 +58,7 @@ impl RunControl {
                 Ok(())
             }
             WorkState::Running(_) => Err("a review is already running".to_string()),
-            WorkState::Applying => Err(
+            WorkState::Applying(_) => Err(
                 "fixes are being applied to this repository — wait for that to finish".to_string(),
             ),
             WorkState::Clearing => {
@@ -68,18 +68,18 @@ impl RunControl {
     }
 
     /// Reserve the applying state, or say why it cannot start.
-    pub fn try_start_apply(&self) -> Result<(), String> {
+    pub fn try_start_apply(&self, cancel: bugsleuth_engine::cancel::Cancel) -> Result<(), String> {
         let mut state = self.state.lock().map_err(|_| lock_poisoned())?;
         match &*state {
             WorkState::Idle => {
-                *state = WorkState::Applying;
+                *state = WorkState::Applying(cancel);
                 Ok(())
             }
             WorkState::Running(_) => Err(
                 "a review is running — applying fixes now would edit the code it is reading"
                     .to_string(),
             ),
-            WorkState::Applying => Err("fixes are already being applied".to_string()),
+            WorkState::Applying(_) => Err("fixes are already being applied".to_string()),
             WorkState::Clearing => {
                 Err("saved sweeps are being cleared — wait for that to finish".to_string())
             }
@@ -97,7 +97,7 @@ impl RunControl {
             WorkState::Running(_) => Err(
                 "a review is running — it is writing here, so wait for it to finish".to_string(),
             ),
-            WorkState::Applying => Err(
+            WorkState::Applying(_) => Err(
                 "fixes are being applied — they are writing here, so wait for that to finish"
                     .to_string(),
             ),
@@ -122,7 +122,7 @@ impl RunControl {
     /// Mark an apply over. Clears only the applying state.
     pub fn finish_apply(&self) {
         if let Ok(mut state) = self.state.lock()
-            && matches!(&*state, WorkState::Applying)
+            && matches!(&*state, WorkState::Applying(_))
         {
             *state = WorkState::Idle;
         }
@@ -150,7 +150,7 @@ impl RunControl {
     fn applying(&self) -> bool {
         self.state
             .lock()
-            .is_ok_and(|state| matches!(&*state, WorkState::Applying))
+            .is_ok_and(|state| matches!(&*state, WorkState::Applying(_)))
     }
 
     /// Whether stored sweeps are being deleted.
@@ -165,6 +165,15 @@ impl RunControl {
     pub fn cancel_run(&self) {
         if let Ok(state) = self.state.lock()
             && let WorkState::Running(cancel) = &*state
+        {
+            cancel.stop();
+        }
+    }
+
+    /// Stop the apply in flight, if there is one.
+    pub fn cancel_apply(&self) {
+        if let Ok(state) = self.state.lock()
+            && let WorkState::Applying(cancel) = &*state
         {
             cancel.stop();
         }
@@ -212,8 +221,10 @@ mod tests {
     #[test]
     fn run_control_run_and_apply_cannot_both_start() {
         for _ in 0..200 {
-            let (control, run_ok, apply_ok) =
-                race(|c| c.try_start_run(Cancel::new()), |c| c.try_start_apply());
+            let (control, run_ok, apply_ok) = race(
+                |c| c.try_start_run(Cancel::new()),
+                |c| c.try_start_apply(Cancel::new()),
+            );
             assert!(run_ok ^ apply_ok, "exactly one of run/apply must win");
             if run_ok {
                 assert!(control.running() && !control.applying());
@@ -251,11 +262,25 @@ mod tests {
         // started after it.
         let control = RunControl::default();
         control
-            .try_start_apply()
+            .try_start_apply(Cancel::new())
             .expect("apply should start from idle");
         control.finish_run();
         assert!(control.applying(), "finish_run wrongly idled a live apply");
         control.finish_apply();
         assert!(!control.running() && !control.applying() && !control.clearing());
+    }
+
+    #[test]
+    fn cancelling_an_apply_stops_its_signal() {
+        let control = RunControl::default();
+        let cancel = Cancel::new();
+        control
+            .try_start_apply(cancel.clone())
+            .expect("apply should start from idle");
+        control.cancel_apply();
+        assert!(
+            cancel.stopped(),
+            "cancel_apply did not stop the applying signal"
+        );
     }
 }

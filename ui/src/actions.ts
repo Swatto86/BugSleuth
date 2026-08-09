@@ -145,13 +145,17 @@ export function bindGuardedActions(deps: ActionDeps): void {
   // subscription quota, and quitting throws away every lane not yet written to
   // disk. One misplaced click should not be able to do that silently.
   ui.stop.addEventListener("click", () => {
+    const applying = isApplying();
     void confirmDialog({
-      title: "Stop this review?",
-      message:
-        "Sweeps that have already finished are kept on disk, and running " +
-        "again with reuse enabled picks up from there rather than paying for " +
-        "them twice. Sweeps still in flight are abandoned.",
-      confirmLabel: "Stop the review",
+      title: applying ? "Stop applying the fixes?" : "Stop this review?",
+      message: applying
+        ? "The model is killed part-way through editing this repository. " +
+          "Commits it has already made are kept — check `git status` and " +
+          "`git log` afterwards to see how far it got."
+        : "Sweeps that have already finished are kept on disk, and running " +
+          "again with reuse enabled picks up from there rather than paying for " +
+          "them twice. Sweeps still in flight are abandoned.",
+      confirmLabel: applying ? "Stop applying" : "Stop the review",
       destructive: true,
     }).then((yes) => {
       if (!yes) return;
@@ -159,17 +163,29 @@ export function bindGuardedActions(deps: ActionDeps): void {
       // dialog can sit open for any part of it, so the run may have finished on
       // its own while it did — and this used to overwrite "Finished" and the
       // ranked defects' status with a permanent, false "Stopping…".
-      if (!isRunning()) return;
-      deps.setStatus("Stopping — killing the sweeps in flight", "running");
+      if (applying ? !isApplying() : !isRunning()) return;
+      deps.setStatus(
+        applying
+          ? "Stopping — killing the model mid-apply"
+          : "Stopping — killing the sweeps in flight",
+        "running",
+      );
       if (document.activeElement === ui.stop) deps.focusStatus();
       ui.stop.disabled = true;
       // A failed cancel must not leave the button dead and the status stuck on
       // "Stopping" forever, with a run still burning quota behind it. Offer the
       // button back and say what happened.
-      void invoke("cancel_run").catch((error: unknown) => {
-        ui.stop.disabled = false;
-        deps.setStatus(`Could not stop the run: ${String(error)}`, "error");
-      });
+      void (applying ? invoke("cancel_apply") : invoke("cancel_run")).catch(
+        (error: unknown) => {
+          ui.stop.disabled = false;
+          deps.setStatus(
+            applying
+              ? `Could not stop the apply: ${String(error)}`
+              : `Could not stop the run: ${String(error)}`,
+            "error",
+          );
+        },
+      );
     });
   });
 

@@ -38,6 +38,7 @@ export interface ApplyDeps {
     /** Holds the effort control, rebuilt whenever the model changes. */
     effort: HTMLDivElement;
     button: HTMLButtonElement;
+    stop: HTMLButtonElement;
     /** Opt-in to publishing what the apply commits. */
     push: HTMLInputElement;
     /** Opt-in to tagging what the push published, so CI releases it. */
@@ -266,6 +267,7 @@ export function bindApply(deps: ApplyDeps): () => void {
         applyStatus(event.payload.ok, changed),
         event.payload.ok ? "" : "error",
       );
+      if (document.activeElement === ui.stop) deps.focusStatus();
       deps.refresh();
       draw();
     },
@@ -297,6 +299,9 @@ function start(deps: ApplyDeps, repo: string): void {
   // rejected by Rust with an error, which reads as the app being broken rather
   // than as a button that should not have been offered.
   deps.refresh();
+  // A stop from a previous operation left the button disabled; this apply is a
+  // fresh operation with its own stop.
+  deps.ui.stop.disabled = false;
   append(deps.ui.output, "Applying the fixes…");
   const settings = settingsForApply(deps.settings(), repo);
   invoke("apply_fixes", { settings }).catch((error: unknown) => {
