@@ -250,10 +250,16 @@ pub(super) async fn invoke_once(run: Run<'_>) -> Result<ResultEnvelope, Provider
     let binary = binary.to_string_lossy().into_owned();
 
     let args = build_args(&run);
-    let env: Vec<(String, String)> = run
+    let mut env: Vec<(String, String)> = run
         .api_key
         .map(|key| vec![("ANTHROPIC_API_KEY".to_string(), key.to_string())])
         .unwrap_or_default();
+    if run.resume.is_some() {
+        env.push((
+            "CLAUDE_CODE_RESUME_INTERRUPTED_TURN".to_string(),
+            "1".to_string(),
+        ));
+    }
 
     let output = process::run(Invocation {
         binary: &binary,

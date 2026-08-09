@@ -109,6 +109,7 @@ async fn a_timed_out_run_resumes_the_same_session_once() {
          exit /b 1\r\n\
          :resumed\r\n\
          echo %* > resumed.txt\r\n\
+         echo %CLAUDE_CODE_RESUME_INTERRUPTED_TURN% > resumed-env.txt\r\n\
          echo {\"result\":\"recovered\",\"is_error\":false,\"session_id\":\"same-session\"}\r\n",
     )
     .expect("write CLI stub");
@@ -136,6 +137,12 @@ async fn a_timed_out_run_resumes_the_same_session_once() {
     assert_eq!(
         value_after(&initial, "--session-id"),
         value_after(&resumed, "--resume")
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join("resumed-env.txt"))
+            .expect("resume environment")
+            .trim(),
+        "1"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
