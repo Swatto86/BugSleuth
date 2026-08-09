@@ -11,20 +11,20 @@ use bugsleuth_domain::Lane;
 use super::{Gap, RunOptions};
 use crate::plan::{Plan, Unit};
 
-/// Whether the repository has uncommitted changes.
+/// Whether git cannot confirm that the repository is clean.
 ///
 /// A sweep by an ordinary vendor reads the **working tree**, but a vendor that
 /// must run in isolation (Kilo) reviews a worktree checked out at **HEAD**. On a
 /// dirty repository those are different code, so one run would review two
 /// versions at once and the merged report would silently span them. Surfacing
 /// the mismatch is the whole point of the caution below.
-pub(super) fn has_uncommitted_changes(repo: &std::path::Path) -> bool {
+pub(super) fn repository_is_not_confirmed_clean(repo: &std::path::Path) -> bool {
     bugsleuth_verify::hide_console_window(&mut std::process::Command::new("git"))
         .args(["status", "--porcelain"])
         .current_dir(repo)
         .output()
-        .map(|out| !out.stdout.is_empty())
-        .unwrap_or(false)
+        .map(|out| !out.status.success() || !out.stdout.is_empty())
+        .unwrap_or(true)
 }
 
 /// Everything worth saying before any quota is spent.
@@ -38,17 +38,18 @@ pub(super) fn caution(plan: &Plan, repo: &std::path::Path) {
     // tree. On a dirty repository those are different code, so one run would be
     // reviewing two versions at once and the merged report would silently mix
     // them. Say so rather than let the reader assume one consistent review.
-    if has_uncommitted_changes(repo)
+    if repository_is_not_confirmed_clean(repo)
         && plan
             .units
             .iter()
             .any(|unit| crate::sweep::Vendor::parse(&unit.model).0.needs_isolation())
     {
         eprintln!(
-            "warning: the repository has uncommitted changes, and this run includes a\n         \
-             vendor that must review a throwaway checkout of HEAD. Those vendors will\n         \
-             not see your uncommitted work while the others will, so the merged report\n         \
-             would span two versions of the code. Commit or stash first."
+            "warning: the repository is not confirmed clean, and this run includes a\n         \
+             vendor that must review a throwaway checkout of HEAD. Any uncommitted work\n         \
+             will be invisible to those vendors while the others see it, so the report\n         \
+             could span two versions of the code. Run git status successfully, then\n         \
+             commit or stash changes first."
         );
     }
 
@@ -147,14 +148,29 @@ mod tests {
         let _ = git(&["add", "-A"]);
         let _ = git(&["commit", "-qm", "base"]);
         assert!(
-            !has_uncommitted_changes(&dir),
+            !repository_is_not_confirmed_clean(&dir),
             "a freshly committed tree is clean"
         );
 
         let _ = std::fs::write(dir.join("a.txt"), "changed\n");
         assert!(
-            has_uncommitted_changes(&dir),
+            repository_is_not_confirmed_clean(&dir),
             "an edited working tree is dirty, and a mixed-version review would silently miss it"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_git_status_is_not_mistaken_for_a_clean_tree() {
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-failed-git-status-tests")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create non-repository directory");
+
+        assert!(
+            repository_is_not_confirmed_clean(&dir),
+            "a failed git status must warn rather than silently authorize a mixed-version review"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
