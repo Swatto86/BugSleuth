@@ -177,6 +177,7 @@ rust anchor::tests::rejects_code_that_does_not_exist_in_the_file
 rust anchor::tests::tolerates_re_indented_code
 rust apply::attribution::tests::a_clean_history_reports_nothing_rather_than_an_empty_subject
 rust apply::attribution::tests::a_commit_crediting_the_tool_is_spotted_and_an_ordinary_one_is_not
+rust apply::attribution::tests::a_credit_in_the_subject_line_is_still_reported
 rust apply::attribution::tests::an_unborn_repositorys_initial_commit_is_stripped_as_a_root
 rust apply::attribution::tests::attribution_read_errors_fail_closed
 rust apply::attribution::tests::stripping_removes_the_trailer_and_changes_nothing_else

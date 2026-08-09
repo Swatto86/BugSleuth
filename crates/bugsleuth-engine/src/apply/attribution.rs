@@ -232,7 +232,7 @@ pub(super) fn attributed(log: &str) -> Vec<String> {
     log.split('\u{1e}')
         .filter_map(|record| {
             let (subject, body) = record.trim_start().split_once('\u{0}')?;
-            let credited = body.lines().any(credits_a_tool);
+            let credited = credits_a_tool(subject) || body.lines().any(credits_a_tool);
             credited.then(|| subject.trim().to_string())
         })
         .filter(|subject| !subject.is_empty())

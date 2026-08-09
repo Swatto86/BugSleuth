@@ -26,6 +26,14 @@ fn a_commit_crediting_the_tool_is_spotted_and_an_ordinary_one_is_not() {
 }
 
 #[test]
+fn a_credit_in_the_subject_line_is_still_reported() {
+    assert_eq!(
+        attributed("Generated with Claude Code\u{0}an ordinary body\u{1e}"),
+        ["Generated with Claude Code"]
+    );
+}
+
+#[test]
 fn the_format_string_is_the_one_git_actually_produces() {
     // The test above builds the log by hand, which proves the parser and
     // nothing about `git log --format=...`. One separator wrong and the
