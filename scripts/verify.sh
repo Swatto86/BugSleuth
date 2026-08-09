@@ -210,7 +210,7 @@ if [ "$package" = "1" ]; then
   # has recorded "dev", every later `tauri build` reuses it and silently makes
   # an app whose window is blank without a dev server.
   cargo clean --release
-  npx --yes @tauri-apps/cli@^2 build
+  npx --no-install tauri build
 fi
 
 printf '\nALL CHECKS PASSED\n'
