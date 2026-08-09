@@ -333,13 +333,13 @@ fn commentary_at(repo: &Path, finding: &bugsleuth_domain::Finding) -> Option<Str
     while index > 0 && block.len() < MOST {
         index -= 1;
         let line = lines.get(index)?.trim();
+        // Attributes and blank lines sit between a doc comment and the item it
+        // documents, so they neither end the block nor join its commentary.
+        if line.is_empty() || line.starts_with("#[") || line.starts_with("#![") {
+            continue;
+        }
         let is_comment = line.starts_with("//") || line.starts_with('#') || line.starts_with('*');
         if !is_comment {
-            // Attributes and blank lines sit between a doc comment and the item
-            // it documents, so they do not end the block.
-            if line.is_empty() || line.starts_with("#[") {
-                continue;
-            }
             break;
         }
         block.push(line);

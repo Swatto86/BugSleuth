@@ -639,6 +639,7 @@ rust triage::tests::a_verdict_making_no_such_claim_is_left_alone
 rust triage::tests::a_verdict_reply_parses_into_verdicts
 rust triage::tests::cancelled_run_does_not_start_or_wait_for_triage
 rust triage::tests::every_defect_is_offered_under_an_id_the_reply_can_name
+rust triage::tests::rust_attributes_are_skipped_instead_of_quoted_as_commentary
 rust triage::tests::the_prompt_carries_what_the_code_says_about_itself
 rust triage::tests::the_prompt_forbids_the_three_things_that_would_damage_the_report
 rust triage::tests::the_prompt_never_offers_tools_the_pass_does_not_have

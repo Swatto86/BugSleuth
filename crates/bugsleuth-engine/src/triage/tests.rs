@@ -254,3 +254,24 @@ fn the_prompt_carries_what_the_code_says_about_itself() {
     assert!(prompt.contains("empty private directory"), "{prompt}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn rust_attributes_are_skipped_instead_of_quoted_as_commentary() {
+    let dir = scratch(
+        "attributes",
+        "// the real reason\n#[serde(default)]\nfn code() {}\n",
+    );
+    let finding = cluster();
+    let commentary = commentary_at(&dir, &finding.findings[0]).expect("comment above item");
+    assert!(commentary.contains("the real reason"), "{commentary}");
+    assert!(!commentary.contains("#[serde"), "{commentary}");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let dir = scratch(
+        "attributes-only",
+        "#[derive(Debug)]\n#[serde(default)]\nfn code() {}\n",
+    );
+    let finding = cluster();
+    assert!(commentary_at(&dir, &finding.findings[0]).is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
