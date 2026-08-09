@@ -105,6 +105,7 @@ node every command the page calls exists in Rust and is exposed
 node every control the matrix rebuilds can be found again afterwards
 node every element the code looks up exists in the markup
 node every event has both an emitter and a listener
+node every lane header explains what that lane hunts
 node every platform the release builds for is offered in the README
 node every quit into Rust reports its failure rather than looking broken
 node every shipped preset covers every lane
@@ -322,6 +323,7 @@ rust codex::scratch::tests::output_that_is_not_events_yields_no_error_rather_tha
 rust codex::scratch::tests::the_scratch_directory_is_outside_the_reviewed_repository
 rust codex::tests::a_sweep_runs_read_only_and_ignores_the_reviewed_repos_own_config
 rust codex::tests::a_timed_out_sweep_resumes_the_thread_reported_by_the_cli
+rust codex::tests::a_transient_failed_turn_resumes_the_thread_reported_by_the_cli
 rust codex::tests::an_apply_may_write_because_it_has_to_edit_files
 rust codex::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
 rust codex::tests::an_invocation_that_must_write_does_not_also_ignore_the_machines_config
@@ -443,6 +445,7 @@ rust kilo::tests::an_id_with_no_prefix_leaves_the_choice_to_kilo
 rust kilo::tests::every_route_can_be_described_to_a_person
 rust kilo::tests::external_plugins_are_skipped_so_the_machine_cannot_change_the_review
 rust kilo::tests::external_project_skills_are_disabled
+rust kilo::tests::kilos_native_timeout_exit_resumes_the_session_it_reported
 rust kilo::tests::the_model_id_says_which_account_a_sweep_will_spend_from
 rust kilo::tests::the_preflight_checks_the_agent_the_sweep_actually_runs_as
 rust kilo::tests::the_working_directory_is_pinned_explicitly
