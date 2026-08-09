@@ -48,7 +48,7 @@ looking, not by inference:
 | 4 | Set a repository, one model, one lane; Untick **Re-grade every severity** | Footer shows one sweep and one round; Run enables; triage is off so this journey remains one model invocation |
 | 5 | **Run review** | Progress streams into the result pane as it happens |
 | 6 | Wait for it | Status reaches Finished and findings are listed |
-| 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
+| 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>-<16-hex-path-hash>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
 | 7b | Check a finding's `fix` | It has an approach, at least one edit naming a symbol, a verification command, and risks. An empty plan renders as "no fix plan" rather than as nothing |
 | 7c | **Copy fix prompt** | The button appears when the run ends, copies, and briefly says "Copied". The path under it points at a real `fix-prompt.md` in the run directory |
 | 8 | Check the reviewed repo | Unchanged: `git status` clean, no `.bugsleuth-worktrees` left behind |

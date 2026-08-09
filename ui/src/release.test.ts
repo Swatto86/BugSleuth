@@ -328,3 +328,17 @@ test("the runbook derives the installer name from Tauri's version", () => {
   assert.ok(runbook.includes("BugSleuth_${version}_x64-setup.exe"));
   assert.doesNotMatch(runbook, /BugSleuth_\d+\.\d+\.\d+_x64-setup\.exe/);
 });
+
+test("run-directory documentation includes the backend path hash", () => {
+  const source = read("src-tauri", "src", "commands", "run.rs");
+  assert.ok(
+    source.includes('format!("{name}-{hash:016x}")'),
+    "the backend path scan no longer found its known format",
+  );
+  for (const doc of ["README.md", "RUNBOOK.md"]) {
+    assert.ok(
+      read(doc).includes("<repo>-<16-hex-path-hash>"),
+      `${doc} omits the suffix the backend writes`,
+    );
+  }
+});

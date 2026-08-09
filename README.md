@@ -80,7 +80,9 @@ Hover a lane heading for the defects that lane is assigned to hunt.
 
 Dark and light both, following the system by default, switchable in the title
 bar. Settings live in `%APPDATA%\BugSleuth\settings.json`, and each run's
-per-sweep JSON goes in `%APPDATA%\BugSleuth\runs\<repo>`.
+per-sweep JSON goes in
+`%APPDATA%\BugSleuth\runs\<repo>-<16-hex-path-hash>`. The hash distinguishes
+checkouts that share the same folder name.
 
 ## Using the command line
 
