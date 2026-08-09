@@ -290,3 +290,20 @@ test("the E2E stop check observes a real provider before and after cancellation"
     `only ${observations} provider-process observations`,
   );
 });
+
+test("safety docs describe the triage exception to lane-relative grades", () => {
+  const engine = read("crates", "bugsleuth-engine", "src", "triage.rs");
+  assert.ok(
+    engine.includes("Grade all of them together, against each other."),
+    "the test no longer found the known runtime rule",
+  );
+  for (const doc of ["README.md", "ARCHITECTURE.md"]) {
+    const text = read(doc);
+    assert.ok(
+      text.includes(
+        "Cross-lane severities are compared only after a complete triage pass.",
+      ),
+    );
+    assert.ok(!text.includes("Severities are not compared across lanes."));
+  }
+});

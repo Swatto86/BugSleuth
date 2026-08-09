@@ -141,8 +141,10 @@ These are the ones to protect when changing anything:
 - **A lane that did not run is never rendered as a lane that found nothing.**
   Both kinds of hole — no model assigned, and sweep failed — are named with a
   reason, and either makes the command exit non-zero.
-- **Severities are not compared across lanes.** They were assigned by models
-  answering different questions.
+- **Cross-lane severities are compared only after a complete triage pass.**
+  That pass grades the merged list against one rubric. If it is disabled,
+  fails, or is partial, the report warns that lane-relative grades are not
+  comparable.
 - **A review cannot modify the code it reviews**, and **the reviewed repository
   cannot alter its own review** (every vendor runs with customizations disabled,
   so the target's hooks and config are not loaded).

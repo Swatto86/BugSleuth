@@ -164,10 +164,10 @@ repository you care about:
   rejected push is reported and left alone. It refuses outright if any commit
   still credits a tool for the work — that is the one thing pushing makes
   permanent.
-- **Severities are not compared across lanes.** A "high" from the security lane
-  and a "high" from the correctness lane were assigned by models answering
-  different questions, so a multi-lane report says so rather than implying a
-  ranking nobody made.
+- **Cross-lane severities are compared only after a complete triage pass.** By
+  default, one model re-grades the merged list against one rubric. If triage is
+  disabled, fails, or grades only part of the list, the report warns that the
+  remaining grades are lane-relative and must not be compared across lanes.
 
 ## End-to-end tests
 
