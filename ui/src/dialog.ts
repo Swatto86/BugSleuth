@@ -71,7 +71,15 @@ export function confirmDialog(request: ConfirmRequest): Promise<boolean> {
       overlay.remove();
       // Put the caller back where they were, or a keyboard user restarts from
       // the top of the document every time they decline something.
-      opener?.focus?.();
+      const canRestore =
+        opener !== null &&
+        opener !== document.body &&
+        opener.isConnected &&
+        !opener.matches(":disabled, [hidden], .hidden");
+      if (canRestore) opener.focus();
+      if (!canRestore || document.activeElement !== opener) {
+        document.getElementById("status")?.focus();
+      }
       resolve(answer);
     };
 
