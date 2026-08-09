@@ -1,4 +1,5 @@
 platform windows
+node Tab with focus outside the dialog's buttons re-enters the trap
 node a bare Claude model never gains a redundant prefix
 node a bare and a prefixed Claude model on one lane count as a single unit
 node a bare voided call is not handled

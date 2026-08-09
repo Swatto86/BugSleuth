@@ -94,6 +94,11 @@ export function confirmDialog(request: ConfirmRequest): Promise<boolean> {
       } else if (!event.shiftKey && active === last) {
         event.preventDefault();
         first.focus();
+      } else if (active !== first && active !== last) {
+        // A click on the dialog's text lands focus on <body>; Tab must
+        // re-enter the trap, not walk the app behind the overlay.
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
       }
     };
 

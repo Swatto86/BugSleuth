@@ -40,3 +40,15 @@ test("the confirmation dialog describes its message to assistive tech", () => {
     "the dialog panel is not described by its warning paragraph",
   );
 });
+
+test("Tab with focus outside the dialog's buttons re-enters the trap", () => {
+  const dialog = frontendFiles().find((file) => file.fileName === "dialog.ts");
+  assert.ok(dialog, "dialog.ts is no longer a shipped frontend module");
+  const confirmDialog = functionText(dialog, "confirmDialog");
+  assert.ok(confirmDialog, "confirmDialog() is gone from dialog.ts");
+  assert.match(
+    confirmDialog,
+    /active !== first && active !== last/,
+    "Tab from <body> escapes the modal into the app behind the overlay",
+  );
+});
