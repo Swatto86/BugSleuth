@@ -159,6 +159,7 @@ node the clear handler shows a running status while the delete is in flight
 node the clearing flag is set before the clear and released on both outcomes
 node the confirmation dialog describes its message to assistive tech
 node the documentation does not point at files that no longer exist
+node the finding cards allow text selection
 node the frontend actually calls into Rust, so this test is not vacuous
 node the live E2E review replaces saved configuration deterministically
 node the one-invocation journey disables the default triage pass

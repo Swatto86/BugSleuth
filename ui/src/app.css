@@ -480,6 +480,7 @@ label.checkline input[type="checkbox"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  user-select: text;
 }
 
 .finding-where {

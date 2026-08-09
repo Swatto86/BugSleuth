@@ -318,3 +318,10 @@ test("every control the matrix rebuilds can be found again afterwards", () => {
       `so the rest drop keyboard focus to the top of the page on every rebuild`,
   );
 });
+
+test("the finding cards allow text selection", () => {
+  const css = fs.readFileSync(path.join(here, "app.css"), "utf8");
+  const block = /\.finding-body\s*\{([^}]*)\}/.exec(css);
+  assert.ok(block, "the finding body rule must exist");
+  assert.match(block[1]!, /user-select:\s*text/);
+});
