@@ -13,7 +13,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import ts from "typescript";
 
-import { callsTo, frontendFiles } from "./ast.test.ts";
+import { callsTo, frontendFiles, stringArgument, walk } from "./ast.test.ts";
 
 /** The source text of a named property's initializer in a call's object
  * literal argument, or undefined if the call has no such property. */
@@ -65,4 +65,64 @@ test("the updater is blocked while a review or an apply is in flight", () => {
         `could restart the process mid-apply: ${busy}`,
     );
   }
+});
+
+test("installing an update disables every operation its restart would interrupt", () => {
+  const files = frontendFiles();
+  const main = files.find((file) => file.fileName === "main.ts");
+  const update = files.find((file) => file.fileName === "update.ts");
+  assert.ok(main, "main.ts is no longer a shipped frontend module");
+  assert.ok(update, "update.ts is no longer a shipped frontend module");
+
+  const updateCall = callsTo(main, "wireUpdate")[0];
+  const applyCall = callsTo(main, "bindApply")[0];
+  assert.ok(updateCall, "wireUpdate is no longer called from main.ts");
+  assert.ok(applyCall, "bindApply is no longer called from main.ts");
+  assert.match(propertyInitializer(updateCall, "busy") ?? "", /isClearing/);
+  assert.match(propertyInitializer(applyCall, "busy") ?? "", /isUpdating/);
+
+  let renderPlanSummary = "";
+  walk(main, (node) => {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === "renderPlanSummary"
+    ) {
+      renderPlanSummary = node.getText(main);
+    }
+  });
+  assert.ok(renderPlanSummary, "renderPlanSummary was not found");
+  assert.match(renderPlanSummary, /isUpdating/);
+
+  const install = callsTo(update, "invoke").find(
+    (call) => stringArgument(call) === "install_update",
+  );
+  assert.ok(install, "the real install_update invocation disappeared");
+  const assignments: Array<{ value: boolean; position: number }> = [];
+  walk(update, (node) => {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isIdentifier(node.left) &&
+      node.left.text === "updating" &&
+      (node.right.kind === ts.SyntaxKind.TrueKeyword ||
+        node.right.kind === ts.SyntaxKind.FalseKeyword)
+    ) {
+      assignments.push({
+        value: node.right.kind === ts.SyntaxKind.TrueKeyword,
+        position: node.getStart(update),
+      });
+    }
+  });
+  assert.ok(
+    assignments.some(
+      ({ value, position }) => value && position < install.getStart(update),
+    ),
+    "updating is not set before install_update starts",
+  );
+  assert.ok(
+    assignments.some(
+      ({ value, position }) => !value && position > install.getStart(update),
+    ),
+    "updating is not cleared after install_update rejects",
+  );
 });

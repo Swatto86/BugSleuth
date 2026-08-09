@@ -27,7 +27,11 @@ export interface UpdateDeps {
   focusStatus: () => void;
   /** True while work that an install-and-restart would interrupt is in flight. */
   busy: () => boolean;
+  activityChanged: () => void;
 }
+
+let updating = false;
+export const isUpdating = (): boolean => updating;
 
 export function wireUpdate(deps: UpdateDeps): void {
   const { button, setStatus } = deps;
@@ -66,7 +70,16 @@ export function wireUpdate(deps: UpdateDeps): void {
           confirmLabel: "Install and restart",
         });
         if (!agreed) return;
+        if (deps.busy()) {
+          setStatus(
+            `Version ${update.version} is available — finish the current operation first`,
+            "error",
+          );
+          return;
+        }
 
+        updating = true;
+        deps.activityChanged();
         setStatus(`Installing ${update.version}…`, "running");
         try {
           // Nothing after this resolves: the process is replaced. An error is
@@ -87,6 +100,9 @@ export function wireUpdate(deps: UpdateDeps): void {
         setStatus(`Could not check for updates: ${String(error)}`, "error");
       })
       .finally(() => {
+        const activityChanged = updating;
+        updating = false;
+        if (activityChanged) deps.activityChanged();
         button.disabled = false;
         button.textContent = previous;
       });

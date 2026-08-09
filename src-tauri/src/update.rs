@@ -57,21 +57,30 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<Available>
 /// from the window: the frontend is not a trusted source for what to install,
 /// and the gap between offering and accepting is unbounded.
 #[tauri::command]
-pub async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
-    let updater = app.updater().map_err(|e| e.to_string())?;
+pub async fn install_update(
+    app: tauri::AppHandle,
+    control: tauri::State<'_, crate::commands::RunControl>,
+) -> Result<(), String> {
+    control.try_start_update()?;
+    let result: Result<(), String> = async {
+        let updater = app.updater().map_err(|e| e.to_string())?;
+        let update = updater
+            .check()
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "there is no update to install".to_string())?;
+        update
+            .download_and_install(|_chunk, _total| {}, || {})
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+    .await;
 
-    let update = updater
-        .check()
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "there is no update to install".to_string())?;
-
-    update
-        .download_and_install(|_chunk, _total| {}, || {})
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // Nothing after this runs: the process is replaced by the new build.
+    if let Err(error) = result {
+        control.finish_update();
+        return Err(error);
+    }
     app.restart();
 }
 

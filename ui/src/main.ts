@@ -19,10 +19,10 @@ import {
   uncoveredLanes,
   unitCount,
 } from "./model";
-import { bindGuardedActions } from "./actions";
+import { bindGuardedActions, isClearing } from "./actions";
 import { bindControls } from "./controls";
 import { matrixHandlers } from "./matrix";
-import { wireUpdate } from "./update";
+import { isUpdating, wireUpdate } from "./update";
 import { savingSettings } from "./persist";
 import { listOf } from "./format";
 import {
@@ -32,7 +32,7 @@ import {
   isRunning,
   listenForRunEvents,
 } from "./run";
-import { bindApply, isApplying } from "./apply";
+import { type ApplyBinding, bindApply, isApplying } from "./apply";
 import { ui } from "./elements";
 import {
   type Catalogue,
@@ -119,14 +119,9 @@ function renderPlanSummary(): void {
     units === 0
       ? ""
       : `${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`;
-  // Not while fixes are being applied: a sweep would be reading the tree the
-  // apply is rewriting, and the report would describe code that no longer
-  // exists. Rust refuses it too — this only saves the click.
-  ui.run.disabled = isRunning() || isApplying() || !canRun(settings);
-  // Same reason, and the same defect if it is left out: Rust refuses to delete
-  // while it is writing there, so an offered button would put up a dialog about
-  // losing paid-for sweeps and then answer it with an error.
-  ui.clearSaved.disabled = isRunning() || isApplying();
+  const busy = isRunning() || isApplying() || isClearing() || isUpdating();
+  ui.run.disabled = busy || !canRun(settings);
+  ui.clearSaved.disabled = busy;
   // Offered only while there is something to stop, so it is never a button
   // that does nothing.
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
@@ -247,10 +242,13 @@ const runDeps = (): RunDeps => ({
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
-let redrawApply: () => void = () => {};
+let applyBinding: ApplyBinding = {
+  redraw: () => {},
+  refreshButton: () => {},
+};
 
 function bind(): void {
-  redrawApply = bindApply({
+  applyBinding = bindApply({
     ui: {
       vendor: ui.applyVendor,
       model: ui.applyModel,
@@ -264,11 +262,16 @@ function bind(): void {
     settings: () => settings,
     promptRepo: currentFixPromptRepo,
     catalogue: () => catalogue,
-    busy: isRunning,
+    busy: () => isRunning() || isClearing() || isUpdating(),
     refresh,
     setStatus,
     focusStatus,
   });
+
+  const activityChanged = (): void => {
+    renderPlanSummary();
+    applyBinding.refreshButton();
+  };
 
   bindControls({
     ui,
@@ -286,9 +289,8 @@ function bind(): void {
     button: ui.checkUpdate,
     setStatus,
     focusStatus,
-    // Installing restarts the process, so neither reviews nor repository edits
-    // may be in flight.
-    busy: () => isRunning() || isApplying(),
+    busy: () => isRunning() || isApplying() || isClearing(),
+    activityChanged,
   });
 
   bindGuardedActions({
@@ -300,6 +302,8 @@ function bind(): void {
     render,
     setStatus,
     focusStatus,
+    updating: isUpdating,
+    activityChanged,
     flushSettings: () => settingsSaver.flush(),
     runDeps,
     isShippedConfiguration,
@@ -312,9 +316,7 @@ async function loadCatalogue(): Promise<string> {
     const vendors = await invoke<VendorModels[]>("available_models");
     catalogue = Object.fromEntries(vendors.map((v) => [v.vendor, v]));
     renderWithoutPersisting();
-    // The apply panel has its own model box, outside the table, so a redraw of
-    // the table alone would leave it offering no suggestions for the session.
-    redrawApply();
+    applyBinding.redraw();
     return "";
   } catch (error) {
     // Not swallowed: when the catalogue cannot load, every effort select stays
@@ -351,9 +353,7 @@ async function boot(): Promise<void> {
   ui.reuseCompleted.checked = settings.reuse_completed;
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
   renderWithoutPersisting();
-  // The panel was bound before the stored settings arrived, so it is showing
-  // the defaults until told otherwise.
-  redrawApply();
+  applyBinding.redraw();
 
   // Reveal as soon as the shell is painted and themed. Deliberately before the
   // event subscriptions below: if one of those ever fails, the window must

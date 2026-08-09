@@ -60,9 +60,13 @@ export interface ApplyDeps {
 let applying = false;
 export const isApplying = (): boolean => applying;
 
-/** Wire the panel up, and hand back the redraw the caller needs when the vendor
- * menus finally arrive. */
-export function bindApply(deps: ApplyDeps): () => void {
+export interface ApplyBinding {
+  redraw: () => void;
+  refreshButton: () => void;
+}
+
+/** Wire the panel up and expose its two focused redraw operations. */
+export function bindApply(deps: ApplyDeps): ApplyBinding {
   const { ui } = deps;
 
   for (const name of VENDORS) {
@@ -279,9 +283,7 @@ export function bindApply(deps: ApplyDeps): () => void {
   });
 
   draw();
-  // Handed back rather than exported: the panel keeps its own state, and the
-  // caller only needs to say "the menus arrived, draw again".
-  return draw;
+  return { redraw: draw, refreshButton: setButtonState };
 }
 
 function start(deps: ApplyDeps, repo: string): void {

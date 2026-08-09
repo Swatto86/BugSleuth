@@ -1,4 +1,4 @@
-//! The one lock that keeps a review, an apply and a clear from overlapping.
+//! The one lock that keeps a review, apply, clear and update from overlapping.
 //!
 //! Split from `run` at the hard line cap, along the seam already there: this is
 //! the mutually-exclusive state machine and nothing else, and what is left in
@@ -7,9 +7,9 @@
 /// The single record of what mutually-exclusive work is in flight, held for
 /// the app's life.
 ///
-/// Running, applying, and clearing must never overlap: a sweep reads the tree
-/// while an apply rewrites it, so the report would describe code that no longer
-/// exists, and clearing deletes the very sweeps a run is writing. The window
+/// Running, applying, clearing, and updating must never overlap: a sweep reads
+/// the tree while an apply rewrites it, clearing deletes sweeps a run is
+/// writing, and an update restarts the process underneath all three. The window
 /// disables the buttons, but the window is not the only way in and a disabled
 /// button is not a lock.
 ///
@@ -24,6 +24,7 @@ enum WorkState {
     Running(bugsleuth_engine::cancel::Cancel),
     Applying(bugsleuth_engine::cancel::Cancel),
     Clearing,
+    Updating,
 }
 
 pub struct RunControl {
@@ -64,6 +65,9 @@ impl RunControl {
             WorkState::Clearing => {
                 Err("saved sweeps are being cleared — wait for that to finish".to_string())
             }
+            WorkState::Updating => {
+                Err("an update is being installed — wait for it to finish".to_string())
+            }
         }
     }
 
@@ -82,6 +86,9 @@ impl RunControl {
             WorkState::Applying(_) => Err("fixes are already being applied".to_string()),
             WorkState::Clearing => {
                 Err("saved sweeps are being cleared — wait for that to finish".to_string())
+            }
+            WorkState::Updating => {
+                Err("an update is being installed — wait for it to finish".to_string())
             }
         }
     }
@@ -102,6 +109,28 @@ impl RunControl {
                     .to_string(),
             ),
             WorkState::Clearing => Err("saved sweeps are already being cleared".to_string()),
+            WorkState::Updating => {
+                Err("an update is being installed — wait for it to finish".to_string())
+            }
+        }
+    }
+
+    /// Reserve the updating state, or say which operation must finish first.
+    pub fn try_start_update(&self) -> Result<(), String> {
+        let mut state = self.state.lock().map_err(|_| lock_poisoned())?;
+        match &*state {
+            WorkState::Idle => {
+                *state = WorkState::Updating;
+                Ok(())
+            }
+            WorkState::Running(_) => Err("a review is running — wait for it to finish".to_string()),
+            WorkState::Applying(_) => {
+                Err("fixes are being applied — wait for them to finish".to_string())
+            }
+            WorkState::Clearing => {
+                Err("saved sweeps are being cleared — wait for that to finish".to_string())
+            }
+            WorkState::Updating => Err("an update is already being installed".to_string()),
         }
     }
 
@@ -132,6 +161,15 @@ impl RunControl {
     pub fn finish_clear(&self) {
         if let Ok(mut state) = self.state.lock()
             && matches!(&*state, WorkState::Clearing)
+        {
+            *state = WorkState::Idle;
+        }
+    }
+
+    /// Release the updating state after a rejected or failed installation.
+    pub fn finish_update(&self) {
+        if let Ok(mut state) = self.state.lock()
+            && matches!(&*state, WorkState::Updating)
         {
             *state = WorkState::Idle;
         }
@@ -282,5 +320,22 @@ mod tests {
             cancel.stopped(),
             "cancel_apply did not stop the applying signal"
         );
+    }
+
+    #[test]
+    fn update_cannot_overlap_repository_work_in_either_direction() {
+        let control = RunControl::default();
+        control
+            .try_start_update()
+            .expect("update should start while idle");
+        assert!(control.try_start_run(Cancel::new()).is_err());
+        assert!(control.try_start_apply(Cancel::new()).is_err());
+        assert!(control.try_start_clear().is_err());
+        control.finish_update();
+
+        control
+            .try_start_clear()
+            .expect("clear should start after update releases the state");
+        assert!(control.try_start_update().is_err());
     }
 }
