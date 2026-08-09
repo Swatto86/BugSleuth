@@ -76,6 +76,7 @@ The app's job that the command line cannot do is catching an uncovered lane
 *before* you pay for the run. A lane with no model assigned still produces a
 report — it just says NOT SWEPT — and that is easy to skim past. The lane matrix
 marks the empty column and says so in as many words.
+Hover a lane heading for the defects that lane is assigned to hunt.
 
 Dark and light both, following the system by default, switchable in the title
 bar. Settings live in `%APPDATA%\BugSleuth\settings.json`, and each run's
@@ -108,8 +109,11 @@ it already completed.
 
 If an individual Claude, Codex, or Kilo process times out, BugSleuth keeps its
 partial CLI output and resumes that same session once for an answer-only pass.
-Recovered findings are labelled as potentially incomplete; a run with no usable
-session id remains `NOT SWEPT` rather than silently restarting from scratch.
+It also handles each provider's native interruption signal: Claude continues an
+interrupted resumed turn, Codex resumes a transient failed turn, and Kilo's exit
+code 124 is treated as its own timeout. Recovered findings are labelled as
+potentially incomplete; a run with no usable session id remains `NOT SWEPT`
+rather than silently restarting from scratch.
 
 ```bash
 cargo run -p bugsleuth-cli -- run --repo <path> --config c.json --per-provider 1
