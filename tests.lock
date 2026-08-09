@@ -386,6 +386,7 @@ rust kilo::events::signin_extraction_tests::the_models_own_words_come_back
 rust kilo::events::tests::a_malformed_event_is_skipped_rather_than_discarding_the_whole_review
 rust kilo::events::tests::a_message_repeated_by_the_stream_is_not_glued_to_itself
 rust kilo::events::tests::a_stream_with_no_text_events_yields_nothing_rather_than_panicking
+rust kilo::events::tests::error_events_accepts_legal_json_whitespace
 rust kilo::events::tests::narration_from_earlier_messages_is_not_mixed_into_the_answer
 rust kilo::events::tests::the_older_flat_event_shape_is_still_read
 rust kilo::preflight::tests::a_blanket_permission_deny_passes

@@ -12,18 +12,18 @@ use crate::process::preview;
 ///
 /// The events look like
 /// `{"type":"error","error":{"name":"...","data":{"message":"..."}}}`.
-/// Read by string rather than by deserializing the whole stream: this runs on a
-/// failure path where the output may well be truncated or malformed, and a
+/// Read one line at a time rather than deserializing the whole stream: this runs
+/// on a failure path where the output may well be truncated or malformed, and a
 /// parser that gives up on the first bad line would throw away the diagnosis.
 pub(super) fn error_events(stdout: &str) -> String {
     let mut seen: Vec<String> = Vec::new();
     for line in stdout.lines() {
-        if !line.contains(r#""type":"error""#) {
-            continue;
-        }
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             continue;
         };
+        if value["type"].as_str() != Some("error") {
+            continue;
+        }
         let error = &value["error"];
         let name = error["name"].as_str().unwrap_or("error");
         let detail = error["data"]["message"]
@@ -101,6 +101,13 @@ pub(super) fn assistant_text(stdout: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn error_events_accepts_legal_json_whitespace() {
+        let stdout =
+            r#"{"type": "error", "error": {"name": "AuthError", "data": {"message": "sign in"}}}"#;
+        assert_eq!(error_events(stdout), "AuthError: sign in");
+    }
 
     #[test]
     fn a_message_repeated_by_the_stream_is_not_glued_to_itself() {
