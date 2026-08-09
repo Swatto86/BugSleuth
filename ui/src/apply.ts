@@ -20,6 +20,7 @@ import {
   VENDORS,
   applyStatus,
   joinId,
+  settingsForApply,
   splitId,
   type Settings,
   type Vendor,
@@ -44,6 +45,7 @@ export interface ApplyDeps {
     output: HTMLPreElement;
   };
   settings: () => Settings;
+  promptRepo: () => string;
   /** The vendor menus, which arrive after the window has already drawn. */
   catalogue: () => Catalogue;
   /** Whether a review is in flight; applying during one is refused. */
@@ -200,6 +202,14 @@ export function bindApply(deps: ApplyDeps): () => void {
     // Checked here as well as inside `start`, so a second click cannot even
     // open a second dialog on top of the first.
     if (applying) return;
+    const repo = deps.promptRepo().trim();
+    if (repo === "") {
+      deps.setStatus(
+        "The displayed result has no repository target; run the review again",
+        "error",
+      );
+      return;
+    }
     // The confirmation has to describe what is about to happen, not what
     // usually happens. Publishing is the one part of an apply that no amount
     // of reading the diff afterwards can undo, so when it is switched on the
@@ -218,7 +228,7 @@ export function bindApply(deps: ApplyDeps): () => void {
           ? "Apply these fixes and push them?"
           : "Apply these fixes to your code?",
       message:
-        "This runs the fix prompt against your repository with write access, " +
+        `This runs the displayed fix prompt against "${repo}" with write access, ` +
         "editing files in place and running your tests. It is refused unless " +
         "the working tree is clean, so everything it does will show up in " +
         "`git diff` and `git log` — but nothing it writes has been checked by " +
@@ -242,7 +252,7 @@ export function bindApply(deps: ApplyDeps): () => void {
       destructive: true,
     }).then((yes) => {
       if (!yes) return;
-      start(deps);
+      start(deps, repo);
     });
   });
 
@@ -272,7 +282,7 @@ export function bindApply(deps: ApplyDeps): () => void {
   return draw;
 }
 
-function start(deps: ApplyDeps): void {
+function start(deps: ApplyDeps, repo: string): void {
   // Checked again, after the dialog. It can sit open for as long as anyone
   // likes, and two confirmed dialogs used to send two `apply_fixes` calls: the
   // second is refused by Rust, and its rejection then cleared the flag and
@@ -288,17 +298,16 @@ function start(deps: ApplyDeps): void {
   // than as a button that should not have been offered.
   deps.refresh();
   append(deps.ui.output, "Applying the fixes…");
-  invoke("apply_fixes", { settings: deps.settings() }).catch(
-    (error: unknown) => {
-      // A rejected call means nothing started, so the flag must come back off or
-      // the button stays dead for the rest of the session with nothing running.
-      applying = false;
-      deps.ui.button.disabled = false;
-      deps.setStatus(String(error), "error");
-      append(deps.ui.output, String(error));
-      deps.refresh();
-    },
-  );
+  const settings = settingsForApply(deps.settings(), repo);
+  invoke("apply_fixes", { settings }).catch((error: unknown) => {
+    // A rejected call means nothing started, so the flag must come back off or
+    // the button stays dead for the rest of the session with nothing running.
+    applying = false;
+    deps.ui.button.disabled = false;
+    deps.setStatus(String(error), "error");
+    append(deps.ui.output, String(error));
+    deps.refresh();
+  });
 }
 
 /**

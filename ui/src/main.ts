@@ -28,6 +28,7 @@ import { listOf } from "./format";
 import {
   type RunDeps,
   currentFixPrompt,
+  currentFixPromptRepo,
   isRunning,
   listenForRunEvents,
 } from "./run";
@@ -246,8 +247,6 @@ const runDeps = (): RunDeps => ({
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
-/** Redraw the apply panel. Assigned when it is bound; the vendor menus arrive
- * later, and its model suggestions come from them. */
 let redrawApply: () => void = () => {};
 
 function bind(): void {
@@ -262,6 +261,7 @@ function bind(): void {
       output: ui.output,
     },
     settings: () => settings,
+    promptRepo: currentFixPromptRepo,
     catalogue: () => catalogue,
     busy: isRunning,
     refresh,

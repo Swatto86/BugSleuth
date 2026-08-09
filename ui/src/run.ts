@@ -38,10 +38,14 @@ let running = false;
 export const isRunning = (): boolean => running;
 
 /** The last run's fix prompt, held so the Copy button has something to give. */
+let activeRunRepo = "";
 let fixPrompt = "";
+let fixPromptRepo = "";
 export const currentFixPrompt = (): string => fixPrompt;
+export const currentFixPromptRepo = (): string => fixPromptRepo;
 
 export async function startRun(deps: RunDeps): Promise<void> {
+  activeRunRepo = deps.settings().repo.trim();
   running = true;
   progressLog = [];
   deps.renderPlanSummary();
@@ -66,6 +70,7 @@ export async function startRun(deps: RunDeps): Promise<void> {
   try {
     await invoke("start_run", { settings: deps.settings() });
   } catch (error) {
+    activeRunRepo = "";
     running = false;
     deps.setStatus(String(error), "error");
     deps.output.textContent = String(error);
@@ -134,6 +139,8 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // is one — and its path is shown either way, because a window can be
     // closed and tens of minutes of sweeping should not go with it.
     fixPrompt = event.payload.prompt ?? "";
+    fixPromptRepo = activeRunRepo;
+    activeRunRepo = "";
     deps.copyPrompt.classList.toggle("hidden", fixPrompt === "");
     // Applying reads the prompt Rust wrote to disk, so it is offered only when
     // this run actually produced one.

@@ -172,6 +172,10 @@ export interface Settings {
   tag_release_after_push: boolean;
 }
 
+export function settingsForApply(settings: Settings, repo: string): Settings {
+  return { ...settings, repo };
+}
+
 /**
  * Lanes no model covers.
  *
