@@ -84,6 +84,107 @@ An invented finding is far worse here than a short list: every snippet you \
 report is checked against the file it names and a fabricated one is discarded, \
 so inventing wastes the salvage and reports nothing either way.";
 
+/// Recover work that is still inside a conversation, once. A successful CLI
+/// envelope without a structured answer is the same incomplete outcome as a
+/// timeout: starting the whole review over would only spend the quota twice.
+pub(super) async fn recover(
+    first: Result<ResultEnvelope, ProviderError>,
+    run: Run<'_>,
+) -> Result<ResultEnvelope, ProviderError> {
+    if run.resume.is_some() {
+        return first;
+    }
+    let timeout = run.timeout.min(Duration::from_secs(300));
+    match first {
+        Ok(outcome) if !run.schema.is_null() => {
+            let Err(original) = crate::json::structured::<Value>(outcome.structured_result())
+            else {
+                return Ok(outcome);
+            };
+            let Some(session) = outcome
+                .session_id
+                .as_deref()
+                .or(run.session_id.as_deref())
+                .filter(|session| !session.trim().is_empty())
+            else {
+                return Err(original);
+            };
+            recovered(
+                original,
+                salvage(
+                    run.repo,
+                    run.model,
+                    session,
+                    run.schema,
+                    run.binary,
+                    run.api_key,
+                    timeout,
+                )
+                .await,
+            )
+        }
+        Ok(outcome) => Ok(outcome),
+        Err(
+            original @ ProviderError::TurnsExhausted {
+                session: Some(_), ..
+            },
+        ) => {
+            let ProviderError::TurnsExhausted {
+                session: Some(session),
+                ..
+            } = &original
+            else {
+                unreachable!()
+            };
+            let session = session.clone();
+            recovered(
+                original,
+                salvage(
+                    run.repo,
+                    run.model,
+                    &session,
+                    run.schema,
+                    run.binary,
+                    run.api_key,
+                    timeout,
+                )
+                .await,
+            )
+        }
+        Err(original @ ProviderError::Process(crate::process::ProcessError::Timeout { .. }))
+            if run.session_id.is_some() =>
+        {
+            recovered(
+                original,
+                salvage(
+                    run.repo,
+                    run.model,
+                    run.session_id.as_deref().unwrap_or_default(),
+                    run.schema,
+                    run.binary,
+                    run.api_key,
+                    timeout,
+                )
+                .await,
+            )
+        }
+        Err(other) => Err(other),
+    }
+}
+
+fn recovered(
+    original: ProviderError,
+    recovery: Result<ResultEnvelope, ProviderError>,
+) -> Result<ResultEnvelope, ProviderError> {
+    let mut recovered = recovery.map_err(|recovery| ProviderError::Recovery {
+        vendor: super::VENDOR,
+        original: original.to_string(),
+        recovery: recovery.to_string(),
+    })?;
+    recovered.salvaged = true;
+    Ok(recovered)
+}
+
 /// Ask a turn-exhausted session for its answer. One attempt.
 pub(super) async fn salvage(
     repo: &Path,

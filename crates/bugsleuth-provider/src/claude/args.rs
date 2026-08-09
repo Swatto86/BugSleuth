@@ -15,6 +15,8 @@ pub(super) fn build_args(run: &Run<'_>) -> Vec<String> {
         "json".into(),
         "--max-turns".into(),
         run.max_turns.to_string(),
+        "--tools".into(),
+        run.allowed.into(),
         "--allowedTools".into(),
         run.allowed.into(),
     ];

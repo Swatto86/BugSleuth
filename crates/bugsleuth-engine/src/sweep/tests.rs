@@ -93,9 +93,9 @@ fn only_kilo_needs_the_schema_spelled_out_in_its_prompt() {
 fn supported_vendors_get_their_own_agent_wording_and_kilo_gets_none() {
     let claude = super::agents::instruction(Vendor::Claude, "sonnet").unwrap_or_default();
     let codex = super::agents::instruction(Vendor::Codex, "").unwrap_or_default();
-    assert!(claude.contains("Ultracode dynamic workflow"), "{claude}");
+    assert!(claude.contains("foreground Explore subagents"), "{claude}");
     assert!(
-        claude.contains("exactly two agent() calls total"),
+        claude.contains("Do not use Workflow, background agents, or delayed wakeups"),
         "{claude}"
     );
     assert!(codex.contains("Codex subagents"), "{codex}");
@@ -222,7 +222,7 @@ async fn the_vendor_prefix_never_reaches_the_cli() {
 async fn agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_policy() {
     let stub = echoing_stub("agent-mode");
     for (model, wording) in [
-        ("sonnet", "Ultracode dynamic workflow"),
+        ("sonnet", "foreground Explore subagents"),
         ("codex:gpt-5.6-codex", "Codex subagents"),
     ] {
         let report = run_with_agents(
@@ -245,7 +245,10 @@ async fn agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_poli
         };
         assert!(reason.contains(wording), "{model}: {reason}");
         if model == "sonnet" {
-            assert!(reason.contains("Read,Glob,Grep,Agent,Workflow"), "{reason}");
+            assert!(
+                reason.contains("--tools \"Read,Glob,Grep,Agent\""),
+                "{reason}"
+            );
             assert!(reason.contains("--effort ultracode"), "{reason}");
         }
     }

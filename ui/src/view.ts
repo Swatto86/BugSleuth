@@ -155,7 +155,7 @@ export function matrixRows(
         const title = !agentsSupported
           ? "Unavailable: BugSleuth uses Kilo's read-only Ask agent, which cannot delegate."
           : selected.vendor === "claude" && usesUltracode(id)
-            ? "Use Claude Ultracode with two parallel agents for this lane (provider limit: 16 concurrent). Uses more tokens."
+            ? "Use Claude Ultracode with two parallel foreground agents for this lane (provider limit: 16 concurrent). Uses more tokens."
             : `Ask ${selected.vendor === "claude" ? "Claude Code" : "Codex"} to delegate independent parts of this lane in parallel. Uses more tokens.`;
         agentControl.title = title;
         agentControl.parentElement?.setAttribute("title", title);
@@ -177,7 +177,7 @@ export function matrixRows(
             ? {
                 label: "Ultracode",
                 title:
-                  "Claude agent mode uses Ultracode (xhigh reasoning plus a small dynamic workflow).",
+                  "Claude agent mode uses Ultracode (xhigh reasoning plus two foreground subagents).",
               }
             : undefined,
         onChange: (effort) => {
@@ -234,7 +234,7 @@ export function matrixRows(
     agentBox.disabled = !agentsSupported;
     agentBox.title = agentsSupported
       ? vendor === "claude" && usesUltracode(model.id)
-        ? "Use Claude Ultracode with two parallel agents for this lane (provider limit: 16 concurrent). Uses more tokens."
+        ? "Use Claude Ultracode with two parallel foreground agents for this lane (provider limit: 16 concurrent). Uses more tokens."
         : `Ask ${vendor === "claude" ? "Claude Code" : "Codex"} to delegate independent parts of this lane in parallel. Uses more tokens.`
       : "Unavailable: BugSleuth uses Kilo's read-only Ask agent, which cannot delegate.";
     agentCell.title = agentBox.title;

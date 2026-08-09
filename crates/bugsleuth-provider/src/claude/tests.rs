@@ -28,6 +28,12 @@ fn run<'a>(model: &'a str) -> Run<'a> {
 #[test]
 fn read_only_sweeps_cannot_be_granted_write_tools() {
     let args = build_args(&run("sonnet"));
+    let available = args
+        .iter()
+        .position(|a| a == "--tools")
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str);
+    assert_eq!(available, Some(READ_ONLY_TOOLS));
     let index = args.iter().position(|a| a == "--disallowedTools");
     let denied = index.and_then(|i| args.get(i + 1)).map(String::as_str);
     assert_eq!(denied, Some(READ_ONLY_DENIED));
@@ -42,7 +48,14 @@ fn agent_enabled_sweeps_only_add_read_only_delegation_tools() {
     let index = args.iter().position(|a| a == "--allowedTools");
     assert_eq!(
         index.and_then(|i| args.get(i + 1)).map(String::as_str),
-        Some("Read,Glob,Grep,Agent,Workflow")
+        Some("Read,Glob,Grep,Agent")
+    );
+    assert_eq!(
+        args.iter()
+            .position(|a| a == "--tools")
+            .and_then(|i| args.get(i + 1))
+            .map(String::as_str),
+        Some("Read,Glob,Grep,Agent")
     );
     assert_eq!(
         args.iter()
@@ -163,6 +176,43 @@ async fn a_timed_out_run_resumes_the_same_session_once() {
             .trim(),
         "1"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn an_empty_successful_reply_resumes_the_same_session_once() {
+    let dir = std::env::temp_dir().join(format!("bugsleuth-claude-empty-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch directory");
+    let stub = dir.join("claude.cmd");
+    std::fs::write(
+        &stub,
+        "@echo off\r\n\
+         echo %* >> calls.txt\r\n\
+         echo %* | findstr /c:\"--resume\" > nul && goto resumed\r\n\
+         echo {\"result\":\"\",\"is_error\":false,\"session_id\":\"same-session\"}\r\n\
+         exit /b 0\r\n\
+         :resumed\r\n\
+         echo {\"result\":\"\",\"structured_output\":{\"findings\":[]},\"is_error\":false,\"session_id\":\"same-session\"}\r\n",
+    )
+    .expect("write CLI stub");
+    let binary = stub.to_string_lossy().into_owned();
+
+    let mut request = run("");
+    request.repo = &dir;
+    request.binary = Some(&binary);
+    let outcome = invoke(request)
+        .await
+        .expect("the empty answer should be recovered from its session");
+
+    assert!(outcome.salvaged);
+    assert_eq!(
+        outcome.structured_result(),
+        &serde_json::json!({"findings": []})
+    );
+    let calls = std::fs::read_to_string(dir.join("calls.txt")).expect("call log");
+    assert_eq!(calls.lines().count(), 2, "recovery must run exactly once");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

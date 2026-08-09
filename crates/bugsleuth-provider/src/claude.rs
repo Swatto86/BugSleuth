@@ -27,13 +27,12 @@ pub use apply::{ApplyRequest, apply};
 pub use envelope::Usage;
 pub use triage::{TriageRequest, TriageResult, triage};
 
-/// Tools a read-only review may use. An explicit allowlist rather than
-/// `--dangerously-skip-permissions`: a sweep that *cannot* write is a far
-/// stronger guarantee than one merely asked not to.
+/// Tools a read-only review may use. `--tools` makes this an availability
+/// boundary; `--allowedTools` alone only controls permission prompts.
 pub(crate) const VENDOR: &str = "claude";
 
 pub(crate) const READ_ONLY_TOOLS: &str = "Read,Glob,Grep";
-pub(crate) const READ_ONLY_AGENT_TOOLS: &str = "Read,Glob,Grep,Agent,Workflow";
+pub(crate) const READ_ONLY_AGENT_TOOLS: &str = "Read,Glob,Grep,Agent";
 pub(crate) const READ_ONLY_DENIED: &str = "Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch";
 
 /// One (model x lane x repository) unit of work.
@@ -121,6 +120,7 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
 /// Everything one CLI invocation needs, independent of what it is being asked
 /// to do. Shared by sweeps, the severity triage pass and applying fixes, which
 /// differ only in prompt, output schema and tool policy.
+#[derive(Clone)]
 pub(crate) struct Run<'a> {
     pub(crate) repo: &'a Path,
     pub(crate) model: &'a str,
@@ -141,7 +141,7 @@ pub(crate) struct Run<'a> {
     pub(crate) resume: Option<&'a str>,
 }
 
-/// Run the CLI, and recover a turn-budget exhaustion or timeout once.
+/// Run the CLI, and recover an interrupted or missing answer once.
 ///
 /// The retry lives here rather than in each caller because every one of them
 /// has the same problem: the expensive work is done inside a conversation that
@@ -153,79 +153,8 @@ pub(crate) async fn invoke(mut run: Run<'_>) -> Result<ResultEnvelope, ProviderE
     if run.resume.is_none() && run.session_id.is_none() {
         run.session_id = Some(salvage::new_session_id());
     }
-    // Held before `run` is consumed: the salvage needs the same model, binary
-    // and schema, and none of them can be read back out of a moved value.
-    let (repo, model, binary, api_key, timeout) =
-        (run.repo, run.model, run.binary, run.api_key, run.timeout);
-    let schema = run.schema.clone();
-    let already_resuming = run.resume.is_some();
-    let recovery_session = run.session_id.clone();
-    let recovery_timeout = timeout.min(Duration::from_secs(300));
-
-    match invoke_once(run).await {
-        Ok(outcome) => Ok(outcome),
-        // A salvage that itself runs out of turns is not salvaged again: the
-        // second failure says the conversation cannot answer, and a third
-        // attempt would only spend more of the budget saying so.
-        Err(
-            original @ ProviderError::TurnsExhausted {
-                session: Some(_), ..
-            },
-        ) if !already_resuming => {
-            let ProviderError::TurnsExhausted {
-                session: Some(session),
-                ..
-            } = &original
-            else {
-                unreachable!()
-            };
-            let session = session.clone();
-            recovered(
-                original,
-                salvage::salvage(
-                    repo,
-                    model,
-                    &session,
-                    schema,
-                    binary,
-                    api_key,
-                    recovery_timeout,
-                )
-                .await,
-            )
-        }
-        Err(original @ ProviderError::Process(process::ProcessError::Timeout { .. }))
-            if !already_resuming && recovery_session.is_some() =>
-        {
-            recovered(
-                original,
-                salvage::salvage(
-                    repo,
-                    model,
-                    recovery_session.as_deref().unwrap_or_default(),
-                    schema,
-                    binary,
-                    api_key,
-                    recovery_timeout,
-                )
-                .await,
-            )
-        }
-        Err(other) => Err(other),
-    }
-}
-
-fn recovered(
-    original: ProviderError,
-    recovery: Result<ResultEnvelope, ProviderError>,
-) -> Result<ResultEnvelope, ProviderError> {
-    let mut recovered = recovery.map_err(|recovery| ProviderError::Recovery {
-        vendor: VENDOR,
-        original: original.to_string(),
-        recovery: recovery.to_string(),
-    })?;
-    recovered.salvaged = true;
-    Ok(recovered)
+    let recovery = run.clone();
+    salvage::recover(invoke_once(run).await, recovery).await
 }
 
 pub(super) async fn invoke_once(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {

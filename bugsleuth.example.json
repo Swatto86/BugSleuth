@@ -13,7 +13,7 @@
     "a ChatGPT subscription.",
     "",
     "Set use_agents to true on a Claude or Codex model to ask it to delegate",
-    "independent lane work in parallel. Claude uses a small Ultracode workflow;",
+    "independent lane work in parallel. Claude uses two foreground Ultracode agents;",
     "Codex chooses its fan-out. Kilo's read-only Ask agent cannot delegate."
   ],
   "models": [
