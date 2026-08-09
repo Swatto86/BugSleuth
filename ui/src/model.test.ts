@@ -206,6 +206,18 @@ test("every lane header explains what that lane hunts", () => {
   }
 });
 
+test("the Agents header exposes its token-cost explanation to screen readers", () => {
+  const html = fs.readFileSync(path.join(here, "..", "index.html"), "utf8");
+  const header = /<th[^>]*class="agent-cell"[^>]*>/.exec(html)?.[0];
+  assert.ok(header, "the Agents table header is missing");
+  const title = /title="([^"]+)"/.exec(header)?.[1];
+  assert.ok(title, "the Agents header has no explanation");
+  assert.ok(
+    header.includes(`aria-label="Agents. ${title}"`),
+    "the Agents explanation is available only by mouse hover",
+  );
+});
+
 test("splitting a model spec and rejoining it settles on one spelling", () => {
   // Not byte-identity: `claude:opus` and `opus` are the same model to the
   // engine, and the round trip deliberately collapses them onto the bare form.
