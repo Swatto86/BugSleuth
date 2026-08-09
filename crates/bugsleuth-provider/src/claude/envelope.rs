@@ -39,6 +39,12 @@ impl Usage {
     }
 }
 
+impl ResultEnvelope {
+    pub(crate) fn structured_result(&self) -> &serde_json::Value {
+        self.structured_output.as_ref().unwrap_or(&self.result)
+    }
+}
+
 /// Whatever the CLI said about a failure, from its own envelope on stdout.
 ///
 /// Used only when the process exited non-zero and said nothing on stderr. The
@@ -124,6 +130,26 @@ mod tests {
         let stdout = r#"{"is_error":false,"result":{"findings":[]},"num_turns":3}"#;
         let parsed = parse(stdout);
         assert_eq!(parsed.map(|e| e.num_turns).unwrap_or(None), Some(3));
+    }
+
+    #[test]
+    fn a_schema_reply_uses_structured_output_instead_of_the_text_result() {
+        let stdout = r#"{"is_error":false,"result":"Review complete.","structured_output":{"findings":[]},"num_turns":3}"#;
+        let parsed = parse(stdout).expect("valid envelope");
+        assert_eq!(
+            parsed.structured_result(),
+            &serde_json::json!({"findings": []})
+        );
+    }
+
+    #[test]
+    fn a_legacy_schema_reply_can_still_fall_back_to_result() {
+        let stdout = r#"{"is_error":false,"result":{"findings":[]},"num_turns":3}"#;
+        let parsed = parse(stdout).expect("valid legacy envelope");
+        assert_eq!(
+            parsed.structured_result(),
+            &serde_json::json!({"findings": []})
+        );
     }
 
     #[test]

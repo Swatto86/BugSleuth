@@ -60,7 +60,7 @@ pub async fn triage(spec: TriageRequest<'_>) -> Result<TriageResult, ProviderErr
     .await?;
 
     Ok(TriageResult {
-        verdicts: crate::json::structured(&outcome.result)?,
+        verdicts: crate::json::structured(outcome.structured_result())?,
         salvaged: outcome.salvaged,
     })
 }

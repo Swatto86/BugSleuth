@@ -278,7 +278,9 @@ rust caveats::tests::the_recovery_caveat_covers_timeouts_as_well_as_turn_limits
 rust claude::apply::tests::a_prose_reply_survives_having_no_schema_to_fit
 rust claude::apply::tests::applying_a_fix_may_write_and_run_commands
 rust claude::envelope::tests::a_failure_is_explained_from_the_envelope_when_stderr_says_nothing
+rust claude::envelope::tests::a_legacy_schema_reply_can_still_fall_back_to_result
 rust claude::envelope::tests::a_normal_envelope_is_read_without_complaint
+rust claude::envelope::tests::a_schema_reply_uses_structured_output_instead_of_the_text_result
 rust claude::envelope::tests::a_turn_exhaustion_is_recoverable_whatever_the_exit_code_was
 rust claude::envelope::tests::an_envelope_with_no_result_falls_back_to_its_subtype
 rust claude::envelope::tests::an_error_envelope_becomes_an_error_not_an_empty_sweep

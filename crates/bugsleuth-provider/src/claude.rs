@@ -100,7 +100,7 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
     let outcome = first?;
     let salvaged = outcome.salvaged;
 
-    let findings = crate::json::structured(&outcome.result)?;
+    let findings = crate::json::structured(outcome.structured_result())?;
     Ok(SweepResult {
         findings,
         usage: outcome.usage,
@@ -350,6 +350,8 @@ pub(crate) struct ResultEnvelope {
     pub(crate) salvaged: bool,
     #[serde(default)]
     pub(crate) result: Value,
+    #[serde(default)]
+    pub(crate) structured_output: Option<Value>,
     #[serde(default)]
     pub(crate) is_error: bool,
     #[serde(default)]
