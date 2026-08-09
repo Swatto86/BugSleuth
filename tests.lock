@@ -548,6 +548,7 @@ rust settings::tests::malformed_settings_are_reported_and_left_in_place
 rust settings::tests::the_default_covers_every_lane_so_a_first_run_has_no_silent_holes
 rust settings::tests::unknown_fields_and_missing_fields_both_survive_a_round_trip
 rust signin::tests::a_failure_keeps_the_reason_the_vendor_gave
+rust signin::tests::a_signal_exit_code_is_a_failed_probe
 rust signin::tests::a_timeout_says_what_it_means_for_a_real_run
 rust signin::tests::an_empty_answer_is_neither_a_pass_nor_a_failure
 rust signin::tests::only_a_real_answer_counts_as_signed_in

@@ -21,7 +21,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::ProviderError;
-use crate::process::{Invocation, ProcessError};
+use crate::process::{CliOutput, Invocation, ProcessError};
 
 /// What a sign-in check found, in the words the interface will use.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +74,29 @@ pub(crate) const PROMPT: &str = "Reply with exactly OK and nothing else.";
 /// forty-minute sweep against.
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(60);
 
+fn answer_from(
+    out: CliOutput,
+    vendor: &'static str,
+    answer: fn(&str) -> String,
+) -> Result<String, ProviderError> {
+    // A failed exit is the usual shape of "not signed in", and the CLI's own
+    // words are the part worth keeping: they say what to do about it.
+    if !out.succeeded() {
+        let said = out.stderr.trim();
+        let message = if said.is_empty() {
+            out.stdout.trim().to_string()
+        } else {
+            said.to_string()
+        };
+        return Err(ProviderError::Failed {
+            vendor,
+            code: out.code.unwrap_or(-1),
+            message,
+        });
+    }
+    Ok(answer(&out.stdout))
+}
+
 /// Ask every vendor for one word, concurrently.
 ///
 /// Concurrent because these are independent processes and a person is waiting:
@@ -115,24 +138,9 @@ pub(crate) async fn one_shot(
     })
     .await;
 
-    let text = outcome.map_err(ProviderError::from).and_then(|out| {
-        // A non-zero exit is the usual shape of "not signed in", and the CLI's
-        // own words are the part worth keeping: they say what to do about it.
-        if out.code.unwrap_or(0) != 0 {
-            let said = out.stderr.trim();
-            let message = if said.is_empty() {
-                out.stdout.trim().to_string()
-            } else {
-                said.to_string()
-            };
-            return Err(ProviderError::Failed {
-                vendor,
-                code: out.code.unwrap_or(-1),
-                message,
-            });
-        }
-        Ok(answer(&out.stdout))
-    });
+    let text = outcome
+        .map_err(ProviderError::from)
+        .and_then(|out| answer_from(out, vendor, answer));
 
     classify(text, TIMEOUT.as_secs())
 }
@@ -153,6 +161,33 @@ pub(crate) fn classify(outcome: Result<String, ProviderError>, seconds: u64) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_signal_exit_code_is_a_failed_probe() {
+        let output = crate::process::CliOutput {
+            code: None,
+            stdout: "OK".into(),
+            stderr: "killed".into(),
+        };
+        let result = answer_from(output, "test", str::to_string);
+        assert!(matches!(
+            result,
+            Err(ProviderError::Failed { code: -1, .. })
+        ));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_signal_killed_probe_is_not_reported_as_signed_in() {
+        let result = one_shot(
+            "/bin/sh",
+            &["-c".into(), "kill -9 $$".into()],
+            "test",
+            str::to_string,
+        )
+        .await;
+        assert!(matches!(result, SignIn::Failed(_)));
+    }
 
     #[test]
     fn only_a_real_answer_counts_as_signed_in() {
