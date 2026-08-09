@@ -25,7 +25,7 @@ pub fn findings(repo: &str, report: &RunReport) -> Vec<Value> {
         .iter()
         .filter(|entry| entry.cluster.acknowledged.is_none())
         .collect();
-    let total = actionable.len();
+    let total = actionable.last().map_or(0, |entry| entry.position);
     let sweeps = report.swept.len();
     actionable
         .iter()
@@ -134,14 +134,16 @@ mod tests {
         // It must not reach the window as a card carrying a standalone fix
         // prompt, or the window would offer to have a model undo it.
         let mut report = report(None, None);
-        let mut ack = report.ranked[0].clone();
-        ack.position = 2;
-        ack.cluster.acknowledged = Some("documented on purpose".into());
-        report.ranked.push(ack);
+        let mut actionable = report.ranked[0].clone();
+        actionable.position = 2;
+        report.ranked[0].cluster.acknowledged = Some("documented on purpose".into());
+        report.ranked.push(actionable);
 
         let cards = findings("C:/repo", &report);
         assert_eq!(cards.len(), 1, "an acknowledged finding produced a card");
-        assert_eq!(cards[0]["position"], 1, "the wrong finding survived");
+        assert_eq!(cards[0]["position"], 2, "the wrong finding survived");
+        let prompt = cards[0]["prompt"].as_str().unwrap_or_default();
+        assert!(prompt.contains("defect 2 of 2"), "{prompt}");
     }
 
     #[test]

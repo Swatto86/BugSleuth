@@ -224,9 +224,10 @@ where
 
     let mut written = 0usize;
     let mut warnings: Vec<String> = Vec::new();
+    let last = actionable.last().map_or(0, |entry| entry.position);
     for entry in &actionable {
         let name = format!("fix-prompt-{:02}.md", entry.position);
-        let body = single(repo, entry, actionable.len(), sweeps);
+        let body = single(repo, entry, last, sweeps);
         match write(&dir.join(&name), &body) {
             Ok(()) => written += 1,
             Err(error) => warnings.push(format!("could not write {name}: {error}")),

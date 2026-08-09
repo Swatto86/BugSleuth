@@ -109,13 +109,13 @@ fn acknowledged_findings_are_not_fix_work() {
     // decision belongs in the report's "already documented" section, not in a
     // work order. Emitted as fix work, an applying model would undo the very
     // thing the code chose on purpose.
-    let actionable = ranked_of(1);
     let acknowledged = {
-        let mut entry = ranked_of(2);
+        let mut entry = ranked_of(1);
         entry.cluster.acknowledged = Some("the code documents this on purpose".into());
         entry
     };
-    let ranked = vec![actionable, acknowledged];
+    let actionable = ranked_of(2);
+    let ranked = vec![acknowledged, actionable];
 
     let bundle = prompt("C:/x", &ranked, &[], 3);
     assert!(
@@ -123,11 +123,11 @@ fn acknowledged_findings_are_not_fix_work() {
         "the count still includes the acknowledged finding: {bundle}"
     );
     assert!(
-        bundle.contains("### 1."),
+        bundle.contains("### 2."),
         "the actionable work order is missing"
     );
     assert!(
-        !bundle.contains("### 2."),
+        !bundle.contains("### 1."),
         "the acknowledged finding became a work order"
     );
 
@@ -142,12 +142,18 @@ fn acknowledged_findings_are_not_fix_work() {
         "the acknowledged finding got a per-defect prompt"
     );
     assert!(
-        dir.join("fix-prompt-01.md").exists(),
+        dir.join("fix-prompt-02.md").exists(),
         "the actionable prompt is missing"
     );
     assert!(
-        !dir.join("fix-prompt-02.md").exists(),
+        !dir.join("fix-prompt-01.md").exists(),
         "the acknowledged finding was written as fix work"
+    );
+    let standalone = std::fs::read_to_string(dir.join("fix-prompt-02.md"))
+        .unwrap_or_else(|error| panic!("could not read prompt: {error}"));
+    assert!(
+        standalone.contains("defect 2 of 2"),
+        "the prompt's rank exceeds its claimed total: {standalone}"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
