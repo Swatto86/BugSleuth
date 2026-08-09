@@ -144,8 +144,7 @@ pub(super) fn legacy_file_name_for(unit: &Unit) -> String {
 ///
 /// Escaping keeps the property that matters — nothing here can be a path
 /// separator, a drive letter or `..` — while making the encoding injective:
-/// every dash in the output came from a literal dash in the input, and
-/// everything else is a hex escape that cannot be produced any other way.
+/// every non-alphanumeric character is a self-delimiting hex escape.
 fn safe(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
@@ -153,10 +152,11 @@ fn safe(text: &str) -> String {
             out.push(c);
         } else if c == '-' {
             // A literal dash escapes too, or `a-b` and `a/b` would still meet.
-            out.push_str("_2d");
+            out.push_str("_2d_");
         } else {
-            // Non-ASCII goes through as its code point, so this stays total.
-            out.push_str(&format!("_{:x}", c as u32));
+            // Terminated with `_`, which never appears bare in the output, so
+            // an escape cannot be extended by the literal hex digits after it.
+            out.push_str(&format!("_{:x}_", c as u32));
         }
     }
     out

@@ -504,6 +504,7 @@ rust orchestrate::persist::naming_tests::an_effort_spelling_the_pass_suffix_cann
 rust orchestrate::persist::naming_tests::an_encoded_name_can_never_reach_outside_the_run_directory
 rust orchestrate::persist::naming_tests::each_unit_gets_a_distinct_file_so_sweeps_cannot_overwrite_each_other
 rust orchestrate::persist::naming_tests::two_model_ids_that_differ_only_in_punctuation_get_different_files
+rust orchestrate::persist::naming_tests::variable_length_hex_escapes_cannot_collide_with_literal_hex_digits
 rust orchestrate::persist::tests::a_failed_sweep_is_retried_not_reused
 rust orchestrate::persist::tests::a_legacy_file_belonging_to_a_different_model_is_not_adopted
 rust orchestrate::persist::tests::a_report_is_replaced_whole_or_not_at_all

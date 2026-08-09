@@ -85,6 +85,19 @@ fn two_model_ids_that_differ_only_in_punctuation_get_different_files() {
 }
 
 #[test]
+fn variable_length_hex_escapes_cannot_collide_with_literal_hex_digits() {
+    let split = file_name_for(&Unit {
+        model: "_2d".into(),
+        ..unit()
+    });
+    let joined = file_name_for(&Unit {
+        model: "\u{5F2D}".into(),
+        ..unit()
+    });
+    assert_ne!(split, joined);
+}
+
+#[test]
 fn an_encoded_name_can_never_reach_outside_the_run_directory() {
     // The encoding exists to be injective, but it must not have bought that
     // by letting a separator or a parent reference through.
