@@ -389,6 +389,10 @@ ${still}`,
   it("leaves the reviewed repository untouched", () => {
     // The promise the whole tool rests on. A review that modified its target
     // would be worse than useless.
+    assert.ok(
+      fs.existsSync(path.join(REPO, "src", "pricing.rs")),
+      `the seeded fixture is missing or empty at ${REPO} — restore it from git history`,
+    );
     assert.ok(!fs.existsSync(path.join(REPO, ".bugsleuth-worktrees")));
   });
 });
