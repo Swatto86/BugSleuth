@@ -28,8 +28,9 @@ server running and shows a blank window without one.
 
 ## Install it
 
-```bash
-./target/release/bundle/nsis/BugSleuth_0.1.0_x64-setup.exe /S
+```powershell
+$version = (Get-Content .\src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
+& ".\target\release\bundle\nsis\BugSleuth_${version}_x64-setup.exe" /S
 ```
 
 Test the installed copy, not the one in `target/`. It is what people get.

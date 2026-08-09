@@ -319,3 +319,12 @@ test("the one-invocation journey disables the default triage pass", () => {
   assert.ok(runbook.includes("one cheap model\ninvocation"));
   assert.ok(runbook.includes("Untick **Re-grade every severity**"));
 });
+
+test("the runbook derives the installer name from Tauri's version", () => {
+  const runbook = read("RUNBOOK.md");
+  const tauri = JSON.parse(read("src-tauri", "tauri.conf.json"));
+  assert.ok(tauri.version, "Tauri version is missing");
+  assert.ok(runbook.includes("src-tauri\\tauri.conf.json"));
+  assert.ok(runbook.includes("BugSleuth_${version}_x64-setup.exe"));
+  assert.doesNotMatch(runbook, /BugSleuth_\d+\.\d+\.\d+_x64-setup\.exe/);
+});

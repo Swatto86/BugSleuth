@@ -176,6 +176,7 @@ node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the release uses the lockfile's Tauri CLI
+node the runbook derives the installer name from Tauri's version
 node the scans find things at all, so a passing run means something
 node the settings the window writes are the settings Rust reads
 node the two calls this rule was wrong about are classified correctly
