@@ -20,7 +20,7 @@ fn run<'a>(model: &'a str) -> Run<'a> {
         timeout: Duration::from_secs(60),
         binary: None,
         api_key: None,
-        session_id: Some(new_session_id()),
+        session_id: Some(salvage::new_session_id()),
         resume: None,
     }
 }

@@ -20,7 +20,9 @@
 //! invented snippet is discarded there regardless.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::Value;
 
@@ -31,6 +33,27 @@ use crate::error::ProviderError;
 /// salvage that needs many turns is investigating, which is the thing this must
 /// not do.
 const SALVAGE_TURNS: u32 = 3;
+
+pub(super) fn new_session_id() -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let mut value = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+        ^ (u128::from(std::process::id()) << 64)
+        ^ u128::from(NEXT.fetch_add(1, Ordering::Relaxed));
+    value = (value & !(0xf000_u128 << 64)) | (0x4000_u128 << 64);
+    value = (value & !(0xc000_u128 << 48)) | (0x8000_u128 << 48);
+    let hex = format!("{value:032x}");
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..]
+    )
+}
 
 /// The session id of a run that failed *specifically* by exhausting its turns.
 ///

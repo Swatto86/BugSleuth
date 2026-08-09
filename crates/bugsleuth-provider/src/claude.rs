@@ -5,9 +5,7 @@
 //! without anchor verification.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use bugsleuth_domain::{Lane, RawFindings, finding_schema};
 use serde::Deserialize;
@@ -144,7 +142,7 @@ pub(crate) struct Run<'a> {
 /// repository to read at all.
 pub(crate) async fn invoke(mut run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
     if run.resume.is_none() && run.session_id.is_none() {
-        run.session_id = Some(new_session_id());
+        run.session_id = Some(salvage::new_session_id());
     }
     // Held before `run` is consumed: the salvage needs the same model, binary
     // and schema, and none of them can be read back out of a moved value.
@@ -219,27 +217,6 @@ fn recovered(
     })?;
     recovered.salvaged = true;
     Ok(recovered)
-}
-
-fn new_session_id() -> String {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let mut value = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos()
-        ^ (u128::from(std::process::id()) << 64)
-        ^ u128::from(NEXT.fetch_add(1, Ordering::Relaxed));
-    value = (value & !(0xf000_u128 << 64)) | (0x4000_u128 << 64);
-    value = (value & !(0xc000_u128 << 48)) | (0x8000_u128 << 48);
-    let hex = format!("{value:032x}");
-    format!(
-        "{}-{}-{}-{}-{}",
-        &hex[..8],
-        &hex[8..12],
-        &hex[12..16],
-        &hex[16..20],
-        &hex[20..]
-    )
 }
 
 pub(super) async fn invoke_once(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
