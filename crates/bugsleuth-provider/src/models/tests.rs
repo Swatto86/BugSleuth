@@ -196,3 +196,18 @@ async fn claude_effort_is_rejected_when_the_model_cannot_apply_it() {
     assert!(validate_effort("claude", "sonnet", "xhigh").await.is_err());
     assert!(validate_effort("claude", "haiku", "high").await.is_err());
 }
+
+#[tokio::test]
+async fn claude_catalogue_does_not_offer_the_undocumented_fable_alias() {
+    let catalogue = available("claude").await.expect("fixed Claude catalogue");
+    let models: Vec<&str> = catalogue
+        .groups
+        .iter()
+        .flat_map(|group| group.models.iter().map(String::as_str))
+        .collect();
+    assert!(
+        models.contains(&"sonnet"),
+        "catalogue scan found no known alias"
+    );
+    assert!(!models.contains(&"fable"), "the CLI has no fable alias");
+}

@@ -157,7 +157,7 @@ pub(crate) fn effort_ok(
 }
 
 /// Claude's documented aliases. Each always points at the newest of its family.
-const CLAUDE_MODELS: &[&str] = &["fable", "opus", "sonnet", "haiku"];
+const CLAUDE_MODELS: &[&str] = &["opus", "sonnet", "haiku"];
 
 fn claude_models() -> VendorCatalogue {
     let mut catalogue = fixed("Claude", CLAUDE_MODELS);
