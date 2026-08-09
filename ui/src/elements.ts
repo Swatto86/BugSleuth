@@ -41,6 +41,7 @@ const ui = {
   run: el<HTMLButtonElement>("run"),
   stop: el<HTMLButtonElement>("stop"),
   quit: el<HTMLButtonElement>("quit"),
+  copyReport: el<HTMLButtonElement>("copy-report"),
   copyPrompt: el<HTMLButtonElement>("copy-prompt"),
   promptPath: el<HTMLParagraphElement>("prompt-path"),
   applyPanel: el<HTMLDivElement>("apply-panel"),

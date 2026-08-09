@@ -21,6 +21,7 @@ export interface RunDeps {
   output: HTMLPreElement;
   stop: HTMLButtonElement;
   findings: HTMLDivElement;
+  copyReport: HTMLButtonElement;
   copyPrompt: HTMLButtonElement;
   promptPath: HTMLParagraphElement;
   /** Where the fixes are handed to a model. Offered once there is a prompt. */
@@ -39,8 +40,10 @@ export const isRunning = (): boolean => running;
 
 /** The last run's fix prompt, held so the Copy button has something to give. */
 let activeRunRepo = "";
+let currentReport = "";
 let fixPrompt = "";
 let fixPromptRepo = "";
+export const currentRunReport = (): string => currentReport;
 export const currentFixPrompt = (): string => fixPrompt;
 export const currentFixPromptRepo = (): string => fixPromptRepo;
 
@@ -52,6 +55,7 @@ export async function startRun(deps: RunDeps): Promise<void> {
   deps.setStatus("Running — this takes tens of minutes", "running");
   const previousCards = [...deps.findings.children];
   const applyWasOffered = !deps.applyPanel.classList.contains("hidden");
+  const reportWasOffered = !deps.copyReport.classList.contains("hidden");
   const copyWasOffered = !deps.copyPrompt.classList.contains("hidden");
   const pathWasShown = !deps.promptPath.classList.contains("hidden");
   deps.output.textContent = "Starting…";
@@ -60,6 +64,7 @@ export async function startRun(deps: RunDeps): Promise<void> {
   // rewritten. Offering it during a run would apply a report the pane is no
   // longer showing.
   deps.applyPanel.classList.add("hidden");
+  deps.copyReport.classList.add("hidden");
   deps.copyPrompt.classList.add("hidden");
   deps.promptPath.classList.add("hidden");
   // Re-enabled per run: it disables itself once pressed, so a second press
@@ -80,6 +85,7 @@ export async function startRun(deps: RunDeps): Promise<void> {
     deps.output.textContent = String(error);
     deps.findings.replaceChildren(...previousCards);
     if (applyWasOffered) deps.applyPanel.classList.remove("hidden");
+    if (reportWasOffered) deps.copyReport.classList.remove("hidden");
     if (copyWasOffered) deps.copyPrompt.classList.remove("hidden");
     if (pathWasShown) deps.promptPath.classList.remove("hidden");
     if (document.activeElement === deps.stop) deps.focusStatus();
@@ -126,6 +132,8 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // about unswept lanes and how severities were graded.
     deps.findings.replaceChildren(findingsList(event.payload.findings ?? []));
     deps.output.textContent = event.payload.text;
+    currentReport = event.payload.text;
+    deps.copyReport.classList.toggle("hidden", currentReport === "");
     // A finished run whose fix prompts did not fully save is not a plain
     // "Finished": the detail is in the output text, but the status has to say
     // the save was incomplete rather than letting the window read as all-clear.

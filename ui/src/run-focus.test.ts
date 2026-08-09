@@ -196,3 +196,18 @@ test("a new run withdraws the previous run's prompt controls", () => {
     "startRun leaves the previous run's saved-path note showing",
   );
 });
+
+test("a new run withdraws the previous run's report action", () => {
+  const run = frontendFiles().find((f) => f.fileName === "run.ts");
+  assert.ok(run, "run.ts is no longer a shipped frontend module");
+  assert.match(
+    run.getText(),
+    /deps\.copyReport\.classList\.add\("hidden"\)/,
+    "startRun leaves the previous run's Copy report button offered",
+  );
+  assert.match(
+    run.getText(),
+    /deps\.copyReport\.classList\.toggle\("hidden",\s*currentReport === ""\)/,
+    "a finished run never offers its report for copying",
+  );
+});

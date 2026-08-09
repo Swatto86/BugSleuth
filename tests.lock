@@ -39,6 +39,7 @@ node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
 node a new run withdraws the previous run's prompt controls
+node a new run withdraws the previous run's report action
 node a partly-failed handoff save is surfaced, not swallowed
 node a passes count above the backend cap is not runnable and is clamped in the picker
 node a progress event carries the fields the window renders from
@@ -526,6 +527,7 @@ rust orchestrate::render::tests::a_complete_run_says_nothing_about_unswept_lanes
 rust orchestrate::render::tests::a_failed_sweep_is_named_with_its_reason
 rust orchestrate::render::tests::a_lane_with_no_model_is_named_in_the_report
 rust orchestrate::render::tests::a_multi_lane_report_warns_that_severities_are_not_comparable
+rust orchestrate::render::tests::a_report_is_split_into_scanable_sections_with_a_summary
 rust orchestrate::render::tests::a_report_says_when_its_severities_were_never_graded_together
 rust orchestrate::render::tests::a_single_lane_report_does_not_warn_about_comparing_lanes
 rust orchestrate::render::tests::a_swept_lane_that_found_nothing_is_not_confused_with_a_gap

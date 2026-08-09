@@ -1,9 +1,4 @@
-/**
- * Wiring: DOM in, commands out.
- *
- * The rules live in model.ts; this file only reflects state into elements and
- * sends what the user asked for to Rust.
- */
+/** Wiring: DOM in, commands out. */
 
 import { invoke } from "@tauri-apps/api/core";
 
@@ -29,6 +24,7 @@ import {
   type RunDeps,
   currentFixPrompt,
   currentFixPromptRepo,
+  currentRunReport,
   isRunning,
   listenForRunEvents,
 } from "./run";
@@ -231,6 +227,7 @@ const runDeps = (): RunDeps => ({
   output: ui.output,
   stop: ui.stop,
   findings: ui.findings,
+  copyReport: ui.copyReport,
   copyPrompt: ui.copyPrompt,
   promptPath: ui.promptPath,
   applyPanel: ui.applyPanel,
@@ -282,6 +279,7 @@ function bind(): void {
     render,
     setStatus,
     focusStatus,
+    report: currentRunReport,
     fixPrompt: currentFixPrompt,
   });
 

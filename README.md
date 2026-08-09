@@ -78,6 +78,11 @@ report — it just says NOT SWEPT — and that is easy to skim past. The lane ma
 marks the empty column and says so in as many words.
 Hover a lane heading for the defects that lane is assigned to hunt.
 
+Finished results show expandable finding cards and a plain-text report split
+into coverage, summary, interpretation, limits, and actionable findings. **Copy
+report** copies that complete report; **Copy fix prompt** copies the detailed
+work orders intended for a fixing agent.
+
 Dark and light both, following the system by default, switchable in the title
 bar. Settings live in `%APPDATA%\BugSleuth\settings.json`, and each run's
 per-sweep JSON goes in

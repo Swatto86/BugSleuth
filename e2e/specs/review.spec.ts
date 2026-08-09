@@ -21,6 +21,7 @@ import {
   MODEL,
   REPO,
   assertSweepWritten,
+  clipboardText,
   clickDialogButton,
   configureOneSweep,
   logWebviewDiagnostics,
@@ -184,6 +185,15 @@ describe("BugSleuth desktop app", () => {
       output.includes("distinct defect"),
       `no merged report in output:\n${output}`,
     );
+    const reportText = await browser.execute(
+      () => document.getElementById("output")?.textContent ?? "",
+    );
+    await $("#copy-report").click();
+    await browser.waitUntil(
+      async () => (await $("#copy-report").getText()) === "Copied",
+      { timeout: 5_000, timeoutMsg: "Copy report did not confirm success" },
+    );
+    assert.equal(clipboardText(), reportText.replace(/\r\n/g, "\n").trimEnd());
 
     // The real window offers the only route to the repository-writing command.
     await expect($("#apply-panel")).toBeDisplayed();

@@ -51,6 +51,7 @@ looking, not by inference:
 | 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>-<16-hex-path-hash>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
 | 7b | Check a finding's `fix` | It has an approach, at least one edit naming a symbol, a verification command, and risks. An empty plan renders as "no fix plan" rather than as nothing |
 | 7c | **Copy fix prompt** | The button appears when the run ends, copies, and briefly says "Copied". The path under it points at a real `fix-prompt.md` in the run directory |
+| 7d | **Copy report** | The button appears when the run ends, copies the complete report, and briefly says "Copied" |
 | 8 | Check the reviewed repo | Unchanged: `git status` clean, no `.bugsleuth-worktrees` left behind |
 | 9 | Switch theme light and dark | Both readable; "Match system" follows the OS |
 | 10 | Close the window | It hides; the process is still alive |

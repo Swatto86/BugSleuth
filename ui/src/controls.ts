@@ -29,6 +29,7 @@ export interface ControlDeps {
     checkSignin: HTMLButtonElement;
     vendors: HTMLDivElement;
     addModel: HTMLButtonElement;
+    copyReport: HTMLButtonElement;
     copyPrompt: HTMLButtonElement;
   };
   settings: () => Settings;
@@ -41,7 +42,29 @@ export interface ControlDeps {
   render: () => void;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
   focusStatus: () => void;
+  report: () => string;
   fixPrompt: () => string;
+}
+
+function bindCopy(
+  button: HTMLButtonElement,
+  value: () => string,
+  idle: string,
+  failed: string,
+): void {
+  button.addEventListener("click", () => {
+    void navigator.clipboard.writeText(value()).then(
+      () => {
+        button.classList.remove("error");
+        button.textContent = "Copied";
+        window.setTimeout(() => (button.textContent = idle), 1500);
+      },
+      () => {
+        button.textContent = failed;
+        button.classList.add("error");
+      },
+    );
+  });
 }
 
 export function bindControls(deps: ControlDeps): void {
@@ -148,23 +171,11 @@ export function bindControls(deps: ControlDeps): void {
     render();
   });
 
-  ui.copyPrompt.addEventListener("click", () => {
-    void navigator.clipboard.writeText(deps.fixPrompt()).then(
-      () => {
-        // Confirm by changing the button, not with a dialog: you are about to
-        // paste somewhere else, and a dialog would be one more thing to dismiss.
-        ui.copyPrompt.textContent = "Copied";
-        window.setTimeout(() => {
-          ui.copyPrompt.textContent = "Copy fix prompt";
-        }, 1500);
-      },
-      () => {
-        // Clipboard access can be refused. Say so and point at the file, which
-        // is always written — silently doing nothing would be the worst outcome
-        // for the one button that hands over the result.
-        ui.copyPrompt.textContent = "Copy failed — use the saved file";
-        ui.copyPrompt.classList.add("error");
-      },
-    );
-  });
+  bindCopy(ui.copyReport, deps.report, "Copy report", "Copy failed");
+  bindCopy(
+    ui.copyPrompt,
+    deps.fixPrompt,
+    "Copy fix prompt",
+    "Copy failed — use the saved file",
+  );
 }

@@ -87,6 +87,17 @@ Get-CimInstance Win32_Process | Where-Object {
   ).trim();
 }
 
+/** Text placed on the Windows clipboard by the real webview. */
+export function clipboardText(): string {
+  return execFileSync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard -Raw"],
+    { encoding: "utf8" },
+  )
+    .replace(/\r\n/g, "\n")
+    .trimEnd();
+}
+
 /**
  * The app's run directory for the fixture, found by prefix.
  *

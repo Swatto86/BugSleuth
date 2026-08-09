@@ -5,7 +5,7 @@
 //! that never ran, and severities are not presented as comparable across lanes
 //! when they are not.
 
-use bugsleuth_domain::Lane;
+use bugsleuth_domain::{Lane, Severity};
 
 use super::RunReport;
 
@@ -66,7 +66,9 @@ impl RunReport {
     }
 
     pub fn to_text(&self) -> String {
-        let mut out = String::from("=== run report ===\n");
+        let mut out = String::from(
+            "BUGSLEUTH RUN REPORT\n====================\n\nREVIEW COVERAGE\n---------------\n",
+        );
         for sweep in &self.swept {
             // The rejection count is trust information, not noise: it says how
             // often this model's claims about this repository failed the only
@@ -103,13 +105,27 @@ impl RunReport {
         }
 
         let total: usize = self.swept.iter().map(|sweep| sweep.findings).sum();
+        let mut severity = [0; 4];
+        for entry in &self.ranked {
+            severity[match entry.cluster.severity() {
+                Severity::Critical => 0,
+                Severity::High => 1,
+                Severity::Medium => 2,
+                Severity::Low => 3,
+            }] += 1;
+        }
         out.push_str(&format!(
-            "\n  {total} findings from {} sweeps merged into {} distinct defects\n",
+            "\nSUMMARY\n-------\n  Sweeps completed: {}\n  Findings reported: {total}\n  \
+             Distinct defects: {}\n  Severity — Critical: {} | High: {} | Medium: {} | Low: {}\n",
             self.swept.len(),
-            self.ranked.len()
+            self.ranked.len(),
+            severity[0],
+            severity[1],
+            severity[2],
+            severity[3],
         ));
 
-        out.push_str(&self.how_it_was_ordered());
+        let mut interpretation = self.how_it_was_ordered();
 
         // Severity means different things in different mandates. A "high" from
         // the security lane and a "high" from the correctness lane were assigned
@@ -122,16 +138,21 @@ impl RunReport {
         // warning then would be telling the reader not to trust the one thing
         // that was done specifically to make the ordering trustworthy.
         if self.lanes_swept() > 1 && !self.graded_together() {
-            out.push_str(
+            interpretation.push_str(
                 "\n  Note: this list spans more than one lane. Severities are relative to\n  \
                  each lane's own mandate and are NOT directly comparable between lanes -\n  \
                  read the ordering within a lane, not across them.\n",
             );
         }
+        if !interpretation.is_empty() {
+            out.push_str("\nINTERPRETATION\n--------------");
+            out.push_str(&interpretation);
+        }
 
         // Both caveats come from one place. Each was once added to a single
         // renderer and forgotten in the other, so the same report read more
         // reassuringly depending only on which command produced it.
+        out.push_str("\nLIMITS\n------");
         out.push_str(&crate::caveats::unsandboxed(
             self.swept.iter().map(|sweep| &sweep.model),
             "  ",
@@ -155,20 +176,25 @@ impl RunReport {
             .iter()
             .filter(|entry| entry.cluster.acknowledged.is_some())
             .collect();
+        let actionable: Vec<_> = self
+            .ranked
+            .iter()
+            .filter(|entry| entry.cluster.acknowledged.is_none())
+            .collect();
+        out.push_str("\nACTIONABLE FINDINGS\n-------------------\n");
         if !known.is_empty() {
             out.push_str(&format!(
-                "\n  {} of these are already documented in the code as deliberate\n  \
-                 decisions. They are listed at the end rather than above, with what the\n  \
-                 code says, so you can disagree with the decision if you want to.\n",
+                "\n  {} additional observations are documented in the code as deliberate\n  \
+                 decisions. They are listed at the end with what the code says, so you\n  \
+                 can disagree with the decision if you want to.\n",
                 known.len()
             ));
         }
+        if actionable.is_empty() {
+            out.push_str("  No actionable defects survived verification.\n");
+        }
 
-        for entry in self
-            .ranked
-            .iter()
-            .filter(|e| e.cluster.acknowledged.is_none())
-        {
+        for entry in actionable {
             let cluster = &entry.cluster;
             let finding = cluster.representative();
             out.push_str(&format!(
@@ -215,9 +241,8 @@ fn already_documented(known: &[&bugsleuth_judge::Ranked]) -> String {
         return String::new();
     }
     let mut out = String::from(
-        "\n  Already documented as deliberate decisions\n  \
-         (accurate observations the code already answers; each quote below was\n  \
-         checked to be really in the file named)\n",
+        "\nALREADY DOCUMENTED\n------------------\n  Accurate observations the code already \
+         answers; each quote below was checked to be really in the file named.\n",
     );
     for entry in known {
         let finding = entry.cluster.representative();

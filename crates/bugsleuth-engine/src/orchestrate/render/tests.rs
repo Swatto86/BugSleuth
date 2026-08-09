@@ -120,6 +120,30 @@ fn a_swept_lane_that_found_nothing_is_not_confused_with_a_gap() {
     assert!(text.contains("0 findings"));
 }
 
+#[test]
+fn a_report_is_split_into_scanable_sections_with_a_summary() {
+    let text = report(vec![]).to_text();
+    for heading in [
+        "BUGSLEUTH RUN REPORT",
+        "REVIEW COVERAGE",
+        "SUMMARY",
+        "LIMITS",
+        "ACTIONABLE FINDINGS",
+    ] {
+        assert!(text.contains(heading), "missing {heading}:\n{text}");
+    }
+    assert!(text.contains("Sweeps completed: 1"), "{text}");
+    assert!(text.contains("Distinct defects: 0"), "{text}");
+    assert!(
+        text.contains("Critical: 0 | High: 0 | Medium: 0 | Low: 0"),
+        "{text}"
+    );
+    assert!(
+        text.contains("No actionable defects survived verification."),
+        "{text}"
+    );
+}
+
 use crate::triage::Outcome;
 
 fn graded_report(triage: Outcome) -> RunReport {
