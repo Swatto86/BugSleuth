@@ -18,6 +18,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import ts from "typescript";
+
+import { parse, walk } from "./ast.test.ts";
 
 const root = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -38,6 +41,9 @@ const read = (...parts: string[]) =>
 
 const readme = () => read("README.md");
 const workflow = () => read(".github", "workflows", "release.yml");
+const e2eConfig = () => read("e2e", "wdio.conf.ts");
+const e2eSpec = () => read("e2e", "specs", "review.spec.ts");
+const e2eSupport = () => read("e2e", "specs", "support.ts");
 
 /**
  * The platform suffixes the release can build for.
@@ -205,4 +211,82 @@ test("the packaged gate cannot download a Tauri CLI", () => {
   const script = read("scripts", "verify.sh");
   assert.ok(script.includes("npx --no-install tauri build"));
   assert.ok(!script.includes("npx --yes @tauri-apps/cli"));
+});
+
+test("the E2E harness waits for its driver cleanup and rejects a stale port", () => {
+  const source = e2eConfig();
+  assert.equal(
+    source.match(/spawn\(\s*"tauri-driver"/g)?.length,
+    1,
+    "the check found no real driver launch",
+  );
+  assert.ok(source.includes("assertDriverPortFree"));
+  assert.ok(source.includes("AbortSignal.timeout"));
+  assert.ok(source.includes('spawnSync("taskkill"'));
+  assert.ok(!source.includes("shell: true"));
+});
+
+test("the live E2E review replaces saved configuration deterministically", () => {
+  const spec = parse("review.spec.ts", e2eSpec());
+  let callsHelper = false;
+  walk(spec, (node) => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      callsHelper ||= node.expression.text === "configureOneSweep";
+    }
+  });
+  assert.ok(
+    callsHelper,
+    "the real review test does not configure its own sweep",
+  );
+
+  const source = parse("support.ts", e2eSupport());
+  let body: ts.Block | undefined;
+  walk(source, (node) => {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === "configureOneSweep"
+    ) {
+      body = node.body;
+    }
+  });
+  assert.ok(body, "the sweep configuration helper was not found");
+
+  let whileLoops = 0;
+  const methods = new Set<string>();
+  walk(body, (node) => {
+    if (ts.isWhileStatement(node)) whileLoops += 1;
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression)
+    ) {
+      methods.add(node.expression.name.text);
+    }
+  });
+  assert.equal(whileLoops, 1, "saved rows are not removed until one remains");
+  assert.ok(
+    methods.has("selectByAttribute"),
+    "the provider still comes from saved settings",
+  );
+  assert.ok(
+    methods.has("isSelected"),
+    "lane selection is still toggled blindly",
+  );
+});
+
+test("the E2E stop check observes a real provider before and after cancellation", () => {
+  const source = parse("review.spec.ts", e2eSpec());
+  let observations = 0;
+  walk(source, (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "providerCliProcesses"
+    ) {
+      observations += 1;
+    }
+  });
+  assert.ok(
+    observations >= 2,
+    `only ${observations} provider-process observations`,
+  );
 });

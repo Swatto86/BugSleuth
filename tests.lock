@@ -11,7 +11,9 @@ node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
+node a bare voided call is not handled
 node a blank row makes the configuration unrunnable, exactly like the engine
+node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
@@ -26,6 +28,7 @@ node a failed catalogue load is told to the user rather than swallowed
 node a lane is spelled the same way in the window as in the engine
 node a model listed twice with different passes counts like the engine: max, not sum
 node a model with no id contributes nothing
+node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
@@ -57,6 +60,7 @@ node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
@@ -66,6 +70,8 @@ node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
+node an awaited call in a discarded callback is not handled
+node an awaited call inside its own try is handled
 node an awaited call inside its own try is handled
 node an awaited call inside its own try is handled
 node an awaited call inside its own try is handled
@@ -94,6 +100,7 @@ node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
+node every arm of a union is read, not just the first
 node every command the page calls exists in Rust and is exposed
 node every control the matrix rebuilds can be found again afterwards
 node every element the code looks up exists in the markup
@@ -103,6 +110,7 @@ node every quit into Rust reports its failure rather than looking broken
 node every shipped preset covers every lane
 node every silent-failure opt-out gives a reason
 node flushing writes the latest pending settings exactly once
+node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
@@ -136,6 +144,8 @@ node starting a run moves focus off the disabled Run button to Stop
 node startup renders do not persist settings back over the saved file
 node stored provider concurrency is clamped at boot
 node the E2E build uses the locked local Tauri CLI
+node the E2E harness waits for its driver cleanup and rejects a stale port
+node the E2E stop check observes a real provider before and after cancellation
 node the README still promises a single file that runs with nothing installed
 node the README's download table names assets the workflow builds
 node the advertised concurrency cap and the enforced cap are the same number
@@ -145,11 +155,13 @@ node the clearing flag is set before the clear and released on both outcomes
 node the confirmation dialog describes its message to assistive tech
 node the documentation does not point at files that no longer exist
 node the frontend actually calls into Rust, so this test is not vacuous
+node the live E2E review replaces saved configuration deterministically
 node the packaged gate cannot download a Tauri CLI
 node the precise scan sees each of the three ways a class is set
 node the preset handler guards on the whole configuration, not per row
 node the provider-concurrency cap is the same number in the window, the markup and Rust
 node the quit guard consults the clearing state, like the tray does
+node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous

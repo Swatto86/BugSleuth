@@ -13,7 +13,7 @@
  * the app, exercises the main action and exits cleanly is.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -68,6 +68,23 @@ function assertProductionBuild(exe: string): void {
 
 let tauriDriver: ChildProcess | undefined;
 
+const driverStatus = () =>
+  fetch("http://127.0.0.1:4444/status", {
+    signal: AbortSignal.timeout(1_000),
+  });
+
+/** Refuse to mistake somebody else's driver for the one this run owns. */
+async function assertDriverPortFree(): Promise<void> {
+  try {
+    await driverStatus();
+  } catch {
+    return;
+  }
+  throw new Error(
+    "port 4444 is already held by a WebDriver process; stop the stale tauri-driver.exe before rerunning E2E",
+  );
+}
+
 /**
  * Wait until the driver is actually accepting connections.
  *
@@ -86,12 +103,14 @@ async function waitForDriver(): Promise<void> {
   let lastError = "no attempt made";
   while (Date.now() < deadline) {
     if (tauriDriver?.exitCode !== null && tauriDriver?.exitCode !== undefined) {
-      throw new Error(`tauri-driver exited with code ${tauriDriver.exitCode} before binding 4444`);
+      throw new Error(
+        `tauri-driver exited with code ${tauriDriver.exitCode} before binding 4444`,
+      );
     }
     try {
       // Any answer at all means it is listening. WebDriver replies 404 to a
       // bare GET, which is a perfectly good sign of life.
-      await fetch("http://127.0.0.1:4444/status");
+      await driverStatus();
       return;
     } catch (error) {
       lastError = String(error);
@@ -161,8 +180,8 @@ ${String(error instanceof Error ? error.message : error)}
     // driver-launched app would exit on the spot — a session attached to
     // nothing, which is indistinguishable from the app being broken. The suite
     // drives the shipped binary, guard included, so it clears the field first.
-    spawn("taskkill", ["/IM", path.basename(application), "/T", "/F"], {
-      shell: true,
+    await assertDriverPortFree();
+    spawnSync("taskkill", ["/IM", path.basename(application), "/T", "/F"], {
       stdio: "ignore",
     });
     await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -170,7 +189,7 @@ ${String(error instanceof Error ? error.message : error)}
     tauriDriver = spawn(
       "tauri-driver",
       ["--native-driver", path.resolve(root, ".webdriver/msedgedriver.exe")],
-      { stdio: [null, process.stdout, process.stderr], shell: true },
+      { stdio: [null, process.stdout, process.stderr] },
     );
     await waitForDriver();
   },
@@ -180,7 +199,9 @@ ${String(error instanceof Error ? error.message : error)}
     // app. Killing only the parent leaves both behind holding port 4444, and
     // the next run then fails for a reason that has nothing to do with the app.
     if (tauriDriver?.pid) {
-      spawn("taskkill", ["/pid", String(tauriDriver.pid), "/T", "/F"], { shell: true });
+      spawnSync("taskkill", ["/pid", String(tauriDriver.pid), "/T", "/F"], {
+        stdio: "ignore",
+      });
     }
   },
 };

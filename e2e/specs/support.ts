@@ -9,9 +9,12 @@
  */
 
 import { strict as assert } from "node:assert";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { splitId } from "../../ui/src/model.ts";
 
 export const REPO = path.resolve(process.cwd(), "fixtures/seeded-repo");
 export const RUNS_ROOT = path.join(
@@ -22,6 +25,67 @@ export const RUNS_ROOT = path.join(
 
 /** Model used for the live run. Overridable so the journey is not pinned to one vendor. */
 export const MODEL = process.env["BUGSLEUTH_E2E_MODEL"] ?? "haiku";
+
+/** Set lane checkboxes without retaining elements invalidated by a matrix redraw. */
+export async function setLaneSelections(
+  selector: string,
+  selectedIndexes: readonly number[],
+): Promise<void> {
+  const count = (await $$(selector)).length;
+  for (let index = 0; index < count; index += 1) {
+    const box = (await $$(selector))[index]!;
+    if ((await box.isSelected()) !== selectedIndexes.includes(index)) {
+      await box.click();
+    }
+  }
+}
+
+/** Replace arbitrary saved settings with one cheap, deterministic sweep. */
+export async function configureOneSweep(modelSpec: string): Promise<void> {
+  const rowCount = async () => (await $$("#matrix-body tr")).length;
+  while ((await rowCount()) > 1) {
+    const before = await rowCount();
+    await (await $$("#matrix-body tr"))[1]!.$("button").click();
+    await clickDialogButton("Remove model");
+    await browser.waitUntil(async () => (await rowCount()) === before - 1, {
+      timeout: 5_000,
+      timeoutMsg: "removing saved model rows did not settle",
+    });
+  }
+
+  const { vendor, model } = splitId(modelSpec);
+  await $(
+    "#matrix-body tr:first-child td:first-child select",
+  ).selectByAttribute("value", vendor);
+  await $("#matrix-body tr:first-child td.model-id input").setValue(model);
+  await $(
+    "#matrix-body tr:first-child td:nth-child(3) select",
+  ).selectByAttribute("value", "");
+  await $(
+    "#matrix-body tr:first-child td:nth-child(4) select",
+  ).selectByAttribute("value", "1");
+  await setLaneSelections("#matrix-body tr:first-child td.lane-cell input", [
+    0,
+  ]);
+  const triage = await $("#triage-severities");
+  if (await triage.isSelected()) await triage.click();
+}
+
+/** Provider processes carrying BugSleuth's production-only flag combinations. */
+export function providerCliProcesses(): string {
+  const command = `
+Get-CimInstance Win32_Process | Where-Object {
+  ($_.Name -eq 'claude.exe' -and $_.CommandLine -match '--safe-mode' -and $_.CommandLine -match '--output-format') -or
+  ($_.Name -eq 'codex.exe' -and $_.CommandLine -match '--ignore-rules' -and $_.CommandLine -match '--output-last-message') -or
+  ($_.Name -eq 'kilo.exe' -and $_.CommandLine -match '--pure' -and $_.CommandLine -match '--agent')
+} | ForEach-Object { "$($_.ProcessId) $($_.Name)" }
+`;
+  return execFileSync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", command],
+    { encoding: "utf8" },
+  ).trim();
+}
 
 /**
  * The app's run directory for the fixture, found by prefix.

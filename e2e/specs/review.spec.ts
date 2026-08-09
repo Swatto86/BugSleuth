@@ -14,7 +14,6 @@
  */
 
 import { strict as assert } from "node:assert";
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -23,8 +22,11 @@ import {
   REPO,
   assertSweepWritten,
   clickDialogButton,
+  configureOneSweep,
   logWebviewDiagnostics,
+  providerCliProcesses,
   runsDir,
+  setLaneSelections,
 } from "./support";
 
 describe("BugSleuth desktop app", () => {
@@ -82,9 +84,7 @@ describe("BugSleuth desktop app", () => {
   it("warns before a run when a lane has no model", async () => {
     // The app's whole reason to exist over the command line: a lane nobody
     // covers is caught while it is still free to fix.
-    for (const box of await $$("td.lane-cell input[type=checkbox]")) {
-      if (await box.isSelected()) await box.click();
-    }
+    await setLaneSelections("td.lane-cell input[type=checkbox]", []);
     await expect($("#uncovered-warning")).toBeDisplayed();
     await expect($("#uncovered-warning")).toHaveText(/NOT SWEPT/);
     await expect($("#run")).toBeDisabled();
@@ -159,14 +159,7 @@ describe("BugSleuth desktop app", () => {
     await $("#repo").setValue(REPO);
 
     // One model, one lane: the cheapest configuration that still does real work.
-    const rows = await $$("#matrix-body tr");
-    const rowCount = await rows.length;
-    for (let i = 1; i < rowCount; i += 1) {
-      await (await $$("#matrix-body tr"))[i]!.$("button").click();
-    }
-    await $("#matrix-body tr:first-child td.model-id input").setValue(MODEL);
-    const boxes = await $$("#matrix-body tr:first-child td.lane-cell input");
-    await boxes[0]!.click(); // correctness only
+    await configureOneSweep(MODEL);
 
     await expect($("#run")).toBeEnabled();
     await $("#run").click();
@@ -241,10 +234,10 @@ describe("BugSleuth desktop app", () => {
 
     await $("#repo").setValue(REPO);
     // Every lane, so there is certain to be work still queued when we stop.
-    const boxes = await $$("#matrix-body tr:first-child td.lane-cell input");
-    for (const box of boxes) {
-      if (!(await box.isSelected())) await box.click();
-    }
+    await setLaneSelections(
+      "#matrix-body tr:first-child td.lane-cell input",
+      [0, 1, 2, 3, 4],
+    );
 
     await expect($("#run")).toBeEnabled();
     await $("#run").click();
@@ -253,6 +246,10 @@ describe("BugSleuth desktop app", () => {
     await browser.waitUntil(async () => await $("#stop").isDisplayed(), {
       timeout: 60_000,
       timeoutMsg: "the Stop button never appeared during a run",
+    });
+    await browser.waitUntil(async () => providerCliProcesses().length > 0, {
+      timeout: 60_000,
+      timeoutMsg: "Stop appeared but no provider CLI process ever started",
     });
 
     await $("#stop").click();
@@ -291,18 +288,12 @@ describe("BugSleuth desktop app", () => {
 ${output}`,
     );
 
-    // And nothing is still burning quota in the background.
-    const still = execSync(
-      'tasklist /FI "IMAGENAME eq claude.exe" /FI "IMAGENAME eq codex.exe"',
-      {
-        encoding: "utf8",
-      },
-    );
-    assert.ok(
-      !/claude\.exe|codex\.exe/.test(still),
-      `a provider CLI survived the cancel:
-${still}`,
-    );
+    // And the exact process observed above is no longer burning quota.
+    await browser.waitUntil(async () => providerCliProcesses().length === 0, {
+      timeout: 30_000,
+      timeoutMsg: `a provider CLI survived the cancel: ${providerCliProcesses()}`,
+    });
+    assert.equal(providerCliProcesses(), "");
   });
 
   it("keeps both themes working", async () => {
