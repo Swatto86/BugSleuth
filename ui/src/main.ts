@@ -111,15 +111,15 @@ function renderCoverage(): void {
 function renderPlanSummary(): void {
   const units = unitCount(settings.models);
   const rounds = batchCount(settings.models);
-  ui.planSummary.textContent =
+  const summary =
     units === 0
       ? ""
       : `${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`;
+  if (ui.planSummary.textContent !== summary)
+    ui.planSummary.textContent = summary;
   const busy = isRunning() || isApplying() || isClearing() || isUpdating();
   ui.run.disabled = busy || !canRun(settings);
   ui.clearSaved.disabled = busy;
-  // Offered only while there is something to stop, so it is never a button
-  // that does nothing.
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
 }
 

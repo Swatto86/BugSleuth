@@ -44,6 +44,41 @@ test("a save failure is shown in its own region, never gated on a run", () => {
   );
 });
 
+test("the plan cost is announced only when it changes", () => {
+  const html = read("ui", "index.html");
+  assert.match(
+    html,
+    /id="plan-summary"[^>]*role="status"/,
+    "the plan summary is not a live region, so cost changes are never announced",
+  );
+
+  const source = ts.createSourceFile(
+    "main.ts",
+    read("ui", "src", "main.ts"),
+    ts.ScriptTarget.ESNext,
+    true,
+  );
+  let render: ts.FunctionDeclaration | undefined;
+  const walk = (node: ts.Node): void => {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === "renderPlanSummary"
+    ) {
+      render = node;
+    }
+    node.forEachChild(walk);
+  };
+  walk(source);
+  assert.ok(render, "renderPlanSummary is gone from main.ts");
+  const text = render.getText(source);
+  assert.match(
+    text,
+    /planSummary\.textContent !== summary/,
+    "unchanged plan costs are rewritten and announced again",
+  );
+  assert.match(text, /planSummary\.textContent = summary/);
+});
+
 test("flushing writes the latest pending settings exactly once", async () => {
   const settings: Settings = {
     repo: "old",
