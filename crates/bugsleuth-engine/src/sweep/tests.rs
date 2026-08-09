@@ -61,8 +61,8 @@ async fn a_kilo_sweep_stops_at_the_preflight_before_doing_any_work() {
     // The two outcomes are asserted against each other rather than against
     // a fixed expectation, because the honest answer depends on the config:
     // a refusal must name the open tool, and a pass must mean the config
-    // really denies the network. Both halves of `network_gap` are tested
-    // directly, against written configs, in the provider crate.
+    // really denies all host capabilities. Both halves of `permission_gap`
+    // are tested directly, against written configs, in the provider crate.
     let report = run(Request {
         repo: Path::new("."),
         lane: Lane::Security,
@@ -76,15 +76,15 @@ async fn a_kilo_sweep_stops_at_the_preflight_before_doing_any_work() {
     })
     .await;
 
-    match (kilo::preflight::network_gap(), report.status) {
-        (Some(_), Status::NotSwept { reason }) => assert!(
-            reason.contains("webfetch") || reason.contains("websearch"),
-            "a refusal must name the tool left open: {reason}"
+    match (kilo::preflight::permission_gap(), report.status) {
+        (Some(gap), Status::NotSwept { reason }) => assert!(
+            reason.contains(&gap),
+            "the refusal did not carry the permission gap: {reason}"
         ),
         (Some(gap), other) => {
-            panic!("network is open ({gap}) but the sweep was not refused: {other:?}")
+            panic!("permissions are open ({gap}) but the sweep was not refused: {other:?}")
         }
-        // Network denied: the preflight is satisfied and the sweep proceeds
+        // Permissions safe: the preflight is satisfied and the sweep proceeds
         // to the next failure, which without a Kilo binary is a real one.
         (None, _) => {}
     }

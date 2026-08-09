@@ -44,7 +44,7 @@ fn the_preflight_checks_the_agent_the_sweep_actually_runs_as() {
         .expect("a sweep must name an agent")
         .clone();
 
-    let denied = r#"{"webfetch":"deny","websearch":"deny"}"#;
+    let denied = r#"{"*":"deny","read":"allow","glob":"allow","grep":"allow"}"#;
     let dir = scratch("agent-agreement");
 
     let matching = dir.join("kilo.jsonc");

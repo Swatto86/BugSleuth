@@ -202,21 +202,17 @@ pub async fn run(request: Request<'_>) -> LaneReport {
     // refused, `bash` was refused, and a read outside `--dir` was refused by
     // the `external_directory` rule.
     //
-    // `webfetch` was **not** refused, so a Kilo sweep can still reach the
-    // network while holding the reviewed repository's text — which is attacker
-    // input. That is the one restriction Kilo cannot be made to enforce here,
-    // so it is the one this check still refuses on, rather than the blanket
-    // refusal that predated the measurement.
-    //
-    // The gate is the user's own config, so verify it rather than trust it: a
-    // machine whose `ask` agent permits the network must not sweep silently.
+    // The gate is the user's own config, so verify it rather than trust it. A
+    // reviewed repository is attacker input: shell, external paths, edits,
+    // skills, subagents, network and unknown future tools all need to default
+    // to denied, rather than inheriting one developer's current setup.
     if vendor == Vendor::Kilo
-        && let Some(gap) = kilo::preflight::network_gap()
+        && let Some(gap) = kilo::preflight::permission_gap()
     {
         return not_swept(format!(
-            "Kilo sweeps need the network denied, because a sweep holds the reviewed \
-             repository's text and could send it out: {gap}. Add \"webfetch\": \"deny\" and \
-             \"websearch\": \"deny\" to that agent's permission block."
+            "Kilo sweeps require a deny-by-default `ask` agent because reviewed source is \
+             attacker input: {gap}. Set `\"*\": \"deny\"`, then explicitly allow only \
+             `read`, `glob`, and `grep` inside that agent's permission block."
         ));
     }
 
