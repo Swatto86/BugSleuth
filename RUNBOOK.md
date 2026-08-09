@@ -44,7 +44,7 @@ looking, not by inference:
 | 1 | App starts | Window appears; no blank page, no unstyled flash |
 | 2 | Providers panel | Every configured CLI listed with a real version |
 | 3 | Untick a lane's every box | The column head is marked and the banner names that lane as NOT SWEPT |
-| 4 | Set a repository, one model, one lane | Footer shows the sweep and round count; Run enables |
+| 4 | Set a repository, one model, one lane; Untick **Re-grade every severity** | Footer shows one sweep and one round; Run enables; triage is off so this journey remains one model invocation |
 | 5 | **Run review** | Progress streams into the result pane as it happens |
 | 6 | Wait for it | Status reaches Finished and findings are listed |
 | 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |

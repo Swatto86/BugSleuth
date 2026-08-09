@@ -159,6 +159,7 @@ node the confirmation dialog describes its message to assistive tech
 node the documentation does not point at files that no longer exist
 node the frontend actually calls into Rust, so this test is not vacuous
 node the live E2E review replaces saved configuration deterministically
+node the one-invocation journey disables the default triage pass
 node the packaged gate cannot download a Tauri CLI
 node the precise scan sees each of the three ways a class is set
 node the preset handler guards on the whole configuration, not per row

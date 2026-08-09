@@ -307,3 +307,15 @@ test("safety docs describe the triage exception to lane-relative grades", () => 
     assert.ok(!text.includes("Severities are not compared across lanes."));
   }
 });
+
+test("the one-invocation journey disables the default triage pass", () => {
+  const html = read("ui", "index.html");
+  assert.match(
+    html,
+    /id="triage-severities"[^>]*checked/,
+    "the test no longer found the known checked default",
+  );
+  const runbook = read("RUNBOOK.md");
+  assert.ok(runbook.includes("one cheap model\ninvocation"));
+  assert.ok(runbook.includes("Untick **Re-grade every severity**"));
+});
