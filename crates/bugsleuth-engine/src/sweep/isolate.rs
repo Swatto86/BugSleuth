@@ -29,9 +29,14 @@ use std::path::Path;
 /// `AGENTS.md` is a real convention, not just a root-level one.
 const INSTRUCTION_FILES: &[&str] = &[
     "agents.md",
+    "agent.md",
     "context.md",
     "claude.md",
     "kilo.md",
+    "kilo.json",
+    "kilo.jsonc",
+    "opencode.json",
+    "opencode.jsonc",
     "gemini.md",
     "copilot-instructions.md",
     ".cursorrules",
@@ -147,6 +152,28 @@ mod tests {
             removed,
             ["AGENTS.md", "CONTEXT.md", "crates/core/AGENTS.md"]
         );
+    }
+
+    #[test]
+    fn kilo_project_control_files_are_removed() {
+        let root = scratch("kilo-project-config");
+        let names = [
+            "AGENT.md",
+            "kilo.json",
+            "kilo.jsonc",
+            "opencode.json",
+            "opencode.jsonc",
+        ];
+        for name in names {
+            write(&root, name, "attacker-controlled Kilo configuration");
+        }
+
+        let removed = strip_agent_instructions(&root);
+
+        for name in names {
+            assert!(!root.join(name).exists(), "{name} survived isolation");
+        }
+        assert!(removed.contains(&"kilo.jsonc".to_string()));
     }
 
     #[test]

@@ -550,6 +550,7 @@ rust similarity::tests::two_different_defects_in_the_same_function_score_far_low
 rust sweep::isolate::tests::a_repository_cannot_redefine_the_agent_that_reviews_it
 rust sweep::isolate::tests::a_rules_directory_goes_whole
 rust sweep::isolate::tests::instruction_files_go_and_code_stays
+rust sweep::isolate::tests::kilo_project_control_files_are_removed
 rust sweep::isolate::tests::matching_ignores_case_because_windows_does
 rust sweep::isolate::tests::the_git_directory_is_never_touched
 rust sweep::revision::tests::git_is_never_spawned_with_a_visible_console_window
