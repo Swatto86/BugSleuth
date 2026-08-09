@@ -136,6 +136,7 @@ node no element asks for a class the stylesheet does not define
 node one vendor doing everything is one round per lane
 node only a complete shipped preset bypasses replacement confirmation
 node quit flushes pending settings before it can invoke exit
+node quit rechecks active work after its settings flush
 node release tag matches version embedded in the app
 node removing a configured model row is guarded by a confirmation
 node render redirects focus when the focused row was just removed

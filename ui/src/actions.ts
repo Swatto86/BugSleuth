@@ -215,7 +215,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
   // One handled route out, for both the immediate and post-confirmation quits.
   // Remaining visible is not feedback after someone pressed Quit: if the IPC
   // rejects, say so in the live status region rather than looking broken.
-  function requestQuit(): void {
+  function requestQuit(acknowledged = false): void {
     if (quitting) return;
     quitting = true;
     void (async () => {
@@ -232,6 +232,17 @@ export function bindGuardedActions(deps: ActionDeps): void {
           quitting = false;
           return;
         }
+      }
+      // Checked again, after the flush: the settings save can take long enough
+      // for a run, apply, clear or update to start, and an unacknowledged quit
+      // must not kill it silently.
+      if (
+        !acknowledged &&
+        (isRunning() || isApplying() || clearing || deps.updating())
+      ) {
+        quitting = false;
+        askBeforeQuitting();
+        return;
       }
       try {
         await invoke("quit");
@@ -282,7 +293,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
       confirmLabel: "Quit anyway",
       destructive: true,
     }).then((yes) => {
-      if (yes) requestQuit();
+      if (yes) requestQuit(true);
     });
   }
 }

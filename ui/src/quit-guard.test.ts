@@ -62,6 +62,36 @@ test("the quit guard consults the clearing state, like the tray does", () => {
   );
 });
 
+test("quit rechecks active work after its settings flush", () => {
+  const source = actionsSource().source;
+  const request = functionText(source, "requestQuit");
+  assert.ok(request, "requestQuit is gone from actions.ts");
+
+  const flush = request.indexOf("await deps.flushSettings()");
+  const busy = request.indexOf("isRunning() || isApplying()");
+  const quit = request.indexOf('await invoke("quit")');
+  assert.ok(flush >= 0, "requestQuit no longer flushes settings");
+  assert.ok(busy >= 0, "requestQuit never rechecks whether work started");
+  assert.ok(quit >= 0, "requestQuit no longer reaches the quit command");
+  assert.ok(
+    flush < busy && busy < quit,
+    "the busy recheck must happen after the flush and before exit",
+  );
+  assert.match(
+    request,
+    /!acknowledged/,
+    "a confirmed quit would loop back into the warning forever",
+  );
+
+  const guard = functionText(source, "askBeforeQuitting");
+  assert.ok(guard, "askBeforeQuitting is gone from actions.ts");
+  assert.match(
+    guard,
+    /if \(yes\) requestQuit\(true\)/,
+    "confirming Quit anyway does not acknowledge the active work",
+  );
+});
+
 test("the clearing flag is set before the clear and released on both outcomes", () => {
   const text = actionsSource().text;
   assert.match(
