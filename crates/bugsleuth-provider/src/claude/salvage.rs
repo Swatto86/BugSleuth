@@ -1,4 +1,4 @@
-//! Recovering a sweep that ran out of turns before it answered.
+//! Recovering a sweep that stopped before it answered.
 //!
 //! `error_max_turns` is the most expensive failure this adapter has. The model
 //! spent the whole budget doing the review — reading the repository, forming
@@ -47,8 +47,8 @@ pub(super) fn exhausted_session(stdout: &str) -> Option<String> {
 }
 
 const ASK: &str = "\
-Your previous turn ran out of budget before you produced your answer. Everything \
-you found is still in this conversation.
+Your previous CLI run ended before you produced your answer. Everything you \
+found is still in this conversation.
 
 Output that answer now, as JSON matching the schema, and nothing else.
 
@@ -86,6 +86,7 @@ pub(super) async fn salvage(
         timeout,
         binary,
         api_key,
+        session_id: None,
         resume: Some(session),
     })
     .await

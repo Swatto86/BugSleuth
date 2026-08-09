@@ -55,6 +55,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> Result<String, ProviderError> {
         timeout: request.timeout,
         binary: None,
         api_key: None,
+        session_id: None,
         resume: None,
     })
     .await?;

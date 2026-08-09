@@ -20,6 +20,7 @@ fn run<'a>(model: &'a str) -> Run<'a> {
         timeout: Duration::from_secs(60),
         binary: None,
         api_key: None,
+        session_id: Some(new_session_id()),
         resume: None,
     }
 }
@@ -79,8 +80,64 @@ fn a_salvage_run_resumes_the_session_rather_than_starting_a_new_one() {
         index.and_then(|i| args.get(i + 1)).map(String::as_str),
         Some("session-abc")
     );
+    assert!(!args.iter().any(|a| a == "--session-id"));
     // And an ordinary sweep must never inherit a conversation.
     assert!(!build_args(&run("sonnet")).iter().any(|a| a == "--resume"));
+}
+
+#[test]
+fn a_new_run_names_its_session_so_a_timeout_can_be_resumed() {
+    let args = build_args(&run("sonnet"));
+    let index = args.iter().position(|a| a == "--session-id");
+    let session = index.and_then(|i| args.get(i + 1)).map(String::as_str);
+    assert!(session.is_some_and(|id| id.len() == 36), "{args:?}");
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn a_timed_out_run_resumes_the_same_session_once() {
+    let dir = std::env::temp_dir().join(format!("bugsleuth-claude-timeout-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch directory");
+    let stub = dir.join("claude.cmd");
+    std::fs::write(
+        &stub,
+        "@echo off\r\n\
+         echo %* | findstr /c:\"--resume\" > nul && goto resumed\r\n\
+         echo %* > initial.txt\r\n\
+         ping -n 10 127.0.0.1 > nul\r\n\
+         exit /b 1\r\n\
+         :resumed\r\n\
+         echo %* > resumed.txt\r\n\
+         echo {\"result\":\"recovered\",\"is_error\":false,\"session_id\":\"same-session\"}\r\n",
+    )
+    .expect("write CLI stub");
+    let binary = stub.to_string_lossy().into_owned();
+
+    let mut request = run("");
+    request.repo = &dir;
+    request.schema = serde_json::Value::Null;
+    request.binary = Some(&binary);
+    request.timeout = Duration::from_millis(500);
+    let outcome = invoke(request)
+        .await
+        .expect("resume should recover the answer");
+
+    assert_eq!(outcome.result, Value::String("recovered".into()));
+    assert!(outcome.salvaged);
+    let value_after = |text: &str, flag: &str| {
+        text.split_whitespace()
+            .skip_while(|part| *part != flag)
+            .nth(1)
+            .map(str::to_string)
+    };
+    let initial = std::fs::read_to_string(dir.join("initial.txt")).expect("initial argv");
+    let resumed = std::fs::read_to_string(dir.join("resumed.txt")).expect("resume argv");
+    assert_eq!(
+        value_after(&initial, "--session-id"),
+        value_after(&resumed, "--resume")
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

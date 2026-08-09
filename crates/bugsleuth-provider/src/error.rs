@@ -58,6 +58,12 @@ pub enum ProviderError {
         vendor: &'static str,
         session: Option<String>,
     },
+    #[error("{original}; automatic {vendor} session recovery also failed: {recovery}")]
+    Recovery {
+        vendor: &'static str,
+        original: String,
+        recovery: String,
+    },
 }
 
 impl ProviderError {

@@ -34,9 +34,9 @@ pub struct TriageRequest<'a> {
 /// The verdicts, and whether they had to be recovered from a cut-off session.
 pub struct TriageResult {
     pub verdicts: SeverityVerdicts,
-    /// True when the grading model ran out of turns and was asked afterwards
-    /// what it had decided. A partial grading is still worth applying, but the
-    /// report must not present it as a full comparison.
+    /// True when the grading run was interrupted and asked afterwards what it
+    /// had decided. A partial grading is still worth applying, but the report
+    /// must not present it as a full comparison.
     pub salvaged: bool,
 }
 
@@ -54,6 +54,7 @@ pub async fn triage(spec: TriageRequest<'_>) -> Result<TriageResult, ProviderErr
         timeout: spec.timeout,
         binary: spec.binary,
         api_key: spec.api_key,
+        session_id: None,
         resume: None,
     })
     .await?;

@@ -5,7 +5,9 @@
 //! without anchor verification.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use bugsleuth_domain::{Lane, RawFindings, finding_schema};
 use serde::Deserialize;
@@ -90,6 +92,7 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
         timeout: spec.timeout,
         binary: spec.binary,
         api_key: spec.api_key,
+        session_id: None,
         resume: None,
     })
     .await;
@@ -124,43 +127,119 @@ pub(crate) struct Run<'a> {
     pub(crate) timeout: Duration,
     pub(crate) binary: Option<&'a str>,
     pub(crate) api_key: Option<&'a str>,
+    /// The id assigned to a new conversation so a killed CLI can be resumed.
+    pub(crate) session_id: Option<String>,
     /// Continue an existing conversation instead of starting one. Only the
     /// salvage path uses this: everything else must start clean, or a sweep
     /// would inherit whatever the last one was thinking.
     pub(crate) resume: Option<&'a str>,
 }
 
-/// Run the CLI, and recover a turn-budget exhaustion once.
+/// Run the CLI, and recover a turn-budget exhaustion or timeout once.
 ///
 /// The retry lives here rather than in each caller because every one of them
 /// has the same problem: the expensive work is done inside a conversation that
 /// then fails to answer. Sweeps, the severity triage pass and applying fixes all
 /// lost whole invocations to it — the triage pass most often, and it has no
 /// repository to read at all.
-pub(crate) async fn invoke(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
+pub(crate) async fn invoke(mut run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
+    if run.resume.is_none() && run.session_id.is_none() {
+        run.session_id = Some(new_session_id());
+    }
     // Held before `run` is consumed: the salvage needs the same model, binary
     // and schema, and none of them can be read back out of a moved value.
     let (repo, model, binary, api_key, timeout) =
         (run.repo, run.model, run.binary, run.api_key, run.timeout);
     let schema = run.schema.clone();
     let already_resuming = run.resume.is_some();
+    let recovery_session = run.session_id.clone();
+    let recovery_timeout = timeout.min(Duration::from_secs(300));
 
     match invoke_once(run).await {
         Ok(outcome) => Ok(outcome),
         // A salvage that itself runs out of turns is not salvaged again: the
         // second failure says the conversation cannot answer, and a third
         // attempt would only spend more of the budget saying so.
-        Err(ProviderError::TurnsExhausted {
-            session: Some(session),
-            ..
-        }) if !already_resuming => {
-            let mut recovered =
-                salvage::salvage(repo, model, &session, schema, binary, api_key, timeout).await?;
-            recovered.salvaged = true;
-            Ok(recovered)
+        Err(
+            original @ ProviderError::TurnsExhausted {
+                session: Some(_), ..
+            },
+        ) if !already_resuming => {
+            let ProviderError::TurnsExhausted {
+                session: Some(session),
+                ..
+            } = &original
+            else {
+                unreachable!()
+            };
+            let session = session.clone();
+            recovered(
+                original,
+                salvage::salvage(
+                    repo,
+                    model,
+                    &session,
+                    schema,
+                    binary,
+                    api_key,
+                    recovery_timeout,
+                )
+                .await,
+            )
+        }
+        Err(original @ ProviderError::Process(process::ProcessError::Timeout { .. }))
+            if !already_resuming && recovery_session.is_some() =>
+        {
+            recovered(
+                original,
+                salvage::salvage(
+                    repo,
+                    model,
+                    recovery_session.as_deref().unwrap_or_default(),
+                    schema,
+                    binary,
+                    api_key,
+                    recovery_timeout,
+                )
+                .await,
+            )
         }
         Err(other) => Err(other),
     }
+}
+
+fn recovered(
+    original: ProviderError,
+    recovery: Result<ResultEnvelope, ProviderError>,
+) -> Result<ResultEnvelope, ProviderError> {
+    let mut recovered = recovery.map_err(|recovery| ProviderError::Recovery {
+        vendor: VENDOR,
+        original: original.to_string(),
+        recovery: recovery.to_string(),
+    })?;
+    recovered.salvaged = true;
+    Ok(recovered)
+}
+
+fn new_session_id() -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let mut value = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+        ^ (u128::from(std::process::id()) << 64)
+        ^ u128::from(NEXT.fetch_add(1, Ordering::Relaxed));
+    value = (value & !(0xf000_u128 << 64)) | (0x4000_u128 << 64);
+    value = (value & !(0xc000_u128 << 48)) | (0x8000_u128 << 48);
+    let hex = format!("{value:032x}");
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..]
+    )
 }
 
 pub(super) async fn invoke_once(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {

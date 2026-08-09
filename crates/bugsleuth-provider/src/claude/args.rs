@@ -46,6 +46,9 @@ pub(super) fn build_args(run: &Run<'_>) -> Vec<String> {
     if let Some(session) = run.resume {
         args.push("--resume".into());
         args.push(session.to_string());
+    } else if let Some(session) = &run.session_id {
+        args.push("--session-id".into());
+        args.push(session.clone());
     }
     if !run.model.trim().is_empty() {
         args.push("--model".into());
