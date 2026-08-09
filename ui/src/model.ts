@@ -262,10 +262,7 @@ export function unitCount(models: ModelSetting[]): number {
  * engine's own parsing — these must agree or the UI's batch estimate is wrong.
  */
 export function vendorOf(modelId: string): string {
-  const [prefix] = modelId.split(":");
-  return prefix === "codex" || prefix === "kilo" || prefix === "claude"
-    ? prefix
-    : "claude";
+  return splitId(modelId).vendor;
 }
 
 /**

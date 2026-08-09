@@ -230,6 +230,8 @@ test("splitId agrees with vendorOf on every shape", () => {
     "kilo:a/b",
     "gpt:weird",
     "",
+    "codex",
+    "kilo",
   ]) {
     assert.equal(splitId(id).vendor, vendorOf(id), `disagreement on ${id}`);
   }
