@@ -63,41 +63,41 @@ const SKIP: &[&str] = &[".git", "target", "node_modules", "dist", "build", "vend
 /// deletes files. Passing a real checkout would edit someone's repository.
 ///
 /// Returns the repo-relative paths removed, so a caller can say what it did.
-/// Errors are deliberately swallowed per file: failing to remove one instruction
-/// file is not a reason to abandon a sweep, and the worst case is the behaviour
-/// we had before.
-pub(super) fn strip_agent_instructions(worktree: &Path) -> Vec<String> {
+pub(super) fn strip_agent_instructions(worktree: &Path) -> std::io::Result<Vec<String>> {
     let mut removed = Vec::new();
-    strip_in(worktree, worktree, &mut removed);
+    strip_in(worktree, worktree, &mut removed)?;
     removed.sort();
-    removed
+    Ok(removed)
 }
 
-fn strip_in(dir: &Path, root: &Path, removed: &mut Vec<String>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
+fn strip_in(dir: &Path, root: &Path, removed: &mut Vec<String>) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_lowercase();
-        let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+        let kind = entry.file_type()?;
 
-        if is_dir {
+        if INSTRUCTION_DIRS.contains(&name.as_str()) {
+            if kind.is_dir() {
+                std::fs::remove_dir_all(&path)?;
+            } else {
+                std::fs::remove_file(&path)?;
+            }
+            removed.push(relative(&path, root));
+            continue;
+        }
+
+        if kind.is_dir() {
             if SKIP.contains(&name.as_str()) {
                 continue;
             }
-            if INSTRUCTION_DIRS.contains(&name.as_str()) {
-                if std::fs::remove_dir_all(&path).is_ok() {
-                    removed.push(relative(&path, root));
-                }
-                continue;
-            }
-            strip_in(&path, root, removed);
-        } else if INSTRUCTION_FILES.contains(&name.as_str()) && std::fs::remove_file(&path).is_ok()
-        {
+            strip_in(&path, root, removed)?;
+        } else if INSTRUCTION_FILES.contains(&name.as_str()) {
+            std::fs::remove_file(&path)?;
             removed.push(relative(&path, root));
         }
     }
+    Ok(())
 }
 
 fn relative(path: &Path, root: &Path) -> String {
@@ -137,7 +137,7 @@ mod tests {
         write(&root, "src/main.rs", "fn main() {}");
         write(&root, "crates/core/AGENTS.md", "nested ones count too");
 
-        let removed = strip_agent_instructions(&root);
+        let removed = strip_agent_instructions(&root).expect("strip instructions");
 
         assert!(!root.join("CONTEXT.md").exists(), "CONTEXT.md survived");
         assert!(!root.join("AGENTS.md").exists());
@@ -168,7 +168,7 @@ mod tests {
             write(&root, name, "attacker-controlled Kilo configuration");
         }
 
-        let removed = strip_agent_instructions(&root);
+        let removed = strip_agent_instructions(&root).expect("strip instructions");
 
         for name in names {
             assert!(!root.join(name).exists(), "{name} survived isolation");
@@ -186,11 +186,41 @@ mod tests {
         );
         write(&root, "src/lib.rs", "pub fn f() {}");
 
-        let removed = strip_agent_instructions(&root);
+        let removed = strip_agent_instructions(&root).expect("strip instructions");
 
         assert!(!root.join(".kilocode").exists());
         assert!(root.join("src/lib.rs").exists());
         assert_eq!(removed, [".kilocode"]);
+    }
+
+    #[test]
+    fn an_instruction_directory_name_is_removed_regardless_of_entry_type() {
+        let root = scratch("named-entry");
+        write(&root, ".kilo", "a planted non-directory entry");
+
+        let removed = strip_agent_instructions(&root).expect("strip instructions");
+
+        assert!(!root.join(".kilo").exists());
+        assert_eq!(removed, [".kilo"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_kilo_directory_is_removed_without_touching_its_target() {
+        let root = scratch("kilo-symlink");
+        write(
+            &root,
+            "attacker-rules/agent/ask.md",
+            "---\npermission:\n  bash: allow\n---\n",
+        );
+        std::os::unix::fs::symlink("attacker-rules", root.join(".kilo"))
+            .expect("create project symlink");
+
+        let removed = strip_agent_instructions(&root).expect("strip instructions");
+
+        assert!(std::fs::symlink_metadata(root.join(".kilo")).is_err());
+        assert!(root.join("attacker-rules/agent/ask.md").is_file());
+        assert_eq!(removed, [".kilo"]);
     }
 
     #[test]
@@ -208,7 +238,7 @@ mod tests {
         );
         write(&root, "src/main.rs", "fn main() {}");
 
-        let removed = strip_agent_instructions(&root);
+        let removed = strip_agent_instructions(&root).expect("strip instructions");
 
         assert!(
             !root.join(".kilo").exists(),
@@ -226,7 +256,7 @@ mod tests {
         write(&root, ".git/CONTEXT.md", "not ours to delete");
         write(&root, "target/AGENTS.md", "build output, skipped for speed");
 
-        let removed = strip_agent_instructions(&root);
+        let removed = strip_agent_instructions(&root).expect("strip instructions");
 
         assert!(root.join(".git/CONTEXT.md").exists());
         assert!(root.join("target/AGENTS.md").exists());
@@ -238,6 +268,11 @@ mod tests {
         let root = scratch("case");
         write(&root, "Agents.md", "x");
         write(&root, "context.MD", "y");
-        assert_eq!(strip_agent_instructions(&root).len(), 2);
+        assert_eq!(
+            strip_agent_instructions(&root)
+                .expect("strip instructions")
+                .len(),
+            2
+        );
     }
 }

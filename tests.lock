@@ -549,6 +549,7 @@ rust similarity::tests::the_same_defect_described_by_two_vendors_scores_high_eno
 rust similarity::tests::two_different_defects_in_the_same_function_score_far_lower
 rust sweep::isolate::tests::a_repository_cannot_redefine_the_agent_that_reviews_it
 rust sweep::isolate::tests::a_rules_directory_goes_whole
+rust sweep::isolate::tests::an_instruction_directory_name_is_removed_regardless_of_entry_type
 rust sweep::isolate::tests::instruction_files_go_and_code_stays
 rust sweep::isolate::tests::kilo_project_control_files_are_removed
 rust sweep::isolate::tests::matching_ignores_case_because_windows_does

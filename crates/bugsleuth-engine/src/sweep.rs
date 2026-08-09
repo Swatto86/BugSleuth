@@ -230,7 +230,11 @@ pub async fn run(request: Request<'_>) -> LaneReport {
                 // Claude and Codex get the same isolation from a flag; Kilo has
                 // none, and inheriting a large instructions file was enough to
                 // end its sweeps before they read any code.
-                isolate::strip_agent_instructions(worktree.path());
+                if let Err(error) = isolate::strip_agent_instructions(worktree.path()) {
+                    return not_swept(format!(
+                        "Kilo's throwaway worktree could not be isolated from project instructions: {error}"
+                    ));
+                }
                 Some(worktree)
             }
             Err(error) => {
