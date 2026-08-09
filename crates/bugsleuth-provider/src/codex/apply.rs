@@ -35,4 +35,5 @@ pub async fn apply(
         sandbox: Sandbox::WorkspaceWrite,
     })
     .await
+    .map(|(answer, _)| answer)
 }

@@ -23,6 +23,7 @@ use crate::process::{self, Invocation, preview};
 
 mod apply;
 mod discover;
+mod recover;
 mod scratch;
 
 pub use apply::apply;
@@ -45,6 +46,7 @@ pub struct CodexSweep<'a> {
 #[derive(Debug, Clone)]
 pub struct CodexResult {
     pub findings: RawFindings,
+    pub salvaged: bool,
 }
 
 /// What the sandbox is allowed to do.
@@ -70,7 +72,7 @@ impl Sandbox {
 
 /// Run one read-only lane sweep through Codex.
 pub async fn sweep(spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
-    let findings = invoke(Invoke {
+    let (findings, salvaged) = invoke(Invoke {
         dir: spec.repo,
         model: spec.model,
         effort: spec.effort,
@@ -81,7 +83,7 @@ pub async fn sweep(spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
         sandbox: Sandbox::ReadOnly,
     })
     .await?;
-    Ok(CodexResult { findings })
+    Ok(CodexResult { findings, salvaged })
 }
 
 pub(crate) struct Invoke<'a> {
@@ -99,14 +101,16 @@ pub(crate) struct Invoke<'a> {
     pub(crate) sandbox: Sandbox,
 }
 
-async fn invoke<T: serde::de::DeserializeOwned>(spec: Invoke<'_>) -> Result<T, ProviderError> {
-    let answer = invoke_text(spec).await?;
+async fn invoke<T: serde::de::DeserializeOwned>(
+    spec: Invoke<'_>,
+) -> Result<(T, bool), ProviderError> {
+    let (answer, salvaged) = invoke_text(spec).await?;
     let value = serde_json::from_str(&answer).unwrap_or(serde_json::Value::String(answer));
-    crate::json::structured(&value)
+    crate::json::structured(&value).map(|value| (value, salvaged))
 }
 
 /// One invocation, answering with whatever the CLI's final message was.
-pub(crate) async fn invoke_text(spec: Invoke<'_>) -> Result<String, ProviderError> {
+pub(crate) async fn invoke_text(spec: Invoke<'_>) -> Result<(String, bool), ProviderError> {
     // The accepted reasoning efforts belong to the model, not the CLI, so an
     // effort forwarded to `model_reasoning_effort` is validated against the
     // model's catalogue before anything is spent. Here rather than in one
@@ -150,7 +154,14 @@ pub(crate) async fn invoke_text(spec: Invoke<'_>) -> Result<String, ProviderErro
     })
     .await;
 
-    finish(output, &answer_path)
+    recover::finish_or_resume(
+        output,
+        &binary.to_string_lossy(),
+        &spec,
+        &schema_path,
+        &answer_path,
+    )
+    .await
 }
 
 /// Removes a directory tree when dropped, so the Codex scratch area is cleaned
@@ -216,15 +227,14 @@ fn finish(
 ///
 /// `--ignore-user-config` and `--ignore-rules` are the security-relevant pair:
 /// neither the machine's own configuration nor the reviewed repository's rules
-/// may change what the model is told to do. `--ephemeral` keeps no session
-/// behind. The set is taken from Eir, which drives the same CLI under the same
-/// subscription and arrived at it first.
-pub(crate) const SHARED_FLAGS: [&str; 9] = [
+/// may change what the model is told to do. Sessions are persisted so a timed
+/// out process can resume its existing work. The set is taken from Eir, which
+/// drives the same CLI under the same subscription and arrived at it first.
+pub(crate) const SHARED_FLAGS: [&str; 8] = [
     "--ask-for-approval",
     "never",
     "exec",
     "--skip-git-repo-check",
-    "--ephemeral",
     "--ignore-user-config",
     "--ignore-rules",
     "--color",
@@ -251,6 +261,7 @@ fn build_args(spec: &Invoke<'_>, schema: &Path, answer: &Path) -> Vec<String> {
     // policy, and it does not interfere.
     if spec.sandbox == Sandbox::WorkspaceWrite {
         args.retain(|flag| flag != "--ignore-user-config");
+        args.push("--ephemeral".into());
     }
     args.push("--json".into());
     args.push("--sandbox".into());
