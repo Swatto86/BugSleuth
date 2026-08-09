@@ -6,6 +6,7 @@
 //! your theme preference. Findings are not cached here — they live in the run
 //! output directory, which is the thing you would actually want to keep.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
@@ -87,6 +88,8 @@ pub struct Settings {
     /// given a scheme it never chose.
     #[serde(default)]
     pub tag_release_after_push: bool,
+    #[serde(flatten)]
+    pub(crate) extra: BTreeMap<String, serde_json::Value>,
 }
 
 /// Serde needs a function; a bare string default is not expressible.
@@ -120,6 +123,8 @@ pub struct ModelSetting {
     /// more is deliberate repetition, which measurably finds more.
     #[serde(default = "one_pass")]
     pub passes: usize,
+    #[serde(flatten)]
+    pub(crate) extra: BTreeMap<String, serde_json::Value>,
 }
 
 fn one_pass() -> usize {
@@ -142,6 +147,7 @@ impl Default for Settings {
                     id: "sonnet".into(),
                     effort: String::new(),
                     passes: 1,
+                    extra: BTreeMap::new(),
                     lanes: vec![
                         "correctness".into(),
                         "security".into(),
@@ -155,6 +161,7 @@ impl Default for Settings {
                     lanes: vec!["correctness".into(), "security".into()],
                     effort: String::new(),
                     passes: 1,
+                    extra: BTreeMap::new(),
                 },
             ],
             theme: "system".into(),
@@ -167,6 +174,7 @@ impl Default for Settings {
             apply_effort: String::new(),
             push_after_apply: false,
             tag_release_after_push: false,
+            extra: BTreeMap::new(),
         }
     }
 }
@@ -249,15 +257,22 @@ mod tests {
 
     #[test]
     fn unknown_fields_and_missing_fields_both_survive_a_round_trip() {
-        // Settings written by a newer or older build must not brick the app.
-        let sparse = r#"{"repo":"C:/x","theme":"dark"}"#;
-        let parsed: Settings = serde_json::from_str(sparse).unwrap_or_default();
-        assert_eq!(parsed.repo, "C:/x");
-        assert_eq!(parsed.theme, "dark");
-        assert!(
-            !parsed.models.is_empty(),
-            "missing models fall back to default"
-        );
+        let newer = r#"{
+            "repo":"C:/x",
+            "theme":"dark",
+            "future_setting":{"enabled":true},
+            "models":[{
+                "id":"sonnet",
+                "lanes":["contract"],
+                "future_model_setting":7
+            }]
+        }"#;
+        let parsed: Settings = serde_json::from_str(newer).expect("newer settings load");
+        assert_eq!(parsed.models[0].passes, 1, "missing fields still default");
+
+        let saved = serde_json::to_value(parsed).expect("settings serialize");
+        assert_eq!(saved["future_setting"]["enabled"], true);
+        assert_eq!(saved["models"][0]["future_model_setting"], 7);
     }
 
     // The "a failed save leaves the settings worse than they were" test used to
