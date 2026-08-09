@@ -67,6 +67,27 @@ test("the updater is blocked while a review or an apply is in flight", () => {
   }
 });
 
+test("declining an available update clears the running status", () => {
+  const update = frontendFiles().find((file) => file.fileName === "update.ts");
+  assert.ok(update, "update.ts is no longer a shipped frontend module");
+
+  let declined: ts.IfStatement | undefined;
+  walk(update, (node) => {
+    if (
+      ts.isIfStatement(node) &&
+      node.expression.getText(update) === "!agreed"
+    ) {
+      declined = node;
+    }
+  });
+  assert.ok(declined, "the update confirmation has no declined path");
+  assert.match(
+    declined.thenStatement.getText(update),
+    /setStatus\s*\(/,
+    "declining the install leaves the running status and spinner stuck",
+  );
+});
+
 test("installing an update disables every operation its restart would interrupt", () => {
   const files = frontendFiles();
   const main = files.find((file) => file.fileName === "main.ts");

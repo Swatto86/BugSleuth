@@ -69,7 +69,10 @@ export function wireUpdate(deps: UpdateDeps): void {
             (notes ? `\n\n${notes.slice(0, 600)}` : ""),
           confirmLabel: "Install and restart",
         });
-        if (!agreed) return;
+        if (!agreed) {
+          setStatus(`Version ${update.version} is available — not installed`);
+          return;
+        }
         if (deps.busy()) {
           setStatus(
             `Version ${update.version} is available — finish the current operation first`,
