@@ -79,6 +79,32 @@ async fn kills_a_child_that_outlives_its_timeout() {
     );
 }
 
+#[tokio::test]
+async fn a_timeout_keeps_output_written_before_the_cutoff() {
+    let (binary, mut args) = shell();
+    args.push(if cfg!(windows) {
+        "echo recover-me & ping -n 30 127.0.0.1 >NUL".into()
+    } else {
+        "printf recover-me; sleep 30".into()
+    });
+    let error = run(Invocation {
+        binary,
+        args: &args,
+        cwd: Path::new("."),
+        stdin: None,
+        env: &[],
+        timeout: Duration::from_millis(400),
+        what: "slow test",
+    })
+    .await
+    .expect_err("the process should time out");
+    let output = error.output().expect("the timeout discarded its output");
+    assert!(
+        output.stdout.contains("recover-me"),
+        "output before the timeout was lost: {output:?}"
+    );
+}
+
 /// A scratch directory that is empty at the start of every run, so a marker
 /// left by an earlier run cannot be read as this one's evidence.
 #[cfg(windows)]

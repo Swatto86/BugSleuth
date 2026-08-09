@@ -26,7 +26,13 @@ pub enum ProcessError {
         source: std::io::Error,
     },
     #[error("`{what}` timed out after {seconds}s")]
-    Timeout { what: String, seconds: u64 },
+    Timeout {
+        what: String,
+        seconds: u64,
+        /// Output written before the cutoff, retained so an adapter can recover
+        /// the session rather than restarting paid work from scratch.
+        output: CliOutput,
+    },
     #[error("`{what}` process error: {source}")]
     Wait {
         what: String,
@@ -46,6 +52,16 @@ pub struct CliOutput {
 impl CliOutput {
     pub fn succeeded(&self) -> bool {
         self.code == Some(0)
+    }
+}
+
+impl ProcessError {
+    /// Output captured before a timeout killed the child, when there is any.
+    pub fn output(&self) -> Option<&CliOutput> {
+        match self {
+            ProcessError::Timeout { output, .. } => Some(output),
+            _ => None,
+        }
     }
 }
 
@@ -122,14 +138,19 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
         written
     };
 
+    // Readers live independently of the completion wait, so a timeout can kill
+    // the child, drain what it already wrote, and hand session events to the
+    // adapter for recovery. Keeping them inside `timeout` discarded those bytes
+    // along with the timed-out future.
+    let stdout_task = tokio::spawn(read_capped(stdout));
+    let stderr_task = tokio::spawn(read_capped(stderr));
     let combined = async {
-        let (out, err, status, fed) =
-            tokio::join!(read_capped(stdout), read_capped(stderr), child.wait(), feed,);
-        (out, err, status, fed)
+        let (status, fed) = tokio::join!(child.wait(), feed);
+        (status, fed)
     };
 
     match tokio::time::timeout(invocation.timeout, combined).await {
-        Ok((out, err, status, fed)) => {
+        Ok((status, fed)) => {
             let status = status.map_err(|source| ProcessError::Wait {
                 what: invocation.what.to_string(),
                 source,
@@ -144,6 +165,9 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
                 what: format!("{} (writing the prompt)", invocation.what),
                 source,
             })?;
+            let (out, err) = tokio::join!(stdout_task, stderr_task);
+            let out = out.unwrap_or_default();
+            let err = err.unwrap_or_default();
             Ok(CliOutput {
                 code: status.code(),
                 stdout: String::from_utf8_lossy(&out).into_owned(),
@@ -155,9 +179,18 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
             // on its own leaves the CLI and everything the CLI started running.
             tree.fire();
             let _ = child.start_kill();
+            // Reap before reading the buffers: process exit closes both pipes,
+            // which lets the reader tasks return every byte already written.
+            let _ = child.wait().await;
+            let (out, err) = tokio::join!(stdout_task, stderr_task);
             Err(ProcessError::Timeout {
                 what: invocation.what.to_string(),
                 seconds: invocation.timeout.as_secs(),
+                output: CliOutput {
+                    code: None,
+                    stdout: String::from_utf8_lossy(&out.unwrap_or_default()).into_owned(),
+                    stderr: String::from_utf8_lossy(&err.unwrap_or_default()).into_owned(),
+                },
             })
         }
     }
@@ -258,7 +291,9 @@ fn no_console_window(_command: &mut Command) {}
 
 /// Drain a child stream, retaining at most [`OUTPUT_CAP`] bytes but continuing to
 /// read (and discard) beyond it so the child is never blocked by a full pipe.
-async fn read_capped<R: tokio::io::AsyncRead + Unpin>(stream: Option<R>) -> Vec<u8> {
+async fn read_capped<R: tokio::io::AsyncRead + Unpin + Send + 'static>(
+    stream: Option<R>,
+) -> Vec<u8> {
     let mut out = Vec::new();
     let Some(mut reader) = stream else {
         return out;

@@ -237,6 +237,11 @@ mod tests {
             Err(ProviderError::Process(ProcessError::Timeout {
                 what: "claude".into(),
                 seconds: 60,
+                output: crate::process::CliOutput {
+                    code: None,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                },
             })),
             60,
         );
