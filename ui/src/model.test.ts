@@ -174,6 +174,27 @@ test("lane titles match the engine's own names, including UX", () => {
   }
 });
 
+test("every lane header explains what that lane hunts", () => {
+  const clues = {
+    correctness: "Logic errors",
+    security: "Exploitable",
+    contract: "Disagreements",
+    ux: "interface failures",
+    gate: "Tests, CI, or build checks",
+  } as const;
+  const html = fs.readFileSync(path.join(here, "..", "index.html"), "utf8");
+  assert.ok(html.includes('data-lane="correctness"'));
+  for (const lane of LANES) {
+    const header = new RegExp(`<th[^>]*data-lane="${lane}"[^>]*>`).exec(
+      html,
+    )?.[0];
+    assert.ok(header, `${lane} has no table header`);
+    const title = /title="([^"]+)"/.exec(header)?.[1];
+    assert.ok(title?.includes(clues[lane]), `${lane} has no useful tooltip`);
+    assert.ok(header.includes(`aria-label="${LANE_TITLES[lane]}. ${title}"`));
+  }
+});
+
 test("splitting a model spec and rejoining it settles on one spelling", () => {
   // Not byte-identity: `claude:opus` and `opus` are the same model to the
   // engine, and the round trip deliberately collapses them onto the bare form.

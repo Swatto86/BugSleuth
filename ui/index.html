@@ -102,11 +102,46 @@
                 <th>Model</th>
                 <th>Effort</th>
                 <th>Passes</th>
-                <th class="lane-cell" data-lane="correctness">Correctness</th>
-                <th class="lane-cell" data-lane="security">Security</th>
-                <th class="lane-cell" data-lane="contract">Contract</th>
-                <th class="lane-cell" data-lane="ux">UX</th>
-                <th class="lane-cell" data-lane="gate">Gate</th>
+                <th
+                  class="lane-cell"
+                  data-lane="correctness"
+                  title="Logic errors, edge cases, crashes, resource leaks, races, and incoming values or state changes that are silently lost."
+                  aria-label="Correctness. Logic errors, edge cases, crashes, resource leaks, races, and incoming values or state changes that are silently lost."
+                >
+                  Correctness
+                </th>
+                <th
+                  class="lane-cell"
+                  data-lane="security"
+                  title="Exploitable trust-boundary bugs: injection, missing authorization, exposed secrets, unsafe paths, broad permissions, and dependency risk."
+                  aria-label="Security. Exploitable trust-boundary bugs: injection, missing authorization, exposed secrets, unsafe paths, broad permissions, and dependency risk."
+                >
+                  Security
+                </th>
+                <th
+                  class="lane-cell"
+                  data-lane="contract"
+                  title="Disagreements between callers and implementations, producers and consumers, schemas, limits, versions, or error shapes."
+                  aria-label="Contract. Disagreements between callers and implementations, producers and consumers, schemas, limits, versions, or error shapes."
+                >
+                  Contract
+                </th>
+                <th
+                  class="lane-cell"
+                  data-lane="ux"
+                  title="Behavioral interface failures: missing feedback or confirmation, trapped states, keyboard barriers, focus, and screen-reader gaps."
+                  aria-label="UX. Behavioral interface failures: missing feedback or confirmation, trapped states, keyboard barriers, focus, and screen-reader gaps."
+                >
+                  UX
+                </th>
+                <th
+                  class="lane-cell"
+                  data-lane="gate"
+                  title="Tests, CI, or build checks that can pass without checking the behavior they claim to protect."
+                  aria-label="Gate. Tests, CI, or build checks that can pass without checking the behavior they claim to protect."
+                >
+                  Gate
+                </th>
                 <th></th>
               </tr>
             </thead>
