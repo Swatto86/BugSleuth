@@ -108,6 +108,7 @@ pub fn quit(app: tauri::AppHandle) {
 /// Reveal the window once the frontend has mounted and themed itself.
 #[tauri::command]
 pub fn frontend_ready(app: tauri::AppHandle) {
+    crate::FRONTEND_READY.store(true, std::sync::atomic::Ordering::Relaxed);
     crate::reveal(&app);
     let _ = app.get_webview_window("main");
 }

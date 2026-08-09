@@ -17,6 +17,9 @@ mod settings;
 mod tray;
 mod update;
 
+pub(crate) static FRONTEND_READY: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -50,7 +53,9 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                reveal(&handle);
+                if !FRONTEND_READY.load(std::sync::atomic::Ordering::Relaxed) {
+                    reveal(&handle);
+                }
             });
             Ok(())
         })
