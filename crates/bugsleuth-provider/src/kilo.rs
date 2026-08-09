@@ -37,6 +37,7 @@ mod apply;
 mod discover;
 mod events;
 pub mod preflight;
+mod recover;
 mod repair;
 
 pub use apply::apply;
@@ -124,9 +125,9 @@ pub struct KiloSweep<'a> {
 #[derive(Debug, Clone)]
 pub struct KiloResult {
     pub findings: RawFindings,
-    /// True when these findings came from a repair pass, which can drop findings
-    /// it cannot reshape. The engine routes this through the same partial-result
-    /// caveat a salvaged sweep gets, rather than presenting it as complete.
+    /// True when these findings came from timeout recovery or a repair pass,
+    /// either of which can return less than the original sweep established.
+    /// The engine presents that as partial rather than complete.
     pub salvaged: bool,
 }
 
@@ -147,15 +148,18 @@ pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
         timeout: spec.timeout,
         what: "kilo CLI",
     })
-    .await?;
+    .await;
 
-    let text = assistant_text_or_error(&output)?;
+    let (text, salvaged) = match output {
+        Ok(output) => (assistant_text_or_error(&output)?, false),
+        Err(error @ process::ProcessError::Timeout { .. }) => {
+            (recover::timeout(error, &spec, &binary).await?, true)
+        }
+        Err(error) => return Err(error.into()),
+    };
 
     match crate::json::structured(&Value::String(text.clone())) {
-        Ok(findings) => Ok(KiloResult {
-            findings,
-            salvaged: false,
-        }),
+        Ok(findings) => Ok(KiloResult { findings, salvaged }),
         Err(schema_error) => {
             // The sweep already did the expensive part — it read the repository
             // and found the defects. Throwing that away over the shape of the

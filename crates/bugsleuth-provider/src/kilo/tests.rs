@@ -138,3 +138,37 @@ fn the_working_directory_is_pinned_explicitly() {
 fn an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument() {
     assert!(!build_args(&spec("   ")).iter().any(|a| a == "-m"));
 }
+
+#[cfg(windows)]
+#[tokio::test]
+async fn a_timed_out_sweep_resumes_the_session_reported_by_kilo() {
+    let dir = scratch("timeout-recovery");
+    let stub = dir.join("kilo.cmd");
+    std::fs::write(
+        &stub,
+        "@echo off\r\n\
+         echo %* | findstr /c:\"--session kilo-session-123\" > nul && goto resumed\r\n\
+         echo {\"type\":\"step_start\",\"sessionID\":\"kilo-session-123\"}\r\n\
+         ping -n 10 127.0.0.1 > nul\r\n\
+         exit /b 1\r\n\
+         :resumed\r\n\
+         echo {\"type\":\"text\",\"sessionID\":\"kilo-session-123\",\"part\":{\"messageID\":\"m1\",\"text\":\"{\\\"findings\\\":[]}\"}}\r\n",
+    )
+    .expect("write CLI stub");
+    let binary = stub.to_string_lossy().into_owned();
+
+    let result = sweep(KiloSweep {
+        worktree: &dir,
+        model: "",
+        effort: "",
+        brief: "review",
+        timeout: Duration::from_millis(500),
+        binary: Some(&binary),
+    })
+    .await
+    .expect("resume should recover the answer");
+
+    assert!(result.findings.findings.is_empty());
+    assert!(result.salvaged);
+    let _ = std::fs::remove_dir_all(&dir);
+}

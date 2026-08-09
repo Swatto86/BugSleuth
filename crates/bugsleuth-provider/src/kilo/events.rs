@@ -8,6 +8,19 @@ use serde_json::Value;
 
 use crate::process::preview;
 
+/// The conversation id carried by Kilo events, if the run got far enough to
+/// create one. Read from any event because current releases repeat it on all of
+/// them, including the first `step_start` written before a timed-out run.
+pub(super) fn session_id(stdout: &str) -> Option<String> {
+    stdout.lines().find_map(|line| {
+        let event: Value = serde_json::from_str(line).ok()?;
+        event["sessionID"]
+            .as_str()
+            .filter(|id| !id.trim().is_empty())
+            .map(str::to_string)
+    })
+}
+
 /// Any error Kilo reported in its event stream, as one line.
 ///
 /// The events look like
@@ -107,6 +120,13 @@ mod tests {
         let stdout =
             r#"{"type": "error", "error": {"name": "AuthError", "data": {"message": "sign in"}}}"#;
         assert_eq!(error_events(stdout), "AuthError: sign in");
+    }
+
+    #[test]
+    fn a_session_id_survives_noise_and_truncated_events() {
+        let stdout = "not json\n{\"type\":\"step_start\",\"sessionID\":\"abc\"}\n{";
+        assert_eq!(session_id(stdout).as_deref(), Some("abc"));
+        assert_eq!(session_id(r#"{"sessionID":""}"#), None);
     }
 
     #[test]
