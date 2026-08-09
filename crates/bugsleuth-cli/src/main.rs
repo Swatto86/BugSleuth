@@ -182,6 +182,18 @@ fn api_key(requested: bool) -> Result<Option<String>> {
         .map_err(|_| anyhow::anyhow!("--use-api-key was given but ANTHROPIC_API_KEY is not set"))
 }
 
+fn sweep_start_message(
+    repo: &Path,
+    lane: bugsleuth_domain::Lane,
+    model: &str,
+    timeout_secs: u64,
+) -> String {
+    format!(
+        "Starting {lane} sweep of {} with {model} (timeout {timeout_secs}s)…",
+        repo.display()
+    )
+}
+
 async fn run_sweep(args: SweepArgs) -> Result<()> {
     let repo = real_path(&args.repo)?;
 
@@ -193,6 +205,10 @@ async fn run_sweep(args: SweepArgs) -> Result<()> {
 
     let api_key = api_key(args.use_api_key)?;
 
+    eprintln!(
+        "{}",
+        sweep_start_message(&repo, args.lane, &args.model, args.timeout_secs)
+    );
     let report = sweep::run(sweep::Request {
         repo: &repo,
         lane: args.lane,
@@ -234,6 +250,19 @@ mod tests {
     // No `use super::*`: only the Windows-only block below reaches into `super`
     // (for `real_path`), so importing it unconditionally is an unused import on
     // other platforms — which fails a `-D warnings` build.
+
+    #[test]
+    fn a_single_sweep_announces_itself_before_waiting() {
+        assert_eq!(
+            super::sweep_start_message(
+                std::path::Path::new("repo"),
+                bugsleuth_domain::Lane::Ux,
+                "haiku",
+                7,
+            ),
+            "Starting UX sweep of repo with haiku (timeout 7s)…"
+        );
+    }
 
     #[test]
     fn unc_verbatim_path() {
