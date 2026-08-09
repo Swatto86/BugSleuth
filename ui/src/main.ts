@@ -12,6 +12,7 @@ import {
   type Lane,
   type Settings,
   batchCount,
+  boundedProviderConcurrency,
   canRun,
   isShippedConfiguration,
   preset,
@@ -340,6 +341,11 @@ async function boot(): Promise<void> {
   ui.theme.value = settings.theme;
   ui.repo.value = settings.repo;
   ui.scope.value = settings.scope;
+  // The settings file is hand-editable and Rust clamps this to 1–10 before a
+  // run, so the window must show and estimate the value the run will use.
+  settings.provider_concurrency = boundedProviderConcurrency(
+    String(settings.provider_concurrency),
+  );
   ui.providerConcurrency.value = String(settings.provider_concurrency);
   ui.reuseCompleted.checked = settings.reuse_completed;
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
