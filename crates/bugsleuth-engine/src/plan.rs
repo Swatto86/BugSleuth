@@ -27,6 +27,9 @@ pub struct ModelPlan {
     /// Reasoning effort for this model. Empty means the vendor's own default.
     #[serde(default)]
     pub effort: String,
+    /// Ask supported CLIs to split this lane across parallel subagents.
+    #[serde(default)]
+    pub use_agents: bool,
     /// How many times to sweep each of this model's lanes.
     ///
     /// **Deliberate repetition, not a retry.** Three identical sweeps of the
@@ -61,6 +64,8 @@ pub struct Unit {
     /// Reasoning effort. Part of the unit because two efforts of the same model
     /// on the same lane are two different sweeps, not one run twice.
     pub effort: String,
+    /// Whether this sweep asks the provider to delegate in parallel.
+    pub use_agents: bool,
 }
 
 /// A run, with the gaps made explicit.
@@ -191,6 +196,12 @@ pub fn plan(config: &Config) -> Result<Plan> {
         // `claude:sonnet` are one scheduled, charged, resumable unit.
         let model_id = canonical_spec(&model.id);
         check_effort(&model_id, model.effort.trim())?;
+        if model.use_agents && vendor_of(&model_id) == "kilo" {
+            anyhow::bail!(
+                "model `{}` requests agents, but Kilo's read-only Ask agent cannot delegate",
+                model.id
+            );
+        }
         // A config file is a file; the UI's picker is not the only way in.
         // Enumerating even a moderately large pass count hangs the run before
         // a single sweep is paid for, so refuse loudly — the same class of
@@ -217,6 +228,7 @@ pub fn plan(config: &Config) -> Result<Plan> {
                     model: model_id.clone(),
                     lane,
                     effort: model.effort.trim().to_string(),
+                    use_agents: model.use_agents,
                     pass,
                 };
                 if !units.contains(&unit) {

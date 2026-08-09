@@ -68,6 +68,7 @@ export function isShippedConfiguration(models: ModelSetting[]): boolean {
           actual !== undefined &&
           actual.id === expected.id &&
           actual.effort === expected.effort &&
+          (actual.use_agents ?? false) === (expected.use_agents ?? false) &&
           (actual.passes ?? 1) === (expected.passes ?? 1) &&
           actual.lanes.length === expected.lanes.length &&
           expected.lanes.every((lane) => actual.lanes.includes(lane))

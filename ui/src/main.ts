@@ -10,6 +10,7 @@ import {
   canRun,
   isShippedConfiguration,
   preset,
+  supportsAgents,
   uncoveredLanes,
   unitCount,
 } from "./model";
@@ -335,6 +336,10 @@ async function boot(): Promise<void> {
     // was saved. Say so instead.
     loadFailed = String(error);
   }
+  settings.models = settings.models.map((model) => ({
+    ...model,
+    use_agents: supportsAgents(model.id) && (model.use_agents ?? false),
+  }));
 
   applyTheme(settings.theme);
   ui.theme.value = settings.theme;

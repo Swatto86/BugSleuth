@@ -102,6 +102,9 @@ pub struct ModelSetting {
     /// still loads, rather than being discarded back to the shipped preset.
     #[serde(default)]
     pub effort: String,
+    /// Ask supported providers to delegate independent review work in parallel.
+    #[serde(default)]
+    pub use_agents: bool,
     /// How many times to sweep each lane with this model. One by default;
     /// more is deliberate repetition, which measurably finds more.
     #[serde(default = "one_pass")]
@@ -129,6 +132,7 @@ impl Default for Settings {
                 ModelSetting {
                     id: "sonnet".into(),
                     effort: String::new(),
+                    use_agents: false,
                     passes: 1,
                     extra: BTreeMap::new(),
                     lanes: vec![
@@ -143,6 +147,7 @@ impl Default for Settings {
                     id: "codex:".into(),
                     lanes: vec!["correctness".into(), "security".into()],
                     effort: String::new(),
+                    use_agents: false,
                     passes: 1,
                     extra: BTreeMap::new(),
                 },
@@ -257,6 +262,7 @@ mod tests {
         }"#;
         let parsed: Settings = serde_json::from_str(newer).expect("newer settings load");
         assert_eq!(parsed.models[0].passes, 1, "missing fields still default");
+        assert!(!parsed.models[0].use_agents, "agents must be opt-in");
 
         let saved = serde_json::to_value(parsed).expect("settings serialize");
         assert_eq!(saved["future_setting"]["enabled"], true);

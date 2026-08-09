@@ -83,6 +83,7 @@ fn unit() -> Unit {
         model: "claude:sonnet".into(),
         lane: Lane::Correctness,
         effort: String::new(),
+        use_agents: false,
         pass: 1,
     }
 }

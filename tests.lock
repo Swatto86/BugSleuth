@@ -52,6 +52,8 @@ node a save failure is shown in its own region, never gated on a run
 node a single finding is not reported as '1 findings'
 node a stored pass count outside the picker presets remains visible
 node a sweep that found nothing is not confusable with one that never ran
+node agent and single-agent prompts are distinct sweeps
+node agents are available for Claude and Codex but not Kilo Ask
 node an apply that changed nothing does not claim to have applied anything
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
@@ -255,6 +257,7 @@ rust atomic::tests::the_staging_file_is_a_sibling_so_the_rename_cannot_cross_a_f
 rust atomic::tests::two_writers_of_one_file_stage_into_different_places
 rust brief::tests::a_path_scope_appears_only_when_one_was_given
 rust brief::tests::a_vendor_without_schema_enforcement_gets_the_schema_in_the_prompt
+rust brief::tests::agent_delegation_is_only_added_when_requested
 rust brief::tests::each_lane_gets_its_own_mandate_and_not_another_lanes
 rust brief::tests::only_the_vendor_that_needs_the_schema_is_given_it
 rust brief::tests::the_brief_always_explains_that_a_bad_quote_discards_the_finding
@@ -299,6 +302,7 @@ rust claude::tests::a_salvage_is_never_itself_salvaged
 rust claude::tests::a_salvage_run_resumes_the_session_rather_than_starting_a_new_one
 rust claude::tests::a_timed_out_run_resumes_the_same_session_once
 rust claude::tests::a_turn_budget_exhaustion_is_reported_as_its_own_failure_not_a_generic_one
+rust claude::tests::agent_enabled_sweeps_only_add_the_delegation_tool
 rust claude::tests::an_empty_denylist_omits_the_flag_rather_than_passing_an_empty_value
 rust claude::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
 rust claude::tests::an_invocation_with_no_schema_asks_for_none_rather_than_for_null
@@ -497,6 +501,7 @@ rust models::tests::efforts_are_recorded_per_model_and_only_where_the_model_has_
 rust one_defect_anchored_five_lines_apart_by_two_vendors_still_merges
 rust orchestrate::gaps::tests::a_dirty_repository_is_detected_and_a_clean_one_is_not
 rust orchestrate::persist::naming_tests::a_second_pass_writes_beside_the_first_rather_than_over_it
+rust orchestrate::persist::naming_tests::an_agent_sweep_cannot_reuse_or_overwrite_a_single_agent_sweep
 rust orchestrate::persist::naming_tests::an_effort_spelling_the_pass_suffix_cannot_collide_with_a_real_second_pass
 rust orchestrate::persist::naming_tests::an_encoded_name_can_never_reach_outside_the_run_directory
 rust orchestrate::persist::naming_tests::each_unit_gets_a_distinct_file_so_sweeps_cannot_overwrite_each_other
@@ -559,6 +564,7 @@ rust plan::tests::canonical_spec_collapses_claude_but_keeps_the_default_and_othe
 rust plan::tests::claude_effort_is_validated_per_model
 rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
 rust plan::tests::every_provider_runs_at_most_one_sweep_per_batch
+rust plan::tests::kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
 rust process::tests::a_timeout_keeps_output_written_before_the_cutoff
@@ -612,11 +618,13 @@ rust sweep::tests::a_bare_model_name_means_claude_so_the_common_case_stays_short
 rust sweep::tests::a_failed_sweeps_reason_is_scrubbed_of_credentials_before_it_is_stored
 rust sweep::tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
 rust sweep::tests::a_vendor_prefix_selects_that_vendor
+rust sweep::tests::agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_policy
 rust sweep::tests::an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped
 rust sweep::tests::kilo_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode
 rust sweep::tests::only_kilo_needs_the_schema_spelled_out_in_its_prompt
 rust sweep::tests::provider_precheck_failures_are_reported_together
 rust sweep::tests::selected_providers_are_checked_once_before_lane_work
+rust sweep::tests::supported_vendors_get_their_own_agent_wording_and_kilo_gets_none
 rust sweep::tests::the_vendor_prefix_never_reaches_the_cli
 rust tests::a_single_sweep_announces_itself_before_waiting
 rust tests::unc_verbatim_path

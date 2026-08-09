@@ -172,6 +172,7 @@ pub(super) fn to_config(settings: &Settings) -> plan::Config {
                 id: m.id.clone(),
                 lanes: m.lanes.clone(),
                 effort: m.effort.clone(),
+                use_agents: m.use_agents,
                 passes: m.passes.max(1),
             })
             .collect(),

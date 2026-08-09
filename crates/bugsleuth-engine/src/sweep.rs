@@ -25,11 +25,7 @@ use revision::reviewed_commit;
 
 /// Which CLI to run, and which model within it.
 ///
-/// Dispatch is a plain enum rather than a trait with one implementation per
-/// vendor. The set of vendors is closed and small: three CLIs we ship support
-/// for ourselves. A trait would buy extensibility nobody needs while making the
-/// differences between adapters harder to see. Revisit when a fourth vendor
-/// appears and the shape has stopped moving.
+/// A plain enum because the supported provider set is closed and small.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Vendor {
     Claude,
@@ -74,6 +70,18 @@ impl Vendor {
     pub fn needs_isolation(self) -> bool {
         matches!(self, Vendor::Kilo)
     }
+
+    fn agents_instruction(self) -> Option<&'static str> {
+        match self {
+            Vendor::Claude => Some(
+                "Call the Agent tool at least twice with subagent_type=Explore and run_in_background=true before waiting for any result, dividing this lane into independent search areas. Keep every subagent inside this mandate, then verify and synthesize their evidence into your one required JSON response. If delegation is unavailable, continue alone.",
+            ),
+            Vendor::Codex => Some(
+                "Use multiple Codex subagents in parallel, dividing this lane into independent search areas. Keep every subagent read-only and inside this mandate, then verify and synthesize their evidence into your one required JSON response. If delegation is unavailable, continue alone.",
+            ),
+            Vendor::Kilo => None,
+        }
+    }
 }
 
 /// The `vendor:model` a spec resolves to, exactly as a report records it.
@@ -101,9 +109,7 @@ pub struct Request<'a> {
     pub max_turns: u32,
     pub timeout: Duration,
     pub api_key: Option<&'a str>,
-    /// Explicit path to the vendor CLI, overriding discovery. `None` in every
-    /// real run; the adapters have always taken one, and without a way to set it
-    /// nothing could check what argv a sweep actually builds.
+    /// Explicit provider CLI path for tests; real runs use discovery.
     pub binary: Option<&'a str>,
 }
 
@@ -120,6 +126,7 @@ async fn invoke_vendor(
     reviewed: &Path,
     request: &Request<'_>,
     brief: &str,
+    use_agents: bool,
 ) -> Result<(Vec<RawFinding>, Option<u32>, bool, Option<String>), bugsleuth_provider::ProviderError>
 {
     match vendor {
@@ -128,6 +135,7 @@ async fn invoke_vendor(
             lane: request.lane,
             model,
             effort: request.effort,
+            use_agents,
             brief,
             timeout: request.timeout,
             max_turns: request.max_turns,
@@ -170,12 +178,15 @@ async fn invoke_vendor(
 /// *reported state*, because the one outcome this tool must never produce is a
 /// lane that quietly looks clean when it never ran.
 pub async fn run(request: Request<'_>) -> LaneReport {
+    run_with_agents(request, false).await
+}
+
+pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> LaneReport {
     // Both halves are used: the vendor picks the adapter, and the model is what
     // that adapter passes to its CLI. Taking only the vendor and handing the
     // whole spec on is the 0.2.19 regression — see [`invoke_vendor`].
     let (vendor, model) = Vendor::parse(request.model);
     let model_label = resolved_label(request.model);
-    let brief = brief::build(request.lane, request.scope, vendor.enforces_schema());
     // Recorded before anything runs, so even a failed sweep says what tree it
     // was pointed at.
     let commit = reviewed_commit(request.repo);
@@ -195,6 +206,24 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         rejected: vec![],
         usage: None,
     };
+
+    let agents_instruction = if use_agents {
+        let Some(instruction) = vendor.agents_instruction() else {
+            return not_swept(format!(
+                "{}'s read-only Ask agent cannot delegate",
+                vendor.label()
+            ));
+        };
+        Some(instruction)
+    } else {
+        None
+    };
+    let brief = brief::build_with_agents(
+        request.lane,
+        request.scope,
+        vendor.enforces_schema(),
+        agents_instruction,
+    );
 
     // Kilo's sweep runs under the globally configured `ask` agent, whose
     // `deny` rules the CLI honours even under `--auto` — measured against the
@@ -248,7 +277,7 @@ pub async fn run(request: Request<'_>) -> LaneReport {
         .as_ref()
         .map_or(request.repo, |worktree| worktree.path());
 
-    let outcome = invoke_vendor(vendor, model, reviewed, &request, &brief).await;
+    let outcome = invoke_vendor(vendor, model, reviewed, &request, &brief, use_agents).await;
 
     let (raw, turns, salvaged, usage) = match outcome {
         Ok(outcome) => outcome,

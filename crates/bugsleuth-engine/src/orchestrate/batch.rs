@@ -32,17 +32,20 @@ pub(super) async fn run_batch(
         let (max_turns, timeout) = (options.max_turns, options.timeout);
 
         tasks.spawn(async move {
-            let lane_report = sweep::run(sweep::Request {
-                repo: &repo,
-                lane: unit.lane,
-                model: &unit.model,
-                scope: scope.as_deref(),
-                effort: &unit.effort,
-                max_turns,
-                timeout,
-                api_key: api_key.as_deref(),
-                binary: None,
-            })
+            let lane_report = sweep::run_with_agents(
+                sweep::Request {
+                    repo: &repo,
+                    lane: unit.lane,
+                    model: &unit.model,
+                    scope: scope.as_deref(),
+                    effort: &unit.effort,
+                    max_turns,
+                    timeout,
+                    api_key: api_key.as_deref(),
+                    binary: None,
+                },
+                unit.use_agents,
+            )
             .await;
 
             SweepOutcome {

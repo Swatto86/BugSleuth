@@ -45,6 +45,7 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
             model: crate::plan::canonical_spec(model),
             lane: Lane::Correctness,
             effort: String::new(),
+            use_agents: false,
             pass: 1,
         };
         let _ = std::fs::create_dir_all(&dir);
@@ -67,12 +68,14 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
                 id: "claude:sonnet".into(),
                 lanes: vec!["correctness".into()],
                 effort: String::new(),
+                use_agents: false,
                 passes: 1,
             },
             ModelPlan {
                 id: "codex:".into(),
                 lanes: vec!["correctness".into()],
                 effort: String::new(),
+                use_agents: false,
                 passes: 1,
             },
         ],
@@ -126,6 +129,7 @@ async fn a_cancelled_run_names_every_sweep_it_never_reached() {
             id: "no-such-model-please".to_string(),
             lanes: vec!["correctness".to_string(), "security".to_string()],
             effort: String::new(),
+            use_agents: false,
             passes: 1,
         }],
     })
@@ -236,6 +240,7 @@ fn finishing_one_pass_leaves_the_other_passes_outstanding() {
         lane: Lane::Correctness,
         pass,
         effort: String::new(),
+        use_agents: false,
     };
     let mut remaining = vec![unit(1), unit(2), unit(3)];
 

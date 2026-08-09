@@ -33,6 +33,7 @@ pub use triage::{TriageRequest, TriageResult, triage};
 pub(crate) const VENDOR: &str = "claude";
 
 pub(crate) const READ_ONLY_TOOLS: &str = "Read,Glob,Grep";
+pub(crate) const READ_ONLY_AGENT_TOOLS: &str = "Read,Glob,Grep,Agent";
 pub(crate) const READ_ONLY_DENIED: &str = "Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch";
 
 /// One (model x lane x repository) unit of work.
@@ -46,6 +47,8 @@ pub struct ClaudeSweep<'a> {
     pub model: &'a str,
     /// Reasoning effort. Empty means the CLI's own default.
     pub effort: &'a str,
+    /// Allow Claude's built-in read-only subagents for this sweep.
+    pub use_agents: bool,
     /// The assembled review brief, delivered on stdin so a long brief cannot hit
     /// the command-line length limit.
     pub brief: &'a str,
@@ -84,7 +87,11 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
         effort: spec.effort,
         prompt: spec.brief,
         schema: finding_schema(),
-        allowed: READ_ONLY_TOOLS,
+        allowed: if spec.use_agents {
+            READ_ONLY_AGENT_TOOLS
+        } else {
+            READ_ONLY_TOOLS
+        },
         denied: READ_ONLY_DENIED,
         max_turns: spec.max_turns,
         timeout: spec.timeout,

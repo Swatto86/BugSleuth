@@ -10,6 +10,7 @@ fn unit() -> Unit {
         model: "claude:sonnet".into(),
         lane: Lane::Correctness,
         effort: String::new(),
+        use_agents: false,
         pass: 1,
     }
 }
@@ -21,16 +22,29 @@ fn each_unit_gets_a_distinct_file_so_sweeps_cannot_overwrite_each_other() {
         model: "codex:".into(),
         lane: Lane::Correctness,
         effort: String::new(),
+        use_agents: false,
         pass: 1,
     });
     let c = file_name_for(&Unit {
         model: "claude:sonnet".into(),
         lane: Lane::Security,
         effort: String::new(),
+        use_agents: false,
         pass: 1,
     });
     assert_ne!(a, b);
     assert_ne!(a, c);
+}
+
+#[test]
+fn an_agent_sweep_cannot_reuse_or_overwrite_a_single_agent_sweep() {
+    let single = file_name_for(&unit());
+    let agents = file_name_for(&Unit {
+        use_agents: true,
+        ..unit()
+    });
+    assert_ne!(single, agents);
+    assert!(agents.contains("~agents"), "got {agents}");
 }
 
 #[test]

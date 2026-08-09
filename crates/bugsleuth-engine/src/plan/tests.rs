@@ -11,6 +11,7 @@ fn config(entries: &[(&str, &[&str])]) -> Config {
                 id: (*id).to_string(),
                 lanes: lanes.iter().map(|l| (*l).to_string()).collect(),
                 effort: String::new(),
+                use_agents: false,
                 passes: 1,
             })
             .collect(),
@@ -23,6 +24,7 @@ fn with_effort(id: &str, effort: &str) -> Config {
             id: id.to_string(),
             lanes: vec!["correctness".to_string()],
             effort: effort.to_string(),
+            use_agents: false,
             passes: 1,
         }],
     }
@@ -61,6 +63,16 @@ fn a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed() {
     // cannot be enumerated would block valid configurations.
     assert!(plan(&with_effort("kilo:some/model", "thinking")).is_ok());
     assert!(plan(&with_effort("kilo:some/model", "anything-at-all")).is_ok());
+}
+
+#[test]
+fn kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to() {
+    let config: Config = serde_json::from_str(
+        r#"{"models":[{"id":"kilo:model","lanes":["security"],"use_agents":true}]}"#,
+    )
+    .expect("config parses");
+    let message = plan(&config).map(|_| ()).unwrap_err().to_string();
+    assert!(message.contains("cannot delegate"), "{message}");
 }
 
 #[test]

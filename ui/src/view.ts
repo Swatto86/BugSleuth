@@ -12,6 +12,7 @@ import {
   VENDORS,
   joinId,
   splitId,
+  supportsAgents,
   type Lane,
   type ModelGroup,
   type ModelSetting,
@@ -89,13 +90,14 @@ export interface MatrixHandlers {
   onVendor: (index: number, id: string) => void;
   onEffort: (index: number, effort: string) => void;
   onPasses: (index: number, passes: number) => void;
+  onAgents: (index: number, useAgents: boolean) => void;
   onToggle: (index: number, lane: Lane, on: boolean) => void;
   onRemove: (index: number) => void;
 }
 
 import { effortPicker, modelPicker, option, passPicker } from "./pickers";
 
-/** One row per configured model: provider, model, effort, passes, then a lane per column. */
+/** One row per configured model: provider, model, effort, passes, agents, then lanes. */
 export function matrixRows(
   models: ModelSetting[],
   catalogue: Catalogue,
@@ -104,6 +106,7 @@ export function matrixRows(
   return models.map((model, index) => {
     const row = document.createElement("tr");
     const { vendor } = splitId(model.id);
+    const agentsSupported = supportsAgents(model.id);
 
     const vendorCell = document.createElement("td");
     const vendorSelect = document.createElement("select");
@@ -130,6 +133,7 @@ export function matrixRows(
     // without waiting for the whole table to re-render.
     let live: ModelSetting = model;
     const laneControls: Array<{ box: HTMLInputElement; lane: Lane }> = [];
+    let agentControl: HTMLInputElement | undefined;
     let removeControl: HTMLButtonElement | undefined;
     const updateRowActionLabels = (id: string): void => {
       const selected = splitId(id);
@@ -140,6 +144,12 @@ export function matrixRows(
           `${name}, row ${index + 1}, covers the ${LANE_TITLES[lane]} lane`,
         );
       }
+      agentControl?.setAttribute(
+        "aria-label",
+        agentsSupported
+          ? `Use parallel review agents for ${name}, row ${index + 1}`
+          : `Parallel review agents unavailable for ${name}, row ${index + 1}: Kilo Ask cannot delegate`,
+      );
       removeControl?.setAttribute(
         "aria-label",
         `Remove ${name} from row ${index + 1}`,
@@ -197,6 +207,24 @@ export function matrixRows(
     passCell.className = "effort-cell";
     passCell.append(passPicker(index, model, handlers));
     row.append(passCell);
+
+    const agentCell = document.createElement("td");
+    agentCell.className = "agent-cell";
+    const agentBox = document.createElement("input");
+    agentBox.type = "checkbox";
+    agentBox.dataset["focusKey"] = `agents-${index}`;
+    agentBox.checked = agentsSupported && (model.use_agents ?? false);
+    agentBox.disabled = !agentsSupported;
+    agentBox.title = agentsSupported
+      ? `Ask ${vendor === "claude" ? "Claude Code" : "Codex"} to delegate independent parts of this lane in parallel. Uses more tokens.`
+      : "Unavailable: BugSleuth uses Kilo's read-only Ask agent, which cannot delegate.";
+    agentCell.title = agentBox.title;
+    agentBox.addEventListener("change", () =>
+      handlers.onAgents(index, agentBox.checked),
+    );
+    agentControl = agentBox;
+    agentCell.append(agentBox);
+    row.append(agentCell);
 
     for (const lane of LANES) {
       const cell = document.createElement("td");

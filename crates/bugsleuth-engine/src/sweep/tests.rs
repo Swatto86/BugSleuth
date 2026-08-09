@@ -89,6 +89,16 @@ fn only_kilo_needs_the_schema_spelled_out_in_its_prompt() {
     assert!(Vendor::Codex.enforces_schema());
 }
 
+#[test]
+fn supported_vendors_get_their_own_agent_wording_and_kilo_gets_none() {
+    let claude = Vendor::Claude.agents_instruction().unwrap_or_default();
+    let codex = Vendor::Codex.agents_instruction().unwrap_or_default();
+    assert!(claude.contains("subagent_type=Explore"), "{claude}");
+    assert!(claude.contains("run_in_background=true"), "{claude}");
+    assert!(codex.contains("Codex subagents"), "{codex}");
+    assert_eq!(Vendor::Kilo.agents_instruction(), None);
+}
+
 #[tokio::test]
 async fn a_kilo_sweep_stops_at_the_preflight_before_doing_any_work() {
     // Whichever way this machine is configured, a Kilo sweep must consult
@@ -125,13 +135,10 @@ async fn a_kilo_sweep_stops_at_the_preflight_before_doing_any_work() {
     }
 }
 
-/// A stand-in CLI that fails, printing on stderr the argv it was handed.
+/// A stand-in CLI that fails, printing its agent instruction and argv.
 ///
-/// The argv is the only place the answer lives: a test that built a vendor spec
-/// itself would be asserting against a copy of the wiring, and the wiring is
-/// exactly what broke. Stdin is drained before exiting, because a CLI that dies
-/// without reading the brief is reported as an undelivered prompt rather than as
-/// a failed invocation, and the argv would never reach the report.
+/// Both are read from the real child process boundary rather than rebuilt in a
+/// test. Stdin is consumed before exit, or the prompt may be undelivered.
 fn echoing_stub(name: &str) -> String {
     let dir = std::env::temp_dir()
         .join("bugsleuth-sweep-tests")
@@ -144,7 +151,7 @@ fn echoing_stub(name: &str) -> String {
         let path = dir.join("stub.cmd");
         std::fs::write(
             &path,
-            "@echo off\r\necho %* 1>&2\r\nmore > nul\r\nexit /b 1\r\n",
+            "@echo off\r\nfindstr /C:\"subagent\" 1>&2\r\necho %* 1>&2\r\nexit /b 1\r\n",
         )
         .expect("write stub");
         path
@@ -155,7 +162,7 @@ fn echoing_stub(name: &str) -> String {
         let path = dir.join("stub.sh");
         std::fs::write(
             &path,
-            "#!/bin/sh\necho \"$@\" >&2\ncat >/dev/null\nexit 1\n",
+            "#!/bin/sh\ngrep subagent >&2\necho \"$@\" >&2\nexit 1\n",
         )
         .expect("write stub");
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
@@ -206,6 +213,38 @@ async fn the_vendor_prefix_never_reaches_the_cli() {
         report.model, "codex:gpt-5.6-codex",
         "the report still records which vendor was asked"
     );
+}
+
+#[tokio::test]
+async fn agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_policy() {
+    let stub = echoing_stub("agent-mode");
+    for (model, wording) in [
+        ("sonnet", "subagent_type=Explore"),
+        ("codex:gpt-5.6-codex", "Codex subagents"),
+    ] {
+        let report = run_with_agents(
+            Request {
+                repo: Path::new("."),
+                lane: Lane::Security,
+                model,
+                scope: None,
+                effort: "",
+                max_turns: 1,
+                timeout: Duration::from_secs(60),
+                api_key: None,
+                binary: Some(&stub),
+            },
+            true,
+        )
+        .await;
+        let Status::NotSwept { reason } = report.status else {
+            panic!("a failing stub cannot complete a sweep");
+        };
+        assert!(reason.contains(wording), "{model}: {reason}");
+        if model == "sonnet" {
+            assert!(reason.contains("Read,Glob,Grep,Agent"), "{reason}");
+        }
+    }
 }
 
 #[test]

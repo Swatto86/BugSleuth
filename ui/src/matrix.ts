@@ -7,7 +7,7 @@
  * before it is lost.
  */
 
-import { type Settings, toggleLane } from "./model";
+import { supportsAgents, type Settings, toggleLane } from "./model";
 import { confirmDialog } from "./dialog";
 import type { MatrixHandlers } from "./view";
 
@@ -36,8 +36,20 @@ export function matrixHandlers({
       const existing = models[index];
       // The effort goes with the old vendor: the levels differ between them,
       // and carrying one over would send a value the new CLI may reject.
-      if (existing) models[index] = { ...existing, id, effort: "" };
+      if (existing)
+        models[index] = {
+          ...existing,
+          id,
+          effort: "",
+          use_agents: supportsAgents(id) && (existing.use_agents ?? false),
+        };
       render();
+    },
+    onAgents: (index, useAgents) => {
+      const models = settings().models;
+      const existing = models[index];
+      if (existing) models[index] = { ...existing, use_agents: useAgents };
+      refresh();
     },
     onPasses: (index, passes) => {
       const models = settings().models;
@@ -63,7 +75,7 @@ export function matrixHandlers({
         title: "Remove this model?",
         message:
           `This removes ${model.id || `row ${index + 1}`} and all of its ` +
-          "lane, effort, and pass settings. This cannot be undone.",
+          "lane, agent, effort, and pass settings. This cannot be undone.",
         confirmLabel: "Remove model",
         destructive: true,
       }).then((yes) => {

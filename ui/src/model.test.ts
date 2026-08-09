@@ -96,6 +96,13 @@ test("a bare and a prefixed Claude model on one lane count as a single unit", ()
   assert.equal(batchCount(models), 1);
 });
 
+test("agent and single-agent prompts are distinct sweeps", () => {
+  const single = row("sonnet", ["correctness"]);
+  const agents = { ...single, use_agents: true };
+  assert.equal(unitCount([single, agents]), 2);
+  assert.equal(batchCount([single, agents]), 2);
+});
+
 test("only a complete shipped preset bypasses replacement confirmation", () => {
   // Per-row checking let a mixture or duplicate of shipped rows through, so a
   // user-built matrix was replaced without a prompt. Only the whole preset,
@@ -103,6 +110,12 @@ test("only a complete shipped preset bypasses replacement confirmation", () => {
   assert.equal(isShippedConfiguration(preset("cheap")), true);
   assert.equal(isShippedConfiguration(preset("balanced")), true);
   assert.equal(isShippedConfiguration(preset("deep")), true);
+  assert.equal(
+    isShippedConfiguration(
+      preset("cheap").map((model) => ({ ...model, use_agents: true })),
+    ),
+    false,
+  );
   // A mix of one row from each of two presets is nobody's shipped configuration.
   assert.equal(
     isShippedConfiguration([preset("cheap")[0]!, preset("deep")[0]!]),

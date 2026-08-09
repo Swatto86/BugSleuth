@@ -30,6 +30,9 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
         // old encoding was lossy, which is exactly why it is not trusted to
         // identify anything on its own.
         .or_else(|| {
+            if unit.use_agents {
+                return None;
+            }
             let legacy = read_swept(&dir.join(legacy_file_name_for(unit)))?;
             // The scope check belongs on this path too. Adding it only to the
             // branch above would leave the whole defect reachable through the
@@ -87,12 +90,14 @@ fn model_of(spec: &str) -> &str {
 }
 
 pub(super) fn file_name_for(unit: &Unit) -> String {
-    // A default unit — no effort, first pass — keeps the original name, so
-    // every report written before efforts or passes existed stays resumable.
+    // An ordinary default unit — no agents, effort, or repeat pass — keeps the
+    // original name, so reports written before those options stay resumable.
+    let agents = if unit.use_agents { "~agents" } else { "" };
     if unit.effort.trim().is_empty() && unit.pass <= 1 {
-        return format!("{}-{}.json", unit.lane.slug(), safe(&unit.model));
+        return format!("{}-{}{}.json", unit.lane.slug(), safe(&unit.model), agents);
     }
-    // Anything else appends BOTH fields, delimited by `~` — a character
+    // Anything else appends both positional fields and, when selected, the
+    // agent marker. They are delimited by `~` — a character
     // `safe()` can never emit, so no effort or model text can spell a pass
     // marker and no pass marker can spell an effort. Plain `-` concatenation
     // could: effort `pass2` and a real second pass produced byte-identical
@@ -100,11 +105,12 @@ pub(super) fn file_name_for(unit: &Unit) -> String {
     // resume then handed one unit the other unit's report. Both fields always
     // present (even empty) so the split is positional, not guessed.
     format!(
-        "{}-{}~{}~p{}.json",
+        "{}-{}~{}~p{}{}.json",
         unit.lane.slug(),
         safe(&unit.model),
         safe(unit.effort.trim()),
-        unit.pass.max(1)
+        unit.pass.max(1),
+        agents
     )
 }
 

@@ -43,6 +43,8 @@ export interface ModelSetting {
   lanes: string[];
   /** Reasoning effort. Empty means the vendor's own default. */
   effort: string;
+  /** Ask supported providers to delegate independent work in parallel. */
+  use_agents?: boolean;
   /**
    * How many times to sweep each lane with this model.
    *
@@ -181,7 +183,7 @@ export function passChoices(passes: number | undefined): number[] {
 }
 
 /**
- * Every (model, lane, effort, pass) unit this configuration implies, as keys.
+ * Every (model, lane, effort, agent mode, pass) unit this configuration implies.
  *
  * Mirrors plan.rs exactly, including its dedup: the engine enumerates these
  * tuples and drops exact duplicates, so a model listed twice against one lane
@@ -210,8 +212,9 @@ function canonicalUnitId(raw: string): string {
 function unitKeys(models: ModelSetting[]): Set<string> {
   const keys = new Set<string>();
   for (const model of models) {
-    const id = canonicalUnitId(model.id);
-    if (!id) continue;
+    const canonical = canonicalUnitId(model.id);
+    if (!canonical) continue;
+    const id = `${canonical}\0${model.use_agents ?? false}`;
     for (const lane of model.lanes) {
       if (!(LANES as readonly string[]).includes(lane)) continue;
       for (let pass = 1; pass <= passesOf(model); pass++) {
@@ -233,6 +236,11 @@ export function unitCount(models: ModelSetting[]): number {
  */
 export function vendorOf(modelId: string): string {
   return splitId(modelId).vendor;
+}
+
+/** Whether BugSleuth's read-only invocation of this provider can delegate. */
+export function supportsAgents(modelId: string): boolean {
+  return vendorOf(modelId) !== "kilo";
 }
 
 /**
@@ -262,6 +270,7 @@ export function canRun(settings: Settings): boolean {
     !settings.models.every(
       (model) =>
         model.id.trim() !== "" &&
+        (!model.use_agents || supportsAgents(model.id)) &&
         model.lanes.every((lane) =>
           (LANES as readonly string[]).includes(lane),
         ) &&

@@ -35,6 +35,25 @@ fn read_only_sweeps_cannot_be_granted_write_tools() {
 }
 
 #[test]
+fn agent_enabled_sweeps_only_add_the_delegation_tool() {
+    let mut spec = run("sonnet");
+    spec.allowed = READ_ONLY_AGENT_TOOLS;
+    let args = build_args(&spec);
+    let index = args.iter().position(|a| a == "--allowedTools");
+    assert_eq!(
+        index.and_then(|i| args.get(i + 1)).map(String::as_str),
+        Some("Read,Glob,Grep,Agent")
+    );
+    assert_eq!(
+        args.iter()
+            .position(|a| a == "--disallowedTools")
+            .and_then(|i| args.get(i + 1))
+            .map(String::as_str),
+        Some(READ_ONLY_DENIED)
+    );
+}
+
+#[test]
 fn customizations_are_disabled_so_the_reviewed_repo_cannot_alter_the_review() {
     assert!(
         build_args(&run("sonnet"))

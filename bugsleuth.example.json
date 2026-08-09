@@ -10,7 +10,10 @@
     "",
     "Model ids are 'vendor:model'. A bare name means Claude. An empty model after",
     "the colon means that CLI's own default. Note gpt-5.6-codex is not available on",
-    "a ChatGPT subscription."
+    "a ChatGPT subscription.",
+    "",
+    "Set use_agents to true on a Claude or Codex model to ask it to delegate",
+    "independent lane work in parallel. Kilo's read-only Ask agent cannot delegate."
   ],
   "models": [
     {

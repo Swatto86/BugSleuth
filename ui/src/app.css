@@ -195,6 +195,12 @@ table.matrix th.lane-cell {
   width: 92px;
 }
 
+table.matrix td.agent-cell,
+table.matrix th.agent-cell {
+  text-align: center;
+  width: 72px;
+}
+
 /*
   The warning marker must not be allowed to wrap. "CONTRACT ⚠" is just wide
   enough to break onto a second line, which lifts that one heading above the
@@ -213,6 +219,11 @@ table.matrix input[type="checkbox"] {
   height: 17px;
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+table.matrix input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 td.model-id {

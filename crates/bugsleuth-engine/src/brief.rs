@@ -17,12 +17,25 @@ use bugsleuth_domain::{Lane, finding_schema};
 /// prompt is a request, a schema is a constraint — so expect more malformed
 /// replies from a vendor that needs the appendix.
 pub fn build(lane: Lane, scope: Option<&str>, enforced_schema: bool) -> String {
+    build_with_agents(lane, scope, enforced_schema, None)
+}
+
+pub(crate) fn build_with_agents(
+    lane: Lane,
+    scope: Option<&str>,
+    enforced_schema: bool,
+    agents_instruction: Option<&str>,
+) -> String {
     let scope_line = match scope {
         Some(paths) if !paths.trim().is_empty() => {
             format!("\nRestrict your review to these paths: {}\n", paths.trim())
         }
         _ => String::new(),
     };
+    let agents_line = agents_instruction
+        .filter(|instruction| !instruction.trim().is_empty())
+        .map(|instruction| format!("{}\n\n", instruction.trim()))
+        .unwrap_or_default();
 
     format!(
         "\
@@ -36,7 +49,7 @@ different mandate. Stay strictly inside yours.
 {scope_line}
 # How to work
 
-Read the code. Navigate the repository yourself — use Grep and Glob to find the \
+{agents_line}Read the code. Navigate the repository yourself — use Grep and Glob to find the \
 files that matter for your mandate, then read them properly. Do not guess at \
 what a file contains.
 
@@ -96,6 +109,7 @@ returning an empty list — an empty result is a valid and useful answer.{schema
         title = lane.title(),
         mandate = lane.mandate(),
         scope_line = scope_line,
+        agents_line = agents_line,
         schema_appendix = if enforced_schema {
             String::new()
         } else {
@@ -244,5 +258,18 @@ mod tests {
         assert!(!enforced.contains("average_price divides by zero"));
         assert!(spelled_out.contains("average_price divides by zero"));
         assert!(spelled_out.len() > enforced.len());
+    }
+
+    #[test]
+    fn agent_delegation_is_only_added_when_requested() {
+        let plain = build(Lane::Security, None, true);
+        let agents = build_with_agents(
+            Lane::Security,
+            None,
+            true,
+            Some("Use parallel subagents and synthesize their evidence."),
+        );
+        assert!(!plain.contains("parallel subagents"));
+        assert!(agents.contains("parallel subagents"));
     }
 }

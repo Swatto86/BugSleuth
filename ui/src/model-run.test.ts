@@ -16,6 +16,7 @@ import {
   canRun,
   passChoices,
   preset,
+  supportsAgents,
 } from "./model.ts";
 
 function row(id: string, lanes: string[]): ModelSetting {
@@ -73,6 +74,34 @@ test("a blank row makes the configuration unrunnable, exactly like the engine", 
     false,
     "an unknown lane must not be silently ignored",
   );
+});
+
+test("agents are available for Claude and Codex but not Kilo Ask", () => {
+  assert.equal(supportsAgents("sonnet"), true);
+  assert.equal(supportsAgents("codex:"), true);
+  assert.equal(supportsAgents("kilo:model"), false);
+
+  const settings = {
+    repo: "C:/x",
+    scope: "",
+    models: [
+      {
+        id: "kilo:model",
+        lanes: ["security"],
+        effort: "",
+        use_agents: true,
+        passes: 1,
+      },
+    ],
+    theme: "system" as const,
+    reuse_completed: true,
+    triage_model: "haiku",
+    apply_model: "",
+    apply_effort: "",
+    push_after_apply: false,
+    tag_release_after_push: false,
+  };
+  assert.equal(canRun(settings), false);
 });
 
 test("a stored pass count outside the picker presets remains visible", () => {
