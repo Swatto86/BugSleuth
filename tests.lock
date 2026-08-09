@@ -128,6 +128,7 @@ node splitId agrees with vendorOf on every shape
 node splitting a model spec and rejoining it settles on one spelling
 node starting a run moves focus off the disabled Run button to Stop
 node startup renders do not persist settings back over the saved file
+node the E2E build uses the locked local Tauri CLI
 node the README still promises a single file that runs with nothing installed
 node the README's download table names assets the workflow builds
 node the advertised concurrency cap and the enforced cap are the same number
