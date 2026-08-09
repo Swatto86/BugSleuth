@@ -9,7 +9,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use bugsleuth_engine::{orchestrate, plan};
+use bugsleuth_engine::{orchestrate, plan, sweep};
 use tauri::{Emitter, Manager};
 
 use super::CommandResult;
@@ -48,6 +48,7 @@ pub async fn start_run(
 ) -> CommandResult<()> {
     let repo = checked_repo(&settings.repo)?;
     let plan = plan::plan(&to_config(&settings)).map_err(|e| e.to_string())?;
+    let selected_models: Vec<String> = plan.units.iter().map(|unit| unit.model.clone()).collect();
     let out_dir = run_output_dir(&repo)?;
 
     // A fresh signal per run: reusing one would let a cancel from a finished
@@ -72,28 +73,37 @@ pub async fn start_run(
     });
 
     tauri::async_runtime::spawn(async move {
-        let report = orchestrate::run(
-            &plan,
-            orchestrate::RunOptions {
-                repo: &repo,
-                scope: non_empty(&settings.scope),
-                max_turns: 40,
-                timeout: Duration::from_secs(2700),
-                api_key: None,
-                out_dir: Some(&out_dir),
-                resume: settings.reuse_completed,
-                triage_model: &settings.triage_model,
-                // Clamped here, not trusted: settings are a JSON file a person
-                // can edit, and an unbounded value is the burst that overloads a
-                // vendor. `batches` floors it at one; the window offers 1–10.
-                per_vendor_concurrency: settings
-                    .provider_concurrency
-                    .clamp(1, MAX_PROVIDER_CONCURRENCY),
-                cancel: cancel.clone(),
-                progress: Some(progress),
-            },
-        )
-        .await;
+        let checked = tokio::select! {
+            result = sweep::precheck_selected(&selected_models) => result,
+            _ = cancel.cancelled() => Err("Provider pre-check stopped; no lane started.".into())
+        };
+        let report = match checked {
+            Ok(()) => {
+                orchestrate::run(
+                    &plan,
+                    orchestrate::RunOptions {
+                        repo: &repo,
+                        scope: non_empty(&settings.scope),
+                        max_turns: 40,
+                        timeout: Duration::from_secs(2700),
+                        api_key: None,
+                        out_dir: Some(&out_dir),
+                        resume: settings.reuse_completed,
+                        triage_model: &settings.triage_model,
+                        // Clamped here, not trusted: settings are a JSON file a person
+                        // can edit, and an unbounded value is the burst that overloads a
+                        // vendor. `batches` floors it at one; the window offers 1–10.
+                        per_vendor_concurrency: settings
+                            .provider_concurrency
+                            .clamp(1, MAX_PROVIDER_CONCURRENCY),
+                        cancel: cancel.clone(),
+                        progress: Some(progress),
+                    },
+                )
+                .await
+            }
+            Err(error) => Err(anyhow::anyhow!(error)),
+        };
 
         let payload = match report {
             Ok(report) => {

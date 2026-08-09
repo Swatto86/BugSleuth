@@ -52,13 +52,13 @@ export async function startRun(deps: RunDeps): Promise<void> {
   running = true;
   progressLog = [];
   deps.renderPlanSummary();
-  deps.setStatus("Running — this takes tens of minutes", "running");
+  deps.setStatus("Checking selected providers…", "running");
   const previousCards = [...deps.findings.children];
   const applyWasOffered = !deps.applyPanel.classList.contains("hidden");
   const reportWasOffered = !deps.copyReport.classList.contains("hidden");
   const copyWasOffered = !deps.copyPrompt.classList.contains("hidden");
   const pathWasShown = !deps.promptPath.classList.contains("hidden");
-  deps.output.textContent = "Starting…";
+  deps.output.textContent = "Checking selected providers…";
   deps.findings.replaceChildren();
   // The panel applies *the last run's* prompt, and that file is about to be
   // rewritten. Offering it during a run would apply a report the pane is no
@@ -104,14 +104,18 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // against a large repository the progress event arrived second and
     // replaced twenty ranked defects with a log of what had just happened.
     if (!running) return;
+    if (progressLog.length === 1) {
+      deps.setStatus("Running — this takes tens of minutes", "running");
+      deps.output.textContent = "Selected providers passed pre-checks.";
+    }
     // Appended, not replaced. This element is `aria-live`, and replacing its
     // whole text makes a screen reader announce the entire log again from the
     // top on every event — by the end of a run that is a hundred lines read out
     // to hear one new one. Appending announces only what is new, which is the
     // whole point of a live region.
     // The separator is decided by what is already on screen, not by how many
-    // events have arrived: the pane is seeded with "Starting…" before the first
-    // one, so keying off the log's length would run the first line into it.
+    // events have arrived: the pane holds the provider-check result before the
+    // first one, so keying off the log's length would run that line into it.
     const line = progressLog[progressLog.length - 1] ?? "";
     const separator = deps.output.textContent === "" ? "" : NEWLINE;
     deps.output.appendChild(document.createTextNode(separator + line));
@@ -132,7 +136,7 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // about unswept lanes and how severities were graded.
     deps.findings.replaceChildren(findingsList(event.payload.findings ?? []));
     deps.output.textContent = event.payload.text;
-    currentReport = event.payload.text;
+    currentReport = event.payload.ok ? event.payload.text : "";
     deps.copyReport.classList.toggle("hidden", currentReport === "");
     // A finished run whose fix prompts did not fully save is not a plain
     // "Finished": the detail is in the output text, but the status has to say

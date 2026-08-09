@@ -9,8 +9,8 @@
  * the app's own runs directory, naming the model that produced it, could not.
  *
  * The target is the seeded fixture — six known bugs, builds in seconds — so the
- * journey costs one cheap model invocation rather than a real repository's
- * worth of quota.
+ * journey costs one provider pre-check and one cheap sweep rather than a real
+ * repository's worth of quota.
  */
 
 import { strict as assert } from "node:assert";

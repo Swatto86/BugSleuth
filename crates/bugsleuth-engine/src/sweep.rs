@@ -1,6 +1,7 @@
 //! One lane sweep, end to end: brief the model, run it, verify what comes back.
 
 mod isolate;
+mod precheck;
 mod revision;
 
 use std::path::Path;
@@ -18,6 +19,7 @@ use crate::brief;
 use crate::report::{LaneReport, Rejected, Status, rank};
 // `clean_revision` is re-exported so `orchestrate::persist` reaches it as
 // `crate::sweep::clean_revision`, unchanged by the split.
+pub use precheck::selected as precheck_selected;
 pub(crate) use revision::clean_revision;
 use revision::reviewed_commit;
 
@@ -207,13 +209,9 @@ pub async fn run(request: Request<'_>) -> LaneReport {
     // skills, subagents, network and unknown future tools all need to default
     // to denied, rather than inheriting one developer's current setup.
     if vendor == Vendor::Kilo
-        && let Some(gap) = kilo::preflight::permission_gap()
+        && let Some(error) = precheck::kilo_permission_error()
     {
-        return not_swept(format!(
-            "Kilo sweeps require a deny-by-default `ask` agent because reviewed source is \
-             attacker input: {gap}. Set `\"*\": \"deny\"`, then explicitly allow only \
-             `read`, `glob`, and `grep` inside that agent's permission block."
-        ));
+        return not_swept(error);
     }
 
     // A vendor that cannot be run read-only gets a throwaway checkout instead.
@@ -322,7 +320,8 @@ fn verify_all(
 /// share one implementation instead of drifting apart on what "available" means.
 ///
 /// Note what a success here does **not** prove: `--version` works fine for a CLI
-/// that is installed but not signed in. Only a real sweep proves authentication.
+/// that is installed but not signed in. The desktop's selected-provider check
+/// proves that.
 pub async fn probe_all() -> Vec<(&'static str, Result<String, String>)> {
     let (claude, codex, kilo) = tokio::join!(claude::probe(), codex::probe(), kilo::probe());
     vec![
@@ -337,7 +336,8 @@ pub async fn probe_all() -> Vec<(&'static str, Result<String, String>)> {
 /// The counterpart to [`probe_all`], and the honest one. Probing answers "can
 /// this CLI start", which every one of them can while signed out; this asks for
 /// one word back, which only a real session can produce. Costs a trivial model
-/// call per vendor, so it is offered rather than run automatically.
+/// call per vendor. A desktop run performs it for its selected providers; the
+/// button performs it for all three.
 pub async fn check_signin() -> Vec<(&'static str, bugsleuth_provider::signin::SignIn)> {
     bugsleuth_provider::signin::check_all().await
 }
@@ -360,7 +360,7 @@ pub async fn preflight() -> Result<()> {
         "
 {usable} of {total} provider CLIs can be started."
     );
-    println!("This does not prove they are signed in; only a real sweep does that.");
+    println!("This does not prove they are signed in; use Check sign-in for that.");
     if usable == 0 {
         std::process::exit(2);
     }

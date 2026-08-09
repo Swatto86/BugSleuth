@@ -95,18 +95,21 @@ passed everything. Both are fixed; both had been read over many times.
 1. **Plan** — the config assigns lanes to models; the (model × lane) product is
    enumerated. Every lane is always listed, so one with no model assigned is
    carried through as an explicit gap.
-2. **Batch** — units are grouped so that at most *N* invocations of one vendor
+2. **Desktop pre-check** — the app gives each selected provider one minimal real
+   invocation, concurrently. Missing sessions, unhealthy CLIs and an unsafe
+   Kilo `ask` policy stop the desktop run before any lane starts.
+3. **Batch** — units are grouped so that at most *N* invocations of one vendor
    run at once, *N* being the per-provider concurrency setting (default 3). With
    CLI subscriptions the binding constraint is rate limits, not money, so the
    fan-out per vendor is bounded and chosen rather than "all at once"; *N* of 1
    restores strictly sequential per-vendor behaviour. A vendor's slots go to
    *different models first*: two models you picked run together rather than one
    model's lanes filling the round while the other waits.
-3. **Sweep** — each unit runs its vendor against the repository. Failure is a
+4. **Sweep** — each unit runs its vendor against the repository. Failure is a
    *reported state*, never an exception that vanishes.
-4. **Verify** — every finding's quoted snippet must exist in the file it names,
+5. **Verify** — every finding's quoted snippet must exist in the file it names,
    or it is discarded. Line numbers are corrected rather than treated as fatal.
-5. **Judge** — findings are clustered by anchor *and* wording; agreement is
+6. **Judge** — findings are clustered by anchor *and* wording; agreement is
    counted per distinct model; the result is ranked severity-first. The ranked
    list, its gaps and a fix prompt are the run's output — handed to a model to
    fix, or read as-is.

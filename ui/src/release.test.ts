@@ -308,7 +308,7 @@ test("safety docs describe the triage exception to lane-relative grades", () => 
   }
 });
 
-test("the one-invocation journey disables the default triage pass", () => {
+test("the acceptance journey accounts for the provider pre-check", () => {
   const html = read("ui", "index.html");
   assert.match(
     html,
@@ -316,7 +316,8 @@ test("the one-invocation journey disables the default triage pass", () => {
     "the test no longer found the known checked default",
   );
   const runbook = read("RUNBOOK.md");
-  assert.ok(runbook.includes("one cheap model\ninvocation"));
+  assert.ok(runbook.includes("two cheap model\ninvocations"));
+  assert.ok(runbook.includes("provider pre-check"));
   assert.ok(runbook.includes("Untick **Re-grade every severity**"));
 });
 

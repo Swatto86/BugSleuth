@@ -37,6 +37,41 @@ fn a_vendor_prefix_selects_that_vendor() {
 }
 
 #[test]
+fn selected_providers_are_checked_once_before_lane_work() {
+    let models = vec![
+        "sonnet".to_string(),
+        "claude:opus".to_string(),
+        "kilo:kilo/zai-coding/glm-5.2".to_string(),
+        "kilo:openrouter/another".to_string(),
+    ];
+    assert_eq!(
+        precheck::vendors_for(&models),
+        vec![Vendor::Claude, Vendor::Kilo]
+    );
+}
+
+#[test]
+fn provider_precheck_failures_are_reported_together() {
+    use bugsleuth_provider::signin::SignIn;
+
+    let credential = "eyJsecret.payload.signature";
+    let error = precheck::summarize(vec![
+        (
+            Vendor::Claude,
+            SignIn::Failed(format!("run `claude login`; token={credential}")),
+        ),
+        (Vendor::Kilo, SignIn::TimedOut(60)),
+    ])
+    .expect_err("two unusable providers passed");
+    assert!(error.contains("before any lane started"), "{error}");
+    assert!(error.contains("claude login"), "{error}");
+    assert!(error.contains("kilo"), "{error}");
+    assert!(error.contains("60s"), "{error}");
+    assert!(!error.contains(credential), "{error}");
+    assert!(error.contains("<redacted-credential>"), "{error}");
+}
+
+#[test]
 fn kilo_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode() {
     assert_eq!(
         Vendor::parse("kilo:anthropic/claude-sonnet-4-5"),

@@ -43,8 +43,10 @@ Windows ones.
 
 **You also need at least one vendor CLI**, signed in, on your `PATH`: `claude`,
 `codex` or `kilo`. BugSleuth drives them under your existing subscription — it
-holds no API key and bills nothing itself. The Providers panel says which ones
-it can start, though only a real sweep proves you are signed in.
+holds no API key and bills nothing itself. Before the desktop app starts any
+lane, it asks each selected provider for one word so a missing session or
+unhealthy CLI fails fast; the Providers panel can perform the same sign-in check
+for all providers.
 
 ## The two ideas
 
@@ -96,7 +98,7 @@ cargo run -p bugsleuth-cli -- preflight
 ```
 
 Checks which provider CLIs can be started. It does **not** prove they are signed
-in; only a real sweep does that.
+in; use **Check sign-in** in the desktop app for that.
 
 ```bash
 cargo run -p bugsleuth-cli -- sweep --repo <path> --lane correctness --model sonnet --json-out run.json
@@ -192,10 +194,11 @@ that from the registry rather than guessing, because a mismatch fails with an
 error that says nothing about the cause.
 
 The suite is deliberately one short journey, not a spec per feature: boot,
-provider preflight, the uncovered-lane warning, **a real review with a real
-model**, and the reviewed repository left untouched. It asserts effects rather
-than calls — findings in the window could come from anywhere, but a sweep report
-landing in the app's runs directory naming the model that produced it could not.
+provider preflight, the uncovered-lane warning, selected-provider pre-check,
+**a real review with a real model**, and the reviewed repository left untouched.
+It asserts effects rather than calls — findings in the window could come from
+anywhere, but a sweep report landing in the app's runs directory naming the
+model that produced it could not.
 
 Set `BUGSLEUTH_E2E_MODEL` to pick the model; it defaults to `haiku` because the
 journey should cost as little as a real run can.

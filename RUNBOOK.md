@@ -1,8 +1,8 @@
 # Release acceptance runbook
 
 The journey to drive before shipping a change to the app, the provider adapters,
-the run lifecycle, or packaging. It takes about ten minutes and one cheap model
-invocation.
+the run lifecycle, or packaging. It takes about ten minutes and two cheap model
+invocations: one provider pre-check and one lane sweep.
 
 `~/.agents/tauri.md` asks for one live acceptance task through the real webview.
 **The WebDriver harness does not currently satisfy that**: it creates a session
@@ -45,8 +45,8 @@ looking, not by inference:
 | 1 | App starts | Window appears; no blank page, no unstyled flash |
 | 2 | Providers panel | Every configured CLI listed with a real version |
 | 3 | Untick a lane's every box | The column head is marked and the banner names that lane as NOT SWEPT |
-| 4 | Set a repository, one model, one lane; Untick **Re-grade every severity** | Footer shows one sweep and one round; Run enables; triage is off so this journey remains one model invocation |
-| 5 | **Run review** | Progress streams into the result pane as it happens |
+| 4 | Set a repository, one model, one lane; Untick **Re-grade every severity** | Footer shows one sweep and one round; Run enables; triage is off so this journey remains one pre-check and one sweep |
+| 5 | **Run review** | The selected-provider pre-check finishes before lane progress streams into the result pane |
 | 6 | Wait for it | Status reaches Finished and findings are listed |
 | 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>-<16-hex-path-hash>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
 | 7b | Check a finding's `fix` | It has an approach, at least one edit naming a symbol, a verification command, and risks. An empty plan renders as "no fix plan" rather than as nothing |

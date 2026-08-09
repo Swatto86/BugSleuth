@@ -13,9 +13,10 @@
 //! subscriptions and settles the same question the same way — one trivial
 //! prompt, a timeout, and a report of exactly what came back.
 //!
-//! Deliberately **on demand, not at launch**. This costs real quota, in a tool
-//! whose whole design treats a model invocation as expensive; checking at every
-//! start would spend three calls to tell most people what they already know.
+//! Deliberately **at Run, not at launch**. A desktop run checks each provider it
+//! selected exactly once before starting any lane; the manual check still covers
+//! all three. That spends only the calls needed to prevent a much costlier
+//! partial run.
 
 use std::path::Path;
 use std::time::Duration;
