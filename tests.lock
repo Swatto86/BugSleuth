@@ -393,9 +393,11 @@ rust kilo::preflight::tests::a_pattern_list_without_a_wildcard_deny_is_not_denia
 rust kilo::preflight::tests::a_plain_deny_counts
 rust kilo::preflight::tests::a_url_inside_a_string_is_not_mistaken_for_a_comment
 rust kilo::preflight::tests::a_wildcard_deny_counts
+rust kilo::preflight::tests::an_allow_exception_makes_a_wildcard_deny_unsafe
 rust kilo::preflight::tests::an_allowed_shell_is_a_gap
 rust kilo::preflight::tests::an_ask_rule_is_reported_as_a_gap_and_names_the_tool
 rust kilo::preflight::tests::an_escaped_quote_does_not_end_a_string_early
+rust kilo::preflight::tests::an_open_top_level_wildcard_is_not_hidden_by_a_specific_deny
 rust kilo::preflight::tests::an_unknown_allowed_tool_is_a_gap
 rust kilo::preflight::tests::ask_is_not_denial_because_auto_approves_it
 rust kilo::preflight::tests::comments_are_actually_removed

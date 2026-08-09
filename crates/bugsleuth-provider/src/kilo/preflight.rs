@@ -184,18 +184,29 @@ pub(crate) fn gap_in(candidates: &[PathBuf]) -> Option<String> {
     ))
 }
 
-/// A tool is denied when its entry is the string `"deny"`, or an object whose
-/// `*` pattern is `deny`. Any other shape — an allow, an `ask` that `--auto`
-/// would approve, or a pattern list with holes in it — is not a denial.
-fn denies(permission: &Value, tool: &str) -> bool {
-    if let Value::String(action) = permission {
-        return action == "deny";
-    }
-    match permission.get(tool) {
-        Some(Value::String(action)) => action == "deny",
-        Some(Value::Object(patterns)) => patterns.get("*").and_then(Value::as_str) == Some("deny"),
+fn rule_denies_everything(rule: &Value) -> bool {
+    match rule {
+        Value::String(action) => action == "deny",
+        Value::Object(patterns) => {
+            patterns.len() == 1 && patterns.get("*").and_then(Value::as_str) == Some("deny")
+        }
         _ => false,
     }
+}
+
+/// A rule is a complete denial only when no ordered exception can reopen it.
+fn denies(permission: &Value, tool: &str) -> bool {
+    if !permission.is_object() {
+        return rule_denies_everything(permission);
+    }
+    let wildcard = permission.get("*");
+    if wildcard.is_some_and(|rule| !rule_denies_everything(rule)) {
+        return false;
+    }
+    permission
+        .get(tool)
+        .or(wildcard)
+        .is_some_and(rule_denies_everything)
 }
 
 #[cfg(test)]

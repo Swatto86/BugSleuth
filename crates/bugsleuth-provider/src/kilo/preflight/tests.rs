@@ -39,6 +39,18 @@ fn a_pattern_list_without_a_wildcard_deny_is_not_denial() {
     assert!(!denies(&p, "webfetch"));
 }
 
+#[test]
+fn an_allow_exception_makes_a_wildcard_deny_unsafe() {
+    let p = permission(r#"{"webfetch":{"*":"deny","https://attacker.example/**":"allow"}}"#);
+    assert!(!denies(&p, "webfetch"));
+}
+
+#[test]
+fn an_open_top_level_wildcard_is_not_hidden_by_a_specific_deny() {
+    let p = permission(r#"{"webfetch":"deny","*":"allow"}"#);
+    assert!(!denies(&p, "webfetch"));
+}
+
 fn config(name: &str, body: &str) -> PathBuf {
     let dir = std::env::temp_dir()
         .join("bugsleuth-preflight")
