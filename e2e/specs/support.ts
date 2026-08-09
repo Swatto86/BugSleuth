@@ -42,6 +42,35 @@ export function runsDir(): string | undefined {
   return match === undefined ? undefined : path.join(RUNS_ROOT, match);
 }
 
+/** Prove the real provider wrote a useful sweep rather than only updating the UI. */
+export function assertSweepWritten(): void {
+  const runs = runsDir();
+  assert.ok(
+    runs !== undefined,
+    `no seeded-repo run directory under ${RUNS_ROOT}`,
+  );
+  const written = fs.readdirSync(runs).filter((file) => file.endsWith(".json"));
+  assert.ok(written.length > 0, `no sweep reports written to ${runs}`);
+
+  const report = JSON.parse(
+    fs.readFileSync(path.join(runs, written[0]!), "utf8"),
+  );
+  assert.equal(report.lane, "Correctness");
+  assert.ok(
+    String(report.model).includes(MODEL),
+    `report model was ${report.model}`,
+  );
+  assert.equal(
+    report.status.state,
+    "swept",
+    `sweep did not run: ${JSON.stringify(report.status)}`,
+  );
+  assert.ok(
+    report.findings.length > 0,
+    "the seeded fixture returned no findings, so the review did not really work",
+  );
+}
+
 /** Click the in-app dialog's button whose label matches, failing loudly if none. */
 export async function clickDialogButton(label: string): Promise<void> {
   const buttons = await $$(".dialog-buttons button");

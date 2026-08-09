@@ -134,3 +134,50 @@ test("every active control hands focus off before it disables or hides itself", 
     "failed and finished runs hide Stop without first handing focus off",
   );
 });
+
+test("a refused start restores the findings it cleared", () => {
+  const run = frontendFiles().find((source) => source.fileName === "run.ts");
+  assert.ok(run, "run.ts is no longer a shipped frontend module");
+  const catches: ts.CatchClause[] = [];
+  walk(run, (node) => {
+    if (ts.isCatchClause(node)) catches.push(node);
+  });
+  assert.equal(catches.length, 1, "startRun no longer has one refusal path");
+
+  let restoresCards = false;
+  let restoresApply = false;
+  walk(catches[0]!.block, (node) => {
+    if (
+      !ts.isCallExpression(node) ||
+      !ts.isPropertyAccessExpression(node.expression)
+    ) {
+      return;
+    }
+    const callee = node.expression;
+    if (
+      callee.name.text === "replaceChildren" &&
+      node.arguments.some(
+        (argument) =>
+          ts.isSpreadElement(argument) &&
+          ts.isIdentifier(argument.expression) &&
+          argument.expression.text === "previousCards",
+      )
+    ) {
+      restoresCards = true;
+    }
+    if (
+      callee.name.text === "remove" &&
+      node.arguments.some(
+        (argument) =>
+          ts.isStringLiteral(argument) && argument.text === "hidden",
+      )
+    ) {
+      restoresApply = true;
+    }
+  });
+  assert.ok(
+    restoresCards,
+    "the refusal path never restores the previous cards",
+  );
+  assert.ok(restoresApply, "the refusal path never restores the Apply panel");
+});

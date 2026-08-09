@@ -37,6 +37,7 @@ node a name that does not exist is undefined rather than empty
 node a partly-failed handoff save is surfaced, not swallowed
 node a passes count above the backend cap is not runnable and is clamped in the picker
 node a progress event carries the fields the window renders from
+node a refused start restores the findings it cleared
 node a repeated pass is a whole extra sweep, and an extra round
 node a reused sweep says it was reused rather than pretending to be fresh
 node a round names what is about to run and where it sits in the sequence

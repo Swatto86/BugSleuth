@@ -21,7 +21,7 @@ import path from "node:path";
 import {
   MODEL,
   REPO,
-  RUNS_ROOT,
+  assertSweepWritten,
   clickDialogButton,
   logWebviewDiagnostics,
   runsDir,
@@ -204,36 +204,27 @@ describe("BugSleuth desktop app", () => {
     // the model stored in this machine's settings, and a check that fails for a
     // reason unrelated to the code is a check someone switches off.
 
-    // Effect two — the one that cannot be faked by the frontend: the sweep's
-    // own JSON is on disk, in the app's runs directory, naming the model.
-    const runs = runsDir();
-    assert.ok(
-      runs !== undefined,
-      `no seeded-repo run directory under ${RUNS_ROOT}`,
-    );
-    const written = fs.readdirSync(runs).filter((f) => f.endsWith(".json"));
-    assert.ok(written.length > 0, `no sweep reports written to ${runs}`);
+    assertSweepWritten();
 
-    const report = JSON.parse(
-      fs.readFileSync(path.join(runs, written[0]!), "utf8"),
+    const cardsBefore = await $$("#findings > *");
+    const cardCount = await cardsBefore.length;
+    assert.ok(cardCount > 0, "the finished run rendered no finding cards");
+    await $("#repo").setValue(path.join(REPO, "missing-e2e-repository"));
+    await $("#run").click();
+    await browser.waitUntil(
+      async () => (await $("#status").getAttribute("class")).includes("error"),
+      {
+        timeout: 30_000,
+        timeoutMsg: "the invalid repository was not refused",
+      },
     );
-    assert.equal(report.lane, "Correctness");
-    assert.ok(
-      String(report.model).includes(MODEL),
-      `report model was ${report.model}`,
-    );
+    const cardsAfter = await $$("#findings > *");
     assert.equal(
-      report.status.state,
-      "swept",
-      `sweep did not run: ${JSON.stringify(report.status)}`,
+      await cardsAfter.length,
+      cardCount,
+      "a refused run erased the previous findings",
     );
-
-    // The fixture has six known defects; a sweep that found none of them means
-    // the pipeline ran but did nothing useful, which a status check would miss.
-    assert.ok(
-      report.findings.length > 0,
-      "the seeded fixture returned no findings, so the review did not really work",
-    );
+    await expect($("#apply-panel")).toBeDisplayed();
   });
 
   it("stops a run when asked, and says what it never reached", async function () {

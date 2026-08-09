@@ -46,6 +46,8 @@ export async function startRun(deps: RunDeps): Promise<void> {
   progressLog = [];
   deps.renderPlanSummary();
   deps.setStatus("Running — this takes tens of minutes", "running");
+  const previousCards = [...deps.findings.children];
+  const applyWasOffered = !deps.applyPanel.classList.contains("hidden");
   deps.output.textContent = "Starting…";
   deps.findings.replaceChildren();
   // The panel applies *the last run's* prompt, and that file is about to be
@@ -67,6 +69,8 @@ export async function startRun(deps: RunDeps): Promise<void> {
     running = false;
     deps.setStatus(String(error), "error");
     deps.output.textContent = String(error);
+    deps.findings.replaceChildren(...previousCards);
+    if (applyWasOffered) deps.applyPanel.classList.remove("hidden");
     if (document.activeElement === deps.stop) deps.focusStatus();
     deps.renderPlanSummary();
   }
