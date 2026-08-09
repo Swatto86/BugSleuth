@@ -39,6 +39,21 @@ fn an_unreadable_repository_after_a_failure_is_not_reported_as_clean() {
 }
 
 #[test]
+fn a_credential_in_an_apply_failure_is_redacted_like_a_sweep_error_is() {
+    let jwt = "eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl";
+    let shown = failure_message(jwt, &[]);
+    assert!(
+        shown.contains("<redacted-credential>"),
+        "a JWT survived unredacted: {shown}"
+    );
+    let unknown = failure_message_unknown(jwt);
+    assert!(
+        unknown.contains("<redacted-credential>"),
+        "a JWT survived unredacted: {unknown}"
+    );
+}
+
+#[test]
 fn only_a_push_that_succeeded_can_lead_to_a_tag() {
     // The ordering rule, and the reason it is a function rather than a
     // `match` inside `apply`: nothing else here can exercise it without a

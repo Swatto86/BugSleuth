@@ -316,6 +316,7 @@ fn baseline(repo: &Path) -> anyhow::Result<Baseline> {
 /// would send someone away believing their checkout was untouched — the same
 /// "absence of a result read as a result" this whole project exists to stop.
 fn failure_message(error: &str, changed: &[String]) -> String {
+    let error = bugsleuth_provider::process::redact_secrets(error);
     match changed.len() {
         0 => format!("{error} — git shows no files changed."),
         n => format!(
@@ -334,6 +335,7 @@ fn failure_message(error: &str, changed: &[String]) -> String {
 /// changed" — that would claim the tree is clean when the truth is it is
 /// unknown, the exact false-clean this project exists to stop.
 fn failure_message_unknown(error: &str) -> String {
+    let error = bugsleuth_provider::process::redact_secrets(error);
     format!(
         "{error} — and BugSleuth could not read the repository afterwards to see what changed. \
          Check `git status` and `git diff` before running anything again."
