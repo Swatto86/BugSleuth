@@ -91,10 +91,7 @@ describe("BugSleuth desktop app", () => {
   });
 
   it("confirms before removing a configured model row", async () => {
-    // A row holds a provider, model id, effort, pass count and five lane
-    // assignments, and removal is immediate with no undo. Like preset
-    // replacement and clearing saved sweeps, it must be confirmed first, so a
-    // stray click on Remove cannot silently discard a hand-built row.
+    // A row holds configuration with no undo, so removal needs confirmation.
     const UNIQUE = "vendor/remove-me-12345";
     const rowCount = async () => (await $$("#matrix-body tr")).length;
     const before = await rowCount();
@@ -110,6 +107,14 @@ describe("BugSleuth desktop app", () => {
     assert.equal(await modelInput().getValue(), UNIQUE);
 
     const removeButton = () => $("#matrix-body tr:last-child button");
+    const actions = await $$(
+      "#matrix-body tr:last-child td.lane-cell input, #matrix-body tr:last-child button",
+    );
+    assert.equal(actions.length, 6, "the row's labelled actions changed");
+    for (const action of actions) {
+      const label = (await action.getAttribute("aria-label")) ?? "";
+      assert.match(label, new RegExp(`${UNIQUE}.*row ${before + 1}`));
+    }
 
     // Removal raises the guard rather than deleting on the spot.
     await removeButton().click();

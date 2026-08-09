@@ -60,3 +60,33 @@ test("removing a configured model row is guarded by a confirmation", () => {
     "matrixRows is no longer called from main.ts",
   );
 });
+
+test("editing a model refreshes its row action labels", () => {
+  const view = frontendFiles().find((file) => file.fileName === "view.ts");
+  assert.ok(view, "view.ts is no longer a shipped frontend module");
+  let rows: ts.FunctionDeclaration | undefined;
+  walk(view, (node) => {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "matrixRows") {
+      rows = node;
+    }
+  });
+  assert.ok(rows, "matrixRows() is gone from view.ts");
+
+  let refreshesLabels = false;
+  walk(rows, (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "updateRowActionLabels" &&
+      node.arguments.some(
+        (argument) => ts.isIdentifier(argument) && argument.text === "id",
+      )
+    ) {
+      refreshesLabels = true;
+    }
+  });
+  assert.ok(
+    refreshesLabels,
+    "renaming a model leaves its screen-reader action names stale",
+  );
+});

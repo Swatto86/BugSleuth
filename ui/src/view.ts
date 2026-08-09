@@ -103,7 +103,7 @@ export function matrixRows(
 ): HTMLTableRowElement[] {
   return models.map((model, index) => {
     const row = document.createElement("tr");
-    const { vendor, model: current } = splitId(model.id);
+    const { vendor } = splitId(model.id);
 
     const vendorCell = document.createElement("td");
     const vendorSelect = document.createElement("select");
@@ -129,6 +129,22 @@ export function matrixRows(
     // The row's own view of what is selected, so the effort cell can be rebuilt
     // without waiting for the whole table to re-render.
     let live: ModelSetting = model;
+    const laneControls: Array<{ box: HTMLInputElement; lane: Lane }> = [];
+    let removeControl: HTMLButtonElement | undefined;
+    const updateRowActionLabels = (id: string): void => {
+      const selected = splitId(id);
+      const name = selected.model || selected.vendor;
+      for (const { box, lane } of laneControls) {
+        box.setAttribute(
+          "aria-label",
+          `${name}, row ${index + 1}, covers the ${LANE_TITLES[lane]} lane`,
+        );
+      }
+      removeControl?.setAttribute(
+        "aria-label",
+        `Remove ${name} from row ${index + 1}`,
+      );
+    };
     const drawEffort = () => {
       effortCell.replaceChildren(
         effortPicker({
@@ -166,6 +182,7 @@ export function matrixRows(
           const effort = allowed.includes(live.effort) ? live.effort : "";
           if (effort !== live.effort) handlers.onEffort(index, effort);
           live = { ...live, id, effort };
+          updateRowActionLabels(id);
           // Which efforts apply depends on which model this is, so that control
           // has to follow it. Only that one cell is rebuilt: re-rendering the row
           // on every keystroke would take focus out of the box mid-word.
@@ -188,11 +205,7 @@ export function matrixRows(
       box.type = "checkbox";
       box.dataset["focusKey"] = `lane-${index}-${lane}`;
       box.checked = model.lanes.includes(lane);
-      // Named for a screen reader, which cannot see the column heading.
-      box.setAttribute(
-        "aria-label",
-        `${current || vendor} covers the ${LANE_TITLES[lane]} lane`,
-      );
+      laneControls.push({ box, lane });
       box.addEventListener("change", () =>
         handlers.onToggle(index, lane, box.checked),
       );
@@ -204,9 +217,10 @@ export function matrixRows(
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "Remove";
-    remove.setAttribute("aria-label", `Remove ${current || vendor}`);
+    removeControl = remove;
     remove.dataset["focusKey"] = `remove-${index}`;
     remove.addEventListener("click", () => handlers.onRemove(index));
+    updateRowActionLabels(live.id);
     removeCell.append(remove);
     row.append(removeCell);
 
