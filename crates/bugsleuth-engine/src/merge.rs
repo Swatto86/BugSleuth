@@ -62,9 +62,9 @@ pub struct Source {
     pub lane: String,
     pub model: String,
     pub findings: usize,
-    /// Whether this sweep ran out of turns and was recovered part-way. Carried
-    /// through the merge because a prefix of a lane's findings must not be
-    /// presented as the whole of it.
+    /// Whether this sweep was recovered and may be partial. Carried through the
+    /// merge because a prefix of a lane's findings must not be presented as the
+    /// whole of it.
     pub salvaged: bool,
 }
 

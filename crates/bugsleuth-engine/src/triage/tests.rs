@@ -147,6 +147,7 @@ fn a_recovered_grading_is_not_presented_as_a_full_comparison() {
     // so this assertion guards the real production code, not a hand-written copy.
     let note = grading_note(true, 4, 9);
     assert!(note.contains("recovered afterwards"), "{note}");
+    assert!(note.contains("interrupted"), "{note}");
     assert!(note.contains("rather than all of them"), "{note}");
     assert!(note.contains("4 of 9"), "{note}");
 }

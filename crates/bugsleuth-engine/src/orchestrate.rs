@@ -127,9 +127,9 @@ pub struct Swept {
     pub model: String,
     pub lane: Lane,
     pub findings: usize,
-    /// True when this sweep's answer was recovered after it ran out of turns.
-    /// Recovered work beats a lost lane, but a short list from a reviewer that
-    /// was cut off means "as far as it got", not "that is all there is".
+    /// True when this sweep's answer was recovered and may be partial.
+    /// Recovered work beats a lost lane, but a short list means "as far as it
+    /// got", not "that is all there is".
     pub salvaged: bool,
     /// Findings the model reported whose quoted code could not be located.
     /// Surfaced because the rate is the headline measure of whether a model's

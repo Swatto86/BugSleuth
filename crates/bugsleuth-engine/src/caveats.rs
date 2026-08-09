@@ -28,8 +28,8 @@ pub(crate) fn limits(indent: &str) -> String {
 
 /// What a recovered sweep is, said the same way wherever it is said.
 ///
-/// A sweep that ran out of turns and was salvaged returned as far as it got.
-/// Its list is a prefix, not an inventory, and presenting it as a finished
+/// A recovered sweep may have returned less than the original run established.
+/// Its list is not necessarily an inventory, and presenting it as a finished
 /// sweep tells the reader that everything there is to find in that lane is on
 /// the page. The run report said so; the merged `judge` report and the
 /// standalone `sweep` report both dropped it — one because its own type had no
@@ -37,7 +37,7 @@ pub(crate) fn limits(indent: &str) -> String {
 /// missed twice, so it lives here once.
 pub(crate) fn salvaged(was_salvaged: bool) -> &'static str {
     if was_salvaged {
-        " — RECOVERED after running out of turns, so this list is as far as it got"
+        " — RECOVERED after the original CLI run was interrupted or returned a malformed answer, so this list is as far as it got and may be incomplete"
     } else {
         ""
     }
@@ -90,6 +90,13 @@ mod tests {
     fn the_limits_carry_the_surrounding_documents_indent() {
         assert!(limits("  ").contains("\n  - No finding here came from running"));
         assert!(limits("").contains("\n- No finding here came from running"));
+    }
+
+    #[test]
+    fn the_recovery_caveat_covers_timeouts_as_well_as_turn_limits() {
+        let text = salvaged(true);
+        assert!(text.contains("interrupted"), "{text}");
+        assert!(!text.contains("running out of turns"), "{text}");
     }
 
     /// The reason this module exists: a caveat added to one document and

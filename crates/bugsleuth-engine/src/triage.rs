@@ -234,7 +234,7 @@ fn id_of(index: usize) -> String {
 fn grading_note(salvaged: bool, graded: usize, total: usize) -> String {
     if salvaged {
         format!(
-            "the triage pass ran out of turns and its grades were recovered afterwards, so {graded} of {total} defects were compared rather than all of them"
+            "the triage pass was interrupted and its grades were recovered afterwards, so {graded} of {total} defects were compared rather than all of them"
         )
     } else if graded == total {
         String::new()
