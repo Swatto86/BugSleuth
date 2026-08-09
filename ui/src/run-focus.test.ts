@@ -181,3 +181,18 @@ test("a refused start restores the findings it cleared", () => {
   );
   assert.ok(restoresApply, "the refusal path never restores the Apply panel");
 });
+
+test("a new run withdraws the previous run's prompt controls", () => {
+  const run = frontendFiles().find((f) => f.fileName === "run.ts");
+  assert.ok(run, "run.ts is no longer a shipped frontend module");
+  assert.match(
+    run.getText(),
+    /deps\.copyPrompt\.classList\.add\("hidden"\)/,
+    "startRun leaves the previous run's Copy fix prompt button offered",
+  );
+  assert.match(
+    run.getText(),
+    /deps\.promptPath\.classList\.add\("hidden"\)/,
+    "startRun leaves the previous run's saved-path note showing",
+  );
+});

@@ -52,12 +52,16 @@ export async function startRun(deps: RunDeps): Promise<void> {
   deps.setStatus("Running — this takes tens of minutes", "running");
   const previousCards = [...deps.findings.children];
   const applyWasOffered = !deps.applyPanel.classList.contains("hidden");
+  const copyWasOffered = !deps.copyPrompt.classList.contains("hidden");
+  const pathWasShown = !deps.promptPath.classList.contains("hidden");
   deps.output.textContent = "Starting…";
   deps.findings.replaceChildren();
   // The panel applies *the last run's* prompt, and that file is about to be
   // rewritten. Offering it during a run would apply a report the pane is no
   // longer showing.
   deps.applyPanel.classList.add("hidden");
+  deps.copyPrompt.classList.add("hidden");
+  deps.promptPath.classList.add("hidden");
   // Re-enabled per run: it disables itself once pressed, so a second press
   // cannot arrive while the first is still killing processes.
   deps.stop.disabled = false;
@@ -76,6 +80,8 @@ export async function startRun(deps: RunDeps): Promise<void> {
     deps.output.textContent = String(error);
     deps.findings.replaceChildren(...previousCards);
     if (applyWasOffered) deps.applyPanel.classList.remove("hidden");
+    if (copyWasOffered) deps.copyPrompt.classList.remove("hidden");
+    if (pathWasShown) deps.promptPath.classList.remove("hidden");
     if (document.activeElement === deps.stop) deps.focusStatus();
     deps.renderPlanSummary();
   }
