@@ -224,6 +224,7 @@ rust atomic::tests::concurrent_writes_leave_one_whole_file_and_no_debris
 rust atomic::tests::failed_stage_write_leaves_no_debris
 rust atomic::tests::no_durable_write_bypasses_this_module
 rust atomic::tests::nothing_is_left_beside_the_file_afterwards
+rust atomic::tests::preexisting_staging_entries_are_never_opened
 rust atomic::tests::the_staging_file_is_a_sibling_so_the_rename_cannot_cross_a_filesystem
 rust atomic::tests::two_writers_of_one_file_stage_into_different_places
 rust brief::tests::a_path_scope_appears_only_when_one_was_given

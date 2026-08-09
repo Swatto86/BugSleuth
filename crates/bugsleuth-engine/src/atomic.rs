@@ -16,7 +16,8 @@
 //! three chances to be missed somewhere else, which is exactly what happened,
 //! so a test below asserts nothing writes a durable file any other way.
 
-use std::io;
+use std::fs::{File, OpenOptions};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -36,23 +37,23 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 /// leaving a `.writing` file beside the real ones for the next reader to
 /// puzzle over.
 pub fn write(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
-    write_with(path, |staged| std::fs::write(staged, contents))
+    write_with(path, |file| file.write_all(contents.as_ref()))
 }
 
 /// The body of [`write`] with the staging write injected, so a test can force a
 /// write that creates and partially fills the file before it fails.
 fn write_with<W>(path: &Path, stage: W) -> io::Result<()>
 where
-    W: FnOnce(&Path) -> io::Result<()>,
+    W: FnOnce(&mut File) -> io::Result<()>,
 {
-    let staged = staged_path(path)?;
+    let (staged, mut file) = create_staged(path)?;
     // The staging file is cleaned on *every* exit after it is named, the failed
-    // staging write included: `fs::write` may create and partially fill the file
-    // before it fails, and returning straight through `?` used to leave that
-    // unique `.writing` file behind for good — one more every time the disk was
-    // near full. The original error is preserved; a cleanup that also fails is
-    // ignored rather than allowed to mask it.
-    if let Err(error) = stage(&staged) {
+    // staging write included: the callback may partially fill the open file
+    // before it fails. The original error is preserved; a cleanup that also
+    // fails is ignored rather than allowed to mask it.
+    let stage_result = stage(&mut file);
+    drop(file);
+    if let Err(error) = stage_result {
         let _ = std::fs::remove_file(&staged);
         return Err(error);
     }
@@ -61,6 +62,25 @@ where
         return Err(error);
     }
     Ok(())
+}
+
+fn create_staged(path: &Path) -> io::Result<(PathBuf, File)> {
+    for _ in 0..64 {
+        let staged = staged_path(path)?;
+        match create_new(&staged) {
+            Ok(file) => return Ok((staged, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not reserve a unique staging file",
+    ))
+}
+
+fn create_new(path: &Path) -> io::Result<File> {
+    OpenOptions::new().write(true).create_new(true).open(path)
 }
 
 /// Whether a name is one of this module's temporaries.

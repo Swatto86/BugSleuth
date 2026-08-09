@@ -72,8 +72,8 @@ fn failed_stage_write_leaves_no_debris() {
     let target = dir.join("report.json");
     std::fs::write(&target, "PREVIOUS GOOD").expect("seed the target");
 
-    let result = write_with(&target, |staged| {
-        std::fs::write(staged, b"partial").expect("partial stage write");
+    let result = write_with(&target, |file| {
+        file.write_all(b"partial").expect("partial stage write");
         Err(io::Error::other("disk full"))
     });
     assert!(result.is_err(), "the staging write should have failed");
@@ -92,6 +92,53 @@ fn failed_stage_write_leaves_no_debris() {
     assert!(
         debris.is_empty(),
         "a failed staging write left {debris:?} behind"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn preexisting_staging_entries_are_never_opened() {
+    let dir = scratch("preexisting-stage");
+    let target = dir.join("report.json");
+    let victim = dir.join("victim.txt");
+    std::fs::write(&victim, "KEEP").expect("seed victim");
+
+    // Plant more candidates than one write can retry. Hard links reproduce the
+    // destructive open on Windows too; the Unix-only test below uses a symlink.
+    let first = NEXT.load(Ordering::Relaxed);
+    for counter in first..first + 128 {
+        let staged = dir.join(format!(
+            ".report.json.{}-{counter}.writing",
+            std::process::id()
+        ));
+        std::fs::hard_link(&victim, staged).expect("plant staging entry");
+    }
+
+    let result = write(&target, "replacement");
+    assert!(result.is_err(), "a planted staging entry was opened");
+    assert_eq!(
+        std::fs::read_to_string(&victim).expect("read victim"),
+        "KEEP",
+        "a planted staging entry redirected the write into another file"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_preexisting_staging_symlink_is_not_followed() {
+    let dir = scratch("staging-symlink");
+    let victim = dir.join("victim.txt");
+    let staged = dir.join(".report.json.planted.writing");
+    std::fs::write(&victim, "KEEP").expect("seed victim");
+    std::os::unix::fs::symlink(&victim, &staged).expect("plant staging symlink");
+
+    let error = create_new(&staged).expect_err("a symlink must already exist");
+
+    assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+    assert_eq!(
+        std::fs::read_to_string(&victim).expect("read victim"),
+        "KEEP"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
