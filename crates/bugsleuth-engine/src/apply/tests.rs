@@ -89,6 +89,59 @@ fn only_a_push_that_succeeded_can_lead_to_a_tag() {
     assert_eq!(to_tag(false, &pushed), None);
 }
 
+/// An orphan branch is unborn even when the repository has other history.
+///
+/// `rev-list --all --count` answers a question about the whole repository, not
+/// about the branch that is checked out, so `git switch --orphan` on a
+/// repository with any commit anywhere was reported as a corrupt HEAD and every
+/// apply against it refused.
+#[test]
+fn orphan_branch_with_other_history_is_an_unborn_baseline() {
+    let dir = std::env::temp_dir().join(format!("bugsleuth-orphan-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch");
+    let run = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("git")
+    };
+    run(&["init", "-q", "-b", "main"]);
+    run(&["config", "user.email", "t@example.invalid"]);
+    run(&["config", "user.name", "test"]);
+    std::fs::write(dir.join("a.txt"), "hello\n").expect("write");
+    run(&["add", "-A"]);
+    run(&["commit", "-qm", "base"]);
+    let switched = run(&["switch", "--orphan", "fresh"]);
+    if !switched.status.success() {
+        return; // git too old for --orphan; the rest of the suite still applies
+    }
+    // `switch --orphan` keeps the index; a clean orphan branch is the case.
+    run(&["rm", "-rq", "--cached", "."]);
+    let _ = std::fs::remove_file(dir.join("a.txt"));
+
+    assert!(
+        matches!(baseline(&dir), Ok(Baseline::Unborn)),
+        "a clean orphan branch is a valid starting point, not a corrupt HEAD"
+    );
+    assert_eq!(
+        observed::range_since(&dir, &Baseline::Unborn).expect("range"),
+        None,
+        "an orphan branch with no commit of its own has no range to inspect"
+    );
+
+    std::fs::write(dir.join("b.txt"), "new\n").expect("write");
+    run(&["add", "-A"]);
+    run(&["commit", "-qm", "first on the orphan"]);
+    assert_eq!(
+        observed::range_since(&dir, &Baseline::Unborn).expect("range"),
+        Some("HEAD".to_string()),
+        "once the orphan branch has a commit, all of HEAD is new"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[tokio::test]
 async fn a_repository_without_git_is_refused_before_anything_is_spent() {
     let dir = std::env::temp_dir().join(format!("bugsleuth-apply-{}", std::process::id()));

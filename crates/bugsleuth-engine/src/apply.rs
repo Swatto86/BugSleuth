@@ -327,28 +327,42 @@ fn to_tag(requested: bool, pushed: &PushOutcome) -> Option<(&str, &str)> {
 
 /// Read where the repository stands before the apply.
 ///
+/// Delegates to [`current_head`], which answers about the checked-out branch.
+fn baseline(repo: &Path) -> anyhow::Result<Baseline> {
+    Ok(match current_head(repo)? {
+        Some(id) => Baseline::Commit(id),
+        None => Baseline::Unborn,
+    })
+}
+
+/// The commit the current branch points at, or `None` when that branch is
+/// unborn.
+///
 /// `git rev-parse --verify HEAD` resolves to the current commit or fails when
 /// the branch is unborn; `--quiet` keeps it from printing an error. A failure is
-/// not automatically "unborn", though — git could be broken — so it is
-/// confirmed with `rev-list --all --count`, which is `0` only when the
-/// repository genuinely has no commits. Anything else is propagated rather than
-/// silently treated as an empty history.
-fn baseline(repo: &Path) -> anyhow::Result<Baseline> {
+/// not automatically "unborn", though — git could be broken — so it is confirmed
+/// with `symbolic-ref HEAD`, which succeeds exactly when HEAD names a branch
+/// that simply has no commit yet.
+///
+/// The confirmation used to be `rev-list --all --count`, which asks about the
+/// whole repository: a perfectly valid `git switch --orphan` branch has no HEAD
+/// while other branches hold history, and every apply against it was refused as
+/// a corrupt repository. Detached HEAD and damaged refs still error, because
+/// neither answers this question either.
+pub(super) fn current_head(repo: &Path) -> anyhow::Result<Option<String>> {
     if let Ok(out) = git(repo, &["rev-parse", "--verify", "--quiet", "HEAD"]) {
         let id = out.trim().to_string();
         if !id.is_empty() {
-            return Ok(Baseline::Commit(id));
+            return Ok(Some(id));
         }
     }
-    let count = git(repo, &["rev-list", "--all", "--count"])?;
-    if count.trim() == "0" {
-        Ok(Baseline::Unborn)
-    } else {
-        anyhow::bail!(
-            "could not resolve HEAD in {} even though it has commits — is HEAD detached or the \
-             repository corrupt?",
+    match git(repo, &["symbolic-ref", "--quiet", "HEAD"]) {
+        Ok(reference) if !reference.trim().is_empty() => Ok(None),
+        _ => anyhow::bail!(
+            "could not resolve HEAD in {} and it does not name an unborn branch — is HEAD \
+             detached or the repository corrupt?",
             repo.display()
-        );
+        ),
     }
 }
 

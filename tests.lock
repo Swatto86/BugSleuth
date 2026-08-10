@@ -275,6 +275,7 @@ rust apply::tests::a_failed_apply_still_says_what_it_had_already_changed
 rust apply::tests::a_repository_without_git_is_refused_before_anything_is_spent
 rust apply::tests::an_unreadable_repository_after_a_failure_is_not_reported_as_clean
 rust apply::tests::only_a_push_that_succeeded_can_lead_to_a_tag
+rust apply::tests::orphan_branch_with_other_history_is_an_unborn_baseline
 rust atomic::tests::a_failed_write_destroys_nothing_and_leaves_no_debris
 rust atomic::tests::a_file_is_replaced_whole
 rust atomic::tests::a_path_that_names_no_file_is_an_error_rather_than_a_panic

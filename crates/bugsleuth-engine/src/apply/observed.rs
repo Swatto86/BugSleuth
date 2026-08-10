@@ -54,21 +54,15 @@ pub(super) fn changed_since(repo: &Path, base: &Baseline) -> anyhow::Result<Vec<
 /// no commits — the model committed nothing, which is a genuine empty result
 /// rather than a failure to inspect.
 ///
-/// The two are told apart the way [`super::baseline`] tells them apart:
-/// `rev-list --all --count` is `0` only when the repository truly has no
-/// commits. Any other Git failure is propagated, never read as "nothing here" —
-/// a damaged `.git` must not masquerade as a clean, empty history.
+/// The two are told apart the way [`super::baseline`] tells them apart, through
+/// the same helper — this asked `rev-list --all --count` separately, which is a
+/// question about the whole repository and gave a different answer from the
+/// baseline on an orphan branch. Any other Git failure is propagated, never read
+/// as "nothing here": a damaged `.git` must not masquerade as an empty history.
 pub(super) fn range_since(repo: &Path, base: &Baseline) -> anyhow::Result<Option<String>> {
     match base {
         Baseline::Commit(base) => Ok(Some(format!("{base}..HEAD"))),
-        Baseline::Unborn => {
-            let all = git(repo, &["rev-list", "--all", "--count"])?;
-            if all.trim() == "0" {
-                Ok(None)
-            } else {
-                Ok(Some("HEAD".to_string()))
-            }
-        }
+        Baseline::Unborn => Ok(super::current_head(repo)?.map(|_| "HEAD".to_string())),
     }
 }
 
