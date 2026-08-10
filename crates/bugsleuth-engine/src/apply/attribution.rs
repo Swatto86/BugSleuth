@@ -9,6 +9,7 @@
 //! told not to add a trailer, the prompt says so too, and what actually landed
 //! is read back and repaired. The first two are requests; this is the check.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
@@ -70,7 +71,7 @@ async fn strip_attribution_at(
         Baseline::Commit(base) => format!("{base}..{expected_head}"),
         Baseline::Unborn => expected_head.to_string(),
     };
-    let ids: Vec<String> = git(repo, &["rev-list", "--reverse", &range])?
+    let ids: Vec<String> = git(repo, &["rev-list", "--topo-order", "--reverse", &range])?
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
@@ -93,35 +94,41 @@ async fn strip_attribution_at(
     }
     refuse_if_published(repo, &ids, cancel, timeout).await?;
 
-    // The parent each rewrite sits on. A commit base is itself the first parent;
-    // an unborn base has none, so the first commit is recreated as a root
-    // (`commit-tree` with no `-p`) and every commit after it parents onto the
-    // rewrite before it.
-    let mut parent: Option<String> = match base {
-        Baseline::Commit(base) => Some(base.clone()),
-        Baseline::Unborn => None,
-    };
+    // Parent-before-child order makes every rewritten parent available when a
+    // child is recreated. Parents outside this apply's range retain their
+    // original ids; parents inside it are replaced through this map.
+    let mut rewritten_by_id: HashMap<String, String> = HashMap::new();
     let mut rewritten = Vec::new();
     for id in &ids {
-        let (new, stripped) = rewrite_one(repo, id, parent.as_deref())?;
+        let parents = git(repo, &["show", "-s", "--format=%P", id])?
+            .split_whitespace()
+            .map(|parent| {
+                rewritten_by_id
+                    .get(parent)
+                    .cloned()
+                    .unwrap_or_else(|| parent.to_string())
+            })
+            .collect::<Vec<_>>();
+        let (new, stripped) = rewrite_one(repo, id, &parents)?;
         if let Some(subject) = stripped {
             rewritten.push(subject);
         }
-        parent = Some(new);
+        rewritten_by_id.insert(id.clone(), new);
     }
 
     // `update-ref` with the frozen old value, so a branch that moved while this
     // ran is left alone rather than clobbered.
-    // `any_credited` above guaranteed the loop ran at least once, so `parent` is
-    // now `Some`; treat the impossible `None` as an error rather than unwrap.
-    let new_head = parent
-        .ok_or_else(|| anyhow::anyhow!("no commit was rewritten, so HEAD cannot be moved"))?;
+    // `any_credited` above guarantees expected HEAD was in the enumerated
+    // range; retain an explicit error if Git ever violates that assumption.
+    let new_head = rewritten_by_id
+        .get(expected_head)
+        .ok_or_else(|| anyhow::anyhow!("expected HEAD was not rewritten"))?;
     git(
         repo,
         &[
             "update-ref",
             &format!("refs/heads/{branch}"),
-            &new_head,
+            new_head,
             expected_head,
         ],
     )?;
@@ -145,15 +152,15 @@ fn message_of(repo: &Path, id: &str) -> anyhow::Result<String> {
     git(repo, &["log", "-1", "--format=%B", id])
 }
 
-/// Re-commit one commit onto `parent` without its trailers, or as a root commit
-/// when `parent` is `None` — the initial commit of an unborn repository has no
-/// parent, and `commit-tree -p` cannot name one that does not exist.
+/// Re-commit one commit onto all of its rewritten parents without its trailers.
+/// An empty slice recreates the initial commit of an unborn repository as a
+/// root; each additional `-p` preserves a merge edge.
 ///
 /// Returns the new id, and the subject when a trailer was actually removed.
 fn rewrite_one(
     repo: &Path,
     id: &str,
-    parent: Option<&str>,
+    parents: &[String],
 ) -> anyhow::Result<(String, Option<String>)> {
     let message = message_of(repo, id)?;
     let cleaned = without_trailers(&message);
@@ -163,7 +170,7 @@ fn rewrite_one(
 
     let cleaned = cleaned.trim_end();
     let mut args: Vec<&str> = vec!["commit-tree", &tree];
-    if let Some(parent) = parent {
+    for parent in parents {
         args.push("-p");
         args.push(parent);
     }

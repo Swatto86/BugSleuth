@@ -35,6 +35,84 @@ fn attributed_repo(tag: &str) -> (std::path::PathBuf, std::path::PathBuf, String
 }
 
 #[tokio::test]
+async fn attribution_strip_does_not_flatten_merge_commits() {
+    let root = std::env::temp_dir().join(format!("bugsleuth-attr-merge-{}", std::process::id()));
+    let repo = root.join("repo");
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&repo).expect("create repository");
+    git_ok(&repo, &["init", "-q"]);
+    git_ok(&repo, &["config", "user.email", "t@example.com"]);
+    git_ok(&repo, &["config", "user.name", "Tester"]);
+    std::fs::write(repo.join("base.txt"), "base").expect("write base");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "base"]);
+    let base = git_ok(&repo, &["rev-parse", "HEAD"]).trim().to_string();
+    let trunk = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"])
+        .trim()
+        .to_string();
+
+    git_ok(&repo, &["checkout", "-qb", "topic"]);
+    std::fs::write(repo.join("topic.txt"), "topic").expect("write topic");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "topic"]);
+    git_ok(&repo, &["checkout", "-q", &trunk]);
+    std::fs::write(repo.join("trunk.txt"), "trunk").expect("write trunk");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "trunk"]);
+    git_ok(
+        &repo,
+        &[
+            "merge",
+            "-q",
+            "--no-ff",
+            "topic",
+            "-m",
+            "merge topic\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+        ],
+    );
+    let final_tree = git_ok(&repo, &["rev-parse", "HEAD^{tree}"])
+        .trim()
+        .to_string();
+    let original_parents = git_ok(&repo, &["show", "-s", "--format=%P", "HEAD"]);
+    let parent_trees = original_parents
+        .split_whitespace()
+        .map(|parent| {
+            git_ok(&repo, &["rev-parse", &format!("{parent}^{{tree}}")])
+                .trim()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(parent_trees.len(), 2, "fixture must be a two-parent merge");
+
+    let stripped = strip_attribution(
+        &repo,
+        &Baseline::Commit(base),
+        &crate::cancel::Cancel::new(),
+        Duration::from_secs(10),
+    )
+    .await
+    .expect("strip merge attribution");
+
+    let rewritten_parents = git_ok(&repo, &["show", "-s", "--format=%P", "HEAD"]);
+    let rewritten_parent_trees = rewritten_parents
+        .split_whitespace()
+        .map(|parent| {
+            git_ok(&repo, &["rev-parse", &format!("{parent}^{{tree}}")])
+                .trim()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(stripped, ["merge topic"]);
+    assert_eq!(
+        git_ok(&repo, &["rev-parse", "HEAD^{tree}"]).trim(),
+        final_tree
+    );
+    assert_eq!(rewritten_parent_trees, parent_trees);
+    assert!(!message_of(&repo, "HEAD").unwrap().contains("Claude"));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[tokio::test]
 async fn attribution_strip_refuses_remote_only_lightweight_and_annotated_tags() {
     for (kind, annotated) in [("annotated", true), ("lightweight", false)] {
         let (root, repo, base, credited) = attributed_repo(&format!("remote-tag-{kind}"));

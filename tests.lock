@@ -214,6 +214,7 @@ rust apply::attribution::published::tests::known_non_commit_targets_are_irreleva
 rust apply::attribution::safety_tests::a_clean_history_does_not_require_remote_tag_access
 rust apply::attribution::safety_tests::a_private_local_tag_also_blocks_the_rewrite
 rust apply::attribution::safety_tests::attribution_read_errors_fail_closed
+rust apply::attribution::safety_tests::attribution_strip_does_not_flatten_merge_commits
 rust apply::attribution::safety_tests::attribution_strip_refuses_remote_only_lightweight_and_annotated_tags
 rust apply::attribution::safety_tests::concurrent_branch_move_is_not_clobbered_by_attribution_strip
 rust apply::attribution::tests::a_clean_history_reports_nothing_rather_than_an_empty_subject
