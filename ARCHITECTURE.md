@@ -193,7 +193,23 @@ Copy button gives you, read from disk rather than from the window — the argume
 that becomes instructions to an agent with write access should not be a string
 the webview chose.
 
-There is no sandbox here and no pretending otherwise. The guarantee is git:
+Every vendor can apply, and what each is confined by differs. None of it bounds
+a shell, so none of it is a sandbox in the sense that word usually carries:
+
+- **Claude** grants `Edit` and `Write` as `./**` rules, so the repository is the
+  only tree it writes to without asking — and it has no way to ask.
+- **Codex** runs under `--sandbox workspace-write`, which the kernel enforces on
+  macOS and Linux. Windows has no such enforcement in the CLI.
+- **Kimi** is confined by its agent file, whose `tools` list is an allowlist;
+  omitting it would allow every tool, including the ones that spawn subagents.
+- **Kilo** has no per-invocation limit at all — its permissions come from the
+  machine's own config. So an apply is refused outright when the repository
+  ships Kilo configuration of its own, because a `kilo.jsonc` in the working
+  directory rewrites the resolved permissions of the agent named on the command
+  line: the repository would be choosing what the model applying its fixes may
+  do.
+
+Beyond that the guarantee is git:
 
 - **The working tree must be clean**, or it is refused. Your uncommitted work
   and the model's changes would otherwise be one indistinguishable pile.
