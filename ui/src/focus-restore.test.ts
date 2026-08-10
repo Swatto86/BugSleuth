@@ -64,3 +64,52 @@ test("a failed catalogue load is told to the user rather than swallowed", () => 
     "boot never reads the catalogue failure, so the preflight 'Ready' overwrites it",
   );
 });
+
+/// A completed apply must not take focus off the control the user is in.
+///
+/// The Apply model and effort controls stay enabled for the hours an apply can
+/// run. When `apply-finished` arrives its handler calls `draw()`, which replaces
+/// both — and in WebView2 replacing the element containing focus drops focus to
+/// `<body>`. Unlike the matrix renderer, this redraw captured nothing, so a
+/// keyboard user was returned to the top of the application.
+test("apply redraw restores a focused picker after replacing it", () => {
+  const apply = frontendFiles().find(
+    (source) => source.fileName === "apply.ts",
+  );
+  assert.ok(apply, "apply.ts is no longer a shipped frontend module");
+
+  let draw: ts.ArrowFunction | undefined;
+  walk(apply, (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "draw" &&
+      node.initializer &&
+      ts.isArrowFunction(node.initializer)
+    ) {
+      draw = node.initializer;
+    }
+  });
+  assert.ok(draw, "bindApply no longer has a draw function");
+
+  const body = draw.getText(apply);
+  const modelReplace = body.indexOf("ui.model.replaceChildren");
+  const effortReplace = body.indexOf("drawEffort();");
+  const restore = body.lastIndexOf(".focus()");
+  assert.ok(
+    body.includes("document.activeElement"),
+    "draw does not look at where focus is before replacing controls",
+  );
+  assert.ok(
+    body.includes('dataset["focusKey"]'),
+    "draw does not capture which control held focus",
+  );
+  assert.ok(
+    modelReplace >= 0 && effortReplace >= 0,
+    "draw no longer replaces both pickers; this check needs rewriting",
+  );
+  assert.ok(
+    restore > modelReplace && restore > effortReplace,
+    "focus is not restored after both picker replacements",
+  );
+});

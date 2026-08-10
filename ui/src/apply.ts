@@ -75,6 +75,19 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
 
   /** Draw the provider, model and effort controls from the stored settings. */
   const draw = (): void => {
+    // Which of the two controls this redraw replaces holds focus, if either.
+    // An apply runs for hours with these enabled, and its completion handler
+    // calls draw(): replacing the element containing focus drops focus to
+    // <body> in WebView2, so a keyboard user waiting in the model box was
+    // returned to the top of the application when the apply finished. Only
+    // these two containers are considered — Status, Stop, the vendor selector
+    // and the publish checkboxes are not replaced and must not be disturbed.
+    const focused = document.activeElement;
+    const focusKey =
+      focused instanceof HTMLElement &&
+      (ui.model.contains(focused) || ui.effort.contains(focused))
+        ? focused.dataset["focusKey"]
+        : undefined;
     // Read through `deps.settings()` every time, never captured into a handler.
     // The window replaces its settings object once, when the stored ones load,
     // and a closure holding the old one would write to an object nothing reads.
@@ -108,6 +121,14 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
     ui.push.checked = deps.settings().push_after_apply;
     drawTag();
     setButtonState();
+    // After both replacements, so the element being focused is the new one.
+    if (focusKey) {
+      const selector = `[data-focus-key="${CSS.escape(focusKey)}"]`;
+      (
+        ui.model.querySelector<HTMLElement>(selector) ??
+        ui.effort.querySelector<HTMLElement>(selector)
+      )?.focus();
+    }
   };
 
   /**

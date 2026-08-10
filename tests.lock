@@ -91,6 +91,7 @@ node an empty configuration needs no rounds
 node an identical duplicate row adds nothing, exactly like the engine
 node an uncovered lane is reported
 node an unknown prefix is treated as a Claude model, colon and all
+node apply redraw restores a focused picker after replacing it
 node applying uses the repository that produced the displayed prompt
 node both sides are actually being read
 node both themes define the same set of colours
