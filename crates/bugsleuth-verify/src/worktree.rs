@@ -320,8 +320,8 @@ fn long_path(path: &Path) -> PathBuf {
 }
 
 mod paths;
-pub use paths::git_path;
 use paths::{git_arg, porcelain_paths};
+pub use paths::{git_path, worktree_roots};
 
 fn git(cwd: &Path, args: &[&str]) -> Result<String, WorktreeError> {
     let output = crate::console::hide(&mut Command::new("git"))

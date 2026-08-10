@@ -47,7 +47,7 @@ pub(super) fn changed_since(repo: &Path, base: &Baseline) -> anyhow::Result<Vec<
     )?));
     files.sort();
     files.dedup();
-    Ok(theirs(files))
+    Ok(theirs(repo, files))
 }
 
 /// The `base..HEAD` revision range, or `None` when an unborn baseline still has
@@ -81,21 +81,8 @@ pub(super) fn commits_since(repo: &Path, base: &Baseline) -> anyhow::Result<usiz
         .with_context(|| format!("git returned an unparseable commit count: {out:?}"))
 }
 
-/// Where BugSleuth's own throwaway checkouts live inside a reviewed repository.
-///
-/// An isolated sweep (Kilo) that was killed rather than dropped leaves one
-/// behind, and git reports it as untracked. Judged as the user's uncommitted work it would
-/// refuse every apply — with advice to "commit or stash" litter this tool left —
-/// until someone deleted a directory by hand. It is not their work, so it is not
-/// counted as theirs, in the guard or in the list of what changed.
-const OURS: &str = ".bugsleuth-worktrees/";
-
-pub(super) fn theirs(files: Vec<String>) -> Vec<String> {
-    files
-        .into_iter()
-        .filter(|path| !path.starts_with(OURS))
-        .collect()
-}
+mod ownership;
+pub(super) use ownership::theirs;
 
 /// The paths in `git status --porcelain -z` output.
 ///
@@ -262,21 +249,6 @@ mod tests {
         // then the empty string, and one of those in the list is enough to
         // refuse to apply anything on a repository that is perfectly clean.
         assert!(dirty_files("?? \0").is_empty());
-    }
-
-    #[test]
-    fn bugsleuths_own_leftovers_are_not_treated_as_the_users_uncommitted_work() {
-        // An isolated sweep that was killed leaves a worktree behind, and git
-        // calls it untracked. Counting it would refuse every apply — telling
-        // the user to commit or stash a directory this tool created — until
-        // they deleted it by hand.
-        let mixed = vec![
-            ".bugsleuth-worktrees/sweep-kilo-1/src/main.rs".to_string(),
-            "src/real.rs".to_string(),
-        ];
-        assert_eq!(theirs(mixed), ["src/real.rs"]);
-        // And a repository whose only "changes" are ours reads as clean.
-        assert!(theirs(vec![".bugsleuth-worktrees/x".to_string()]).is_empty());
     }
 
     #[test]

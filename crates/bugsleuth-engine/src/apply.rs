@@ -132,15 +132,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         );
     }
 
-    let dirty = theirs(dirty_files(&git(repo, &["status", "--porcelain", "-z"])?));
-    if !dirty.is_empty() {
-        anyhow::bail!(
-            "the working tree has uncommitted changes, so applying fixes is refused: your work \
-             and the model's would be mixed together with no way to revert one without the \
-             other. Commit or stash these first — {}",
-            summarise(&dirty)
-        );
-    }
+    refuse_if_dirty(repo)?;
 
     // Where the repository started. Compared against afterwards, because the
     // prompt asks the model to commit each fix and a committed change leaves
@@ -327,6 +319,33 @@ fn to_tag(requested: bool, pushed: &PushOutcome) -> Option<(&str, &str)> {
 
 /// Read where the repository stands before the apply.
 ///
+/// Refuse before spending anything if the user has uncommitted work.
+///
+/// Their work and the model's would be mixed together with no way to revert one
+/// without the other. `--untracked-files=all` so git reports the individual
+/// children of an untracked directory rather than collapsing it to the
+/// directory name: with the whole of `.bugsleuth-worktrees` named once, no child
+/// path could be matched against the worktrees git actually has registered, and
+/// a user file committed under there would be discarded with our own leftovers.
+fn refuse_if_dirty(repo: &Path) -> anyhow::Result<()> {
+    let dirty = theirs(
+        repo,
+        dirty_files(&git(
+            repo,
+            &["status", "--porcelain", "-z", "--untracked-files=all"],
+        )?),
+    );
+    if !dirty.is_empty() {
+        anyhow::bail!(
+            "the working tree has uncommitted changes, so applying fixes is refused: your work \
+             and the model's would be mixed together with no way to revert one without the \
+             other. Commit or stash these first — {}",
+            summarise(&dirty)
+        );
+    }
+    Ok(())
+}
+
 /// Delegates to [`current_head`], which answers about the checked-out branch.
 fn baseline(repo: &Path) -> anyhow::Result<Baseline> {
     Ok(match current_head(repo)? {

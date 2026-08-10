@@ -15,4 +15,4 @@ mod worktree;
 
 pub use anchor::{Rejection, verify_anchor};
 pub use console::hide as hide_console_window;
-pub use worktree::{Worktree, WorktreeError, git_path};
+pub use worktree::{Worktree, WorktreeError, git_path, worktree_roots};

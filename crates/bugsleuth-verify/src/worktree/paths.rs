@@ -68,7 +68,7 @@ pub fn git_path(path: &Path) -> PathBuf {
 /// Never trimmed either. Leading and trailing whitespace are legal in a path,
 /// and trimming is how a path that git reported exactly stops comparing equal to
 /// itself. `-z` exists precisely so neither of these needs guessing at.
-pub(super) fn worktree_roots(listing: &str) -> Vec<&str> {
+pub fn worktree_roots(listing: &str) -> Vec<&str> {
     listing
         .split('\0')
         .filter_map(|record| record.strip_prefix("worktree "))
