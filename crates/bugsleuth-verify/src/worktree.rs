@@ -10,8 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-mod orphans;
-use orphans::{PREFIX, remove_orphan_branches};
+const PREFIX: &str = "bugsleuth/";
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorktreeError {
@@ -76,28 +75,37 @@ impl Worktree {
         // branch — and the second one's "clear the wreckage" step deleted the
         // first one's *live* worktree, taking a test run and the minutes it had
         // cost with it. Nothing warned; the losing run simply started failing.
-        let slug = format!(
-            "{}-{}-{}",
-            sanitize(label),
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        );
-        let branch = format!("{PREFIX}{slug}");
-        let path = root.join(&slug);
-
-        // Only this run's own path, which no other process can now be using.
-        remove(&repo, &path);
-        let _ = git(&repo, &["branch", "-D", &branch]);
+        let label = sanitize(label);
+        let (branch, path) = loop {
+            let slug = format!(
+                "{}-{}-{}",
+                label,
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            );
+            let branch = format!("{PREFIX}{slug}");
+            let path = root.join(&slug);
+            if !path.exists()
+                && git(
+                    &repo,
+                    &[
+                        "show-ref",
+                        "--verify",
+                        "--quiet",
+                        &format!("refs/heads/{branch}"),
+                    ],
+                )
+                .is_err()
+            {
+                break (branch, path);
+            }
+        };
 
         // A run killed rather than dropped leaves a directory behind, and the
         // unique path above means nothing will ever reuse and clean it. Git is
         // the authority on which of them are still worktrees: anything under
         // our directory that it no longer lists is wreckage.
         remove_orphans(&repo);
-        // The refs beside them. Cleaning the directories alone left the branch
-        // of every killed run in the user's repository for good, accumulating
-        // one per kill with nothing to ever collect them.
-        remove_orphan_branches(&repo);
 
         git(
             &repo,
@@ -358,3 +366,7 @@ fn sanitize(label: &str) -> String {
 #[cfg(test)]
 #[path = "worktree/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "worktree/ownership_tests.rs"]
+mod ownership_tests;
