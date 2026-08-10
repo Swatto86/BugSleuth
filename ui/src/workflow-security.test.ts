@@ -12,6 +12,9 @@ const root = path.join(
 const workflow = fs
   .readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
   .replace(/\r\n?/g, "\n");
+const verifyWorkflow = fs
+  .readFileSync(path.join(root, ".github", "workflows", "verify.yml"), "utf8")
+  .replace(/\r\n?/g, "\n");
 
 function section(name: string, indent: number): string {
   const lines = workflow.split("\n");
@@ -28,10 +31,10 @@ function section(name: string, indent: number): string {
   return lines.slice(start, end < 0 ? undefined : end).join("\n");
 }
 
-function actionRef(action: string): string {
+function actionRef(action: string, source = workflow): string {
   const escaped = action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const matches = [
-    ...workflow.matchAll(new RegExp(`${escaped}@([^\\s#]+)`, "g")),
+    ...source.matchAll(new RegExp(`${escaped}@([^\\s#]+)`, "g")),
   ];
   assert.equal(matches.length, 1, `expected one ${action} use`);
   return matches[0]![1]!;
@@ -82,4 +85,8 @@ test("checksum fallback excludes and verifies its own manifest", () => {
   assert.match(collect, /if command -v sha256sum >\/dev\/null 2>&1; then/);
   assert.match(collect, /sha256sum -c "\$sums"/);
   assert.match(collect, /shasum -a 256 -c "\$sums"/);
+});
+
+test("the verification checkout is pinned to an immutable revision", () => {
+  assert.match(actionRef("actions/checkout", verifyWorkflow), /^[0-9a-f]{40}$/);
 });

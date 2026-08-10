@@ -192,6 +192,7 @@ node the settings the window writes are the settings Rust reads
 node the two calls this rule was wrong about are classified correctly
 node the two themes are actually different
 node the updater is blocked while a review or an apply is in flight
+node the verification checkout is pinned to an immutable revision
 node the window never leaves a release armed while pushing is off
 node toggling a lane leaves other models untouched
 node toggling a lane off removes exactly it, and twice on is idempotent
