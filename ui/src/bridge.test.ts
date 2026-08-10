@@ -191,7 +191,10 @@ test("a lane is spelled the same way in the window as in the engine", () => {
     /pub fn title\(self\) -> &'static str \{\s*match self \{([\s\S]*?)\n {8}\}\n {4}\}/.exec(
       lane,
     );
-  assert.ok(titleMethod, "could not read Lane::title; this scan needs updating");
+  assert.ok(
+    titleMethod,
+    "could not read Lane::title; this scan needs updating",
+  );
   const titles = new Set(
     [...titleMethod[1]!.matchAll(/Lane::\w+ => "([^"]+)"/g)].map((m) => m[1]!),
   );
