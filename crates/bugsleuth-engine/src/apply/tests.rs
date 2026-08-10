@@ -63,6 +63,7 @@ fn only_a_push_that_succeeded_can_lead_to_a_tag() {
         branch: "main".into(),
         upstream: "origin/main".into(),
         remote: "origin".into(),
+        oid: "abc123".into(),
     };
     // The exact remote, not the `origin/main` display string, so a remote
     // whose own name contains a slash is not truncated on the way to the tag.

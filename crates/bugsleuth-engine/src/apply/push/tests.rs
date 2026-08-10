@@ -179,6 +179,7 @@ async fn the_commits_actually_reach_the_remote() {
             branch: branch.clone(),
             upstream: format!("origin/{branch}"),
             remote: "origin".to_string(),
+            oid: local.clone(),
         },
         "{outcome:?}"
     );

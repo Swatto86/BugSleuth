@@ -231,6 +231,9 @@ rust apply::observed::tests::git_paths_preserve_unicode_and_arrow
 rust apply::observed::tests::the_refusal_names_a_few_files_rather_than_all_of_them
 rust apply::observed::tests::unborn_repository_reports_its_initial_commit_as_a_change
 rust apply::push::cancellation_tests::cancel_during_publication_stops_push_and_tag
+rust apply::push::publication_tests::a_successful_push_without_remote_confirmation_is_unknown
+rust apply::push::publication_tests::configured_push_rules_cannot_publish_extra_refs
+rust apply::push::publication_tests::push_uses_only_the_frozen_apply_tip
 rust apply::push::tests::a_branch_with_no_upstream_is_left_alone
 rust apply::push::tests::a_clean_apply_with_commits_is_publishable
 rust apply::push::tests::a_commit_that_credits_a_tool_is_never_published

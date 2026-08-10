@@ -41,6 +41,9 @@ pub enum PushOutcome {
         /// same place, rather than being re-derived from `upstream` by splitting
         /// on '/', which truncates a remote name that itself contains a slash.
         remote: String,
+        /// The frozen apply tip confirmed on the remote. A later release must
+        /// target this object rather than re-reading mutable `HEAD`.
+        oid: String,
     },
     /// git ran and the remote is confirmed still unchanged: a genuine rejection.
     /// Left for the user: the fix is a fetch and a rebase, or a force-push, and
@@ -151,6 +154,12 @@ async fn upstream_live_tip(
         })
 }
 
+fn head_oid(repo: &Path) -> Option<String> {
+    let id = git(repo, &["rev-parse", "HEAD"]).ok()?;
+    let id = id.trim();
+    (!id.is_empty()).then_some(id.to_string())
+}
+
 /// Push the branch the apply committed on, if it may be pushed.
 pub(super) async fn push(
     repo: &Path,
@@ -214,69 +223,63 @@ pub(super) async fn push(
         ));
     }
 
-    // `push.default=upstream` for this invocation only, which is what makes a
-    // bare `git push` mean "this branch, to its upstream, and nothing else".
-    //
-    // Without it the repository's own setting decides, and the old `matching`
-    // default pushes *every* local branch that shares a name with one on the
-    // remote — so applying a fix on one branch would publish however many
-    // unrelated branches happened to be lying around. `-c` overrides it for
-    // this command without touching the user's config.
-    //
-    // Still no force and no refspec of our own: a rejection is left rejected,
-    // because recovering from one means a fetch and a rebase, or a force, and
-    // a tool that picks either on your behalf is a tool that loses work.
-    // The object a successful push would place on the remote branch.
-    let desired = match git(repo, &["rev-parse", "HEAD"]) {
-        Ok(id) if !id.trim().is_empty() => id.trim().to_string(),
-        _ => {
-            return PushOutcome::Refused(
-                "could not resolve HEAD to publish, so nothing was pushed.".to_string(),
-            );
-        }
+    // Freeze the object before starting the network operation. The shared
+    // explicit-ref push uses this OID as its source, so a concurrent local
+    // commit and repository push rules cannot change what gets published.
+    let Some(desired) = head_oid(repo) else {
+        return PushOutcome::Refused(
+            "could not resolve HEAD to publish, so nothing was pushed.".to_string(),
+        );
     };
 
-    match network::git(
-        repo,
-        &["-c", "push.default=upstream", "push"],
-        cancel,
-        timeout,
-    )
-    .await
-    {
-        Ok(_) => PushOutcome::Pushed {
-            branch,
-            upstream,
-            remote,
-        },
-        Err(network::Error::Cancelled) => PushOutcome::Unknown {
+    let result =
+        super::remote::push_ref(repo, &remote, &desired, &reference, cancel, timeout).await;
+    if matches!(&result, Err(network::Error::Cancelled)) {
+        return PushOutcome::Unknown {
             branch,
             upstream,
             error: "publication was cancelled while git push was in flight; the remote may have accepted the update before the process was stopped"
                 .to_string(),
+        };
+    }
+    let result = result.map_err(|error| error.to_string());
+
+    // A success reply is still only a claim until the remote ref is observed.
+    // An error can likewise arrive after the update landed, so both paths use
+    // the same fresh read and differ only when the remote stayed unchanged.
+    let before = Ok(Some(live_upstream_tip));
+    let after = super::remote::remote_oid(repo, &remote, &reference, cancel, timeout)
+        .await
+        .map_err(|error| error.to_string());
+    let confirmation_error = match &after {
+        Ok(Some(actual)) => format!(
+            "git push reported success, but {upstream} points to {actual} instead of the frozen apply commit {desired}; whether it was published is unknown"
+        ),
+        Ok(None) => format!(
+            "git push reported success, but {upstream} no longer exists; whether the frozen apply commit was published is unknown"
+        ),
+        Err(error) => format!(
+            "git push reported success, but {upstream} could not be confirmed afterward: {error}; whether the frozen apply commit was published is unknown"
+        ),
+    };
+    match (result, super::remote::classify(&before, &desired, &after)) {
+        (_, super::remote::UpdateAfterError::Landed) => PushOutcome::Pushed {
+            branch,
+            upstream,
+            remote,
+            oid: desired,
         },
-        Err(error) => {
-            // A push error only means the client got no success reply. The
-            // update may already be on the remote, so re-read the ref before
-            // calling it a failure.
-            let before = Ok(Some(live_upstream_tip));
-            let after = super::remote::remote_oid(repo, &remote, &reference, cancel, timeout)
-                .await
-                .map_err(|error| error.to_string());
-            match super::remote::classify(&before, &desired, &after) {
-                super::remote::UpdateAfterError::Landed => PushOutcome::Pushed {
-                    branch,
-                    upstream,
-                    remote,
-                },
-                super::remote::UpdateAfterError::Rejected => PushOutcome::Failed(error.to_string()),
-                super::remote::UpdateAfterError::Unknown => PushOutcome::Unknown {
-                    branch,
-                    upstream,
-                    error: error.to_string(),
-                },
-            }
-        }
+        (Err(error), super::remote::UpdateAfterError::Rejected) => PushOutcome::Failed(error),
+        (Err(error), super::remote::UpdateAfterError::Unknown) => PushOutcome::Unknown {
+            branch,
+            upstream,
+            error,
+        },
+        (Ok(_), _) => PushOutcome::Unknown {
+            branch,
+            upstream,
+            error: confirmation_error,
+        },
     }
 }
 
@@ -287,3 +290,7 @@ mod tests;
 #[cfg(test)]
 #[path = "push/cancellation_tests.rs"]
 mod cancellation_tests;
+
+#[cfg(test)]
+#[path = "push/publication_tests.rs"]
+mod publication_tests;

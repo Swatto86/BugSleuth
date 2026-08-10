@@ -48,6 +48,36 @@ pub(super) fn classify(
     }
 }
 
+/// Publish one exact object to one exact remote ref.
+///
+/// The explicit refspec ignores repository `remote.*.push` rules, while the two
+/// negative options prevent configured tag-following or submodule publication
+/// from broadening this irreversible operation.
+pub(super) async fn push_ref(
+    repo: &Path,
+    remote: &str,
+    oid: &str,
+    reference: &str,
+    cancel: &Cancel,
+    timeout: Duration,
+) -> Result<String, network::Error> {
+    let refspec = format!("{oid}:{reference}");
+    network::git(
+        repo,
+        &[
+            "push",
+            "--no-follow-tags",
+            "--recurse-submodules=no",
+            "--",
+            remote,
+            &refspec,
+        ],
+        cancel,
+        timeout,
+    )
+    .await
+}
+
 /// The object ID a remote reports for `reference`, or `None` if it has no such
 /// ref. An empty successful listing is a definite absence; a command or parse
 /// failure is an error, never silently read as absence.

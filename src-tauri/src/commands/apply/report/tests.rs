@@ -132,6 +132,7 @@ fn a_completed_push_names_where_it_went_and_that_it_is_permanent() {
         branch: "master".into(),
         upstream: "origin/master".into(),
         remote: "origin".into(),
+        oid: "abc123".into(),
     });
     assert!(text.contains("Pushed master to origin/master"), "{text}");
     assert!(text.contains("published"), "{text}");
@@ -154,6 +155,7 @@ fn the_push_outcome_reaches_the_text_the_window_shows() {
             branch: "main".into(),
             upstream: "origin/main".into(),
             remote: "origin".into(),
+            oid: "abc123".into(),
         },
         tag: TagOutcome::Tagged {
             tag: "v1.4.2".into(),
