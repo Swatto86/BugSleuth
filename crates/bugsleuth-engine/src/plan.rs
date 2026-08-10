@@ -265,30 +265,8 @@ pub fn plan(config: &Config) -> Result<Plan> {
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-mod effort_gate_tests {
-    /// Both commands must validate effort, and from the same function.
-    ///
-    /// The defect: `run` checked it and `sweep` did not, so a typo in --effort
-    /// reached the vendor's CLI — either rejected after the sweep was paid for,
-    /// or ignored, leaving a report that looks normal and never says the depth
-    /// asked for was never applied. Two commands, one contract, one check.
-    #[test]
-    fn the_sweep_command_checks_effort_the_same_way_run_does() {
-        let cli = include_str!("../../bugsleuth-cli/src/main.rs");
-        let code: String = cli
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let sweep = code
-            .split_once("async fn run_sweep")
-            .expect("run_sweep is gone; this check needs rewriting")
-            .1;
-        let body = &sweep[..sweep.find("\nasync fn ").unwrap_or(sweep.len())];
-        assert!(
-            body.contains("check_effort"),
-            "the sweep command no longer validates effort before spending a sweep"
-        );
-    }
-}
+// The scan that used to live here looked for the string `check_effort` inside
+// `run_sweep`. `let _ = check_effort(...)` keeps the substring and throws the
+// error away, so it could not fail for the defect it was written to catch.
+// Replaced by crates/bugsleuth-cli/tests/sweep_effort.rs, which runs the real
+// binary and asserts the sweep is refused before the provider is reached.
