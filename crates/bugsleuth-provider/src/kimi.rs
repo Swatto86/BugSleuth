@@ -146,6 +146,13 @@ fn build_args(spec: &KimiSweep<'_>, brief: &brief_file::BriefFile) -> Vec<String
     args.push("--skills-dir".into());
     args.push(brief.skills_dir().to_string_lossy().into_owned());
 
+    // The cost and safety boundary. Without an agent definition Kimi's tool
+    // allowlist is absent, which means *every* tool including `Agent` and
+    // `AgentSwarm` — and K3 spontaneously delegated to subagents and burned an
+    // entire billing cycle's quota inside one lane. See `brief_file`.
+    args.push("--agent-file".into());
+    args.push(brief.agent_path().to_string_lossy().into_owned());
+
     let model = spec.model.trim();
     if !model.is_empty() {
         args.push("-m".into());

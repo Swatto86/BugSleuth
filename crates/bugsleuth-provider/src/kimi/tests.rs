@@ -309,3 +309,53 @@ fn project_skill_discovery_is_disabled() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Every sweep runs under an agent definition that cannot delegate.
+///
+/// This is the cost boundary, not a nicety. Kimi's `tools` frontmatter is an
+/// allowlist and omitting it allows *every* tool — so without this file K3
+/// spawned subagents on its own initiative and exhausted a whole billing
+/// cycle's quota inside one lane, leaving the other four lanes to fail with
+/// HTTP 403 and the run to produce nothing.
+#[test]
+fn every_sweep_runs_under_an_agent_that_cannot_delegate() {
+    let dir = scratch("agent-confinement");
+    let brief = brief_file::BriefFile::write("brief").expect("write brief");
+    let args = build_args(&spec("kimi-code/k3", &dir), &brief);
+
+    let at = args
+        .iter()
+        .position(|arg| arg == "--agent-file")
+        .expect("without an agent definition Kimi is allowed every tool it has");
+    assert_eq!(
+        args.get(at + 1).map(String::as_str),
+        Some(brief.agent_path().to_string_lossy().as_ref())
+    );
+
+    let agent = std::fs::read_to_string(brief.agent_path()).expect("the agent file must exist");
+    // An allowlist, because omitting `tools` allows everything.
+    let allowed: Vec<&str> = agent
+        .lines()
+        .skip_while(|line| line.trim() != "tools:")
+        .skip(1)
+        .take_while(|line| line.trim_start().starts_with("- "))
+        .map(|line| line.trim().trim_start_matches("- "))
+        .collect();
+    assert_eq!(
+        allowed,
+        ["Read", "Grep", "Glob"],
+        "the tool allowlist is not what a read-only review needs"
+    );
+    // The two that spawn subagents must not be in it, under any spelling.
+    for spawner in ["Agent", "AgentSwarm", "Bash", "Skill"] {
+        assert!(
+            !allowed.contains(&spawner),
+            "{spawner} is allowed, so a sweep can fan out or run commands"
+        );
+        assert!(
+            agent.contains(&format!("- {spawner}")),
+            "{spawner} is not named in disallowedTools; a bare * matches nothing in Kimi"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

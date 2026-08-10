@@ -505,6 +505,7 @@ rust kimi::signin::tests::the_probe_invokes_the_cli_the_way_a_sweep_does
 rust kimi::tests::a_failing_cli_is_an_error_rather_than_no_findings
 rust kimi::tests::a_real_invocation_returns_the_findings_the_cli_printed
 rust kimi::tests::discovery_finds_a_real_installation
+rust kimi::tests::every_sweep_runs_under_an_agent_that_cannot_delegate
 rust kimi::tests::no_approval_flag_is_passed_because_prompt_mode_refuses_them
 rust kimi::tests::project_skill_discovery_is_disabled
 rust kimi::tests::the_brief_directory_is_granted_to_the_session

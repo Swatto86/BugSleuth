@@ -1,4 +1,7 @@
-//! Handing Kimi a brief it cannot be given as an argument.
+//! The private files one Kimi invocation needs: its brief, and the agent
+//! definition that confines it.
+//!
+//! ## Handing Kimi a brief it cannot be given as an argument
 //!
 //! `kimi --prompt` takes the prompt as an **argv string**; there is no stdin
 //! form and no `--prompt-file`. BugSleuth's briefs for a vendor that cannot
@@ -51,6 +54,7 @@ impl BriefFile {
         // brief's own: pointed there, Kimi listed the brief as a *skill*, which
         // is not what it is and not a classification worth depending on.
         std::fs::create_dir_all(dir.join("skills")).map_err(scratch)?;
+        std::fs::write(dir.join("agent.md"), REVIEW_AGENT).map_err(scratch)?;
         let path = dir.join("brief.md");
         std::fs::write(&path, brief).map_err(scratch)?;
         Ok(Self { dir, path })
@@ -74,7 +78,50 @@ impl BriefFile {
     pub(super) fn skills_dir(&self) -> PathBuf {
         self.dir.join("skills")
     }
+
+    /// The agent definition this invocation must run under.
+    pub(super) fn agent_path(&self) -> PathBuf {
+        self.dir.join("agent.md")
+    }
 }
+
+/// The agent definition every sweep runs under.
+///
+/// **This is the cost and safety boundary.** Kimi's `tools` frontmatter is an
+/// allowlist, and *omitting it allows every tool* — including `Agent` and
+/// `AgentSwarm`, which spawn subagents. Run without one against a multi-crate
+/// workspace, K3 decided on its own initiative to "delegate exploration to
+/// subagents" and exhausted a whole billing cycle's quota inside a single lane;
+/// the remaining four lanes then failed with HTTP 403 and the run produced
+/// nothing. Nothing in the brief asked for that, and nothing could refuse it.
+///
+/// So the allowlist names only what reading code needs. `disallowedTools`
+/// repeats the delegation and shell tools by exact name — a bare `*` matches
+/// nothing in Kimi's matcher, so the denial has to be spelled out, and naming
+/// them twice costs nothing.
+///
+/// The body after the frontmatter is the agent's system prompt.
+const REVIEW_AGENT: &str = r#"---
+name: bugsleuth-review
+description: Read-only reviewer for a single BugSleuth lane.
+tools:
+  - Read
+  - Grep
+  - Glob
+disallowedTools:
+  - Agent
+  - AgentSwarm
+  - Bash
+  - Skill
+---
+You are reviewing code read-only, for one narrow mandate given in a brief.
+
+Do not delegate. Do not spawn subagents. Do the work yourself, in this session.
+Do not run shell commands. Do not edit, create or delete any file.
+
+Read only what the brief's mandate needs, and answer with the single JSON object
+the brief specifies — nothing before it and nothing after it.
+"#;
 
 impl Drop for BriefFile {
     fn drop(&mut self) {
