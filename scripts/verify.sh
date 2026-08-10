@@ -126,7 +126,25 @@ say "no test has gone missing"
 # twice in one day. The suite stayed green with less of it running, and the
 # count did not move because two tests were added in the same change. Names are
 # the only thing a comparison can be trusted on.
-recorded_on=$(sed -n 's/^platform //p' tests.lock | head -1)
+# The header is validated before it is trusted. Anything other than the current
+# OS used to read as a legitimate foreign-platform lock and skip the comparison,
+# so `platform bogus` — or a missing, duplicated or misspelled header — switched
+# this gate off on all three platforms at once and no job said anything.
+# Read as one line rather than scanned, which also refuses a duplicate header.
+IFS= read -r recorded_header < tests.lock || {
+  echo "invalid tests.lock: missing platform header"
+  exit 1
+}
+recorded_header=${recorded_header%$'\r'}
+case "$recorded_header" in
+  "platform windows") recorded_on=windows ;;
+  "platform macos") recorded_on=macos ;;
+  "platform linux") recorded_on=linux ;;
+  *)
+    echo "invalid tests.lock platform header: ${recorded_header:-<missing>}"
+    exit 1
+    ;;
+esac
 if [ "$recorded_on" != "$(platform)" ]; then
   # Some tests are #[cfg(windows)] and do not exist elsewhere, so a lock taken
   # on one platform lists names another cannot run. Comparing anyway would fail
