@@ -175,7 +175,10 @@ while IFS= read -r file; do
   case "$file" in
     ./target/*|./node_modules/*|./ui/dist/*|./.git/*) continue ;;
   esac
-  lines=$(wc -l < "$file")
+  # Records, not newline bytes. `wc -l` reported a 401-line file with no
+  # trailing newline as 400 and let it through the hard cap; awk's NR counts the
+  # unterminated final record too, and is POSIX on Git Bash, Linux and macOS.
+  lines=$(awk 'END { print NR }' "$file")
   if [ "$lines" -gt "$hard" ]; then
     echo "  OVER HARD CAP ($hard): $file — $lines lines"
     over=$((over + 1))
