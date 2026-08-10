@@ -316,6 +316,7 @@ rust claude::envelope::tests::an_error_envelope_becomes_an_error_not_an_empty_sw
 rust claude::envelope::tests::any_other_envelope_error_is_still_an_ordinary_failure
 rust claude::envelope::tests::output_that_is_not_an_envelope_is_still_shown_rather_than_dropped
 rust claude::envelope::tests::usage_token_counts_are_surfaced_as_text
+rust claude::permission_tests::read_only_tools_are_repo_scoped
 rust claude::salvage::tests::a_turn_limit_failure_offers_its_session_for_salvage
 rust claude::salvage::tests::a_turn_limit_with_no_session_id_cannot_be_salvaged
 rust claude::salvage::tests::any_other_failure_is_not_worth_resuming

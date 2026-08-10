@@ -33,6 +33,8 @@ pub(crate) const VENDOR: &str = "claude";
 
 pub(crate) const READ_ONLY_TOOLS: &str = "Read,Glob,Grep";
 pub(crate) const READ_ONLY_AGENT_TOOLS: &str = "Read,Glob,Grep,Agent";
+pub(crate) const READ_ONLY_ALLOWED: &str = "Read(./**),Glob(./**)";
+pub(crate) const READ_ONLY_AGENT_ALLOWED: &str = "Read(./**),Glob(./**),Agent";
 pub(crate) const READ_ONLY_DENIED: &str = "Edit,Write,NotebookEdit,Bash,WebFetch,WebSearch";
 
 /// One (model x lane x repository) unit of work.
@@ -87,10 +89,15 @@ pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> 
         effort: if ultracode { "ultracode" } else { spec.effort },
         prompt: spec.brief,
         schema: finding_schema(),
-        allowed: if spec.use_agents {
+        available: if spec.use_agents {
             READ_ONLY_AGENT_TOOLS
         } else {
             READ_ONLY_TOOLS
+        },
+        allowed: if spec.use_agents {
+            READ_ONLY_AGENT_ALLOWED
+        } else {
+            READ_ONLY_ALLOWED
         },
         denied: READ_ONLY_DENIED,
         max_turns: spec.max_turns,
@@ -127,6 +134,7 @@ pub(crate) struct Run<'a> {
     pub(crate) effort: &'a str,
     pub(crate) prompt: &'a str,
     pub(crate) schema: Value,
+    pub(crate) available: &'a str,
     pub(crate) allowed: &'a str,
     pub(crate) denied: &'a str,
     pub(crate) max_turns: u32,
@@ -322,3 +330,7 @@ pub async fn signin() -> crate::signin::SignIn {
 #[cfg(test)]
 #[path = "claude/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "claude/permission_tests.rs"]
+mod permission_tests;

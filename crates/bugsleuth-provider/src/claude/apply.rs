@@ -49,6 +49,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> Result<String, ProviderError> {
         effort: request.effort,
         prompt: request.prompt,
         schema: Value::Null,
+        available: APPLY_TOOLS,
         allowed: APPLY_TOOLS,
         denied: APPLY_DENIED,
         max_turns: request.max_turns,

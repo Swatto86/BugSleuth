@@ -14,7 +14,8 @@ fn run<'a>(model: &'a str) -> Run<'a> {
         model,
         prompt: "",
         schema: finding_schema(),
-        allowed: READ_ONLY_TOOLS,
+        available: READ_ONLY_TOOLS,
+        allowed: READ_ONLY_ALLOWED,
         denied: READ_ONLY_DENIED,
         max_turns: 12,
         timeout: Duration::from_secs(60),
@@ -43,19 +44,20 @@ fn read_only_sweeps_cannot_be_granted_write_tools() {
 #[test]
 fn agent_enabled_sweeps_only_add_read_only_delegation_tools() {
     let mut spec = run("sonnet");
-    spec.allowed = READ_ONLY_AGENT_TOOLS;
+    spec.available = READ_ONLY_AGENT_TOOLS;
+    spec.allowed = READ_ONLY_AGENT_ALLOWED;
     let args = build_args(&spec);
     let index = args.iter().position(|a| a == "--allowedTools");
     assert_eq!(
         index.and_then(|i| args.get(i + 1)).map(String::as_str),
-        Some("Read,Glob,Grep,Agent")
+        Some(READ_ONLY_AGENT_ALLOWED)
     );
     assert_eq!(
         args.iter()
             .position(|a| a == "--tools")
             .and_then(|i| args.get(i + 1))
             .map(String::as_str),
-        Some("Read,Glob,Grep,Agent")
+        Some(READ_ONLY_AGENT_TOOLS)
     );
     assert_eq!(
         args.iter()

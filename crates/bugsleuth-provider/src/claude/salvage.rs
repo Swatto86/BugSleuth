@@ -203,6 +203,7 @@ pub(super) async fn salvage(
         prompt: ASK,
         schema,
         // No tools. The review is over; this is transcription.
+        available: "",
         allowed: "",
         denied: super::READ_ONLY_DENIED,
         max_turns: SALVAGE_TURNS,

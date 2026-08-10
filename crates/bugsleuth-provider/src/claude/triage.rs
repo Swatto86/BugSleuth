@@ -48,6 +48,7 @@ pub async fn triage(spec: TriageRequest<'_>) -> Result<TriageResult, ProviderErr
         prompt: spec.prompt,
         schema: triage_schema(),
         // No tools. One turn in, one answer out.
+        available: "",
         allowed: "",
         denied: READ_ONLY_DENIED,
         max_turns: spec.max_turns,

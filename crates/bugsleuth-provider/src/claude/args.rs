@@ -16,9 +16,11 @@ pub(super) fn build_args(run: &Run<'_>) -> Vec<String> {
         "--max-turns".into(),
         run.max_turns.to_string(),
         "--tools".into(),
-        run.allowed.into(),
+        run.available.into(),
         "--allowedTools".into(),
         run.allowed.into(),
+        "--permission-mode".into(),
+        "dontAsk".into(),
     ];
     // A null schema means "no schema", not "the schema `null`". Applying fixes
     // is the one invocation whose answer is prose for a person rather than a
