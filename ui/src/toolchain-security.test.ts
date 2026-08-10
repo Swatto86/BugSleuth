@@ -72,6 +72,23 @@ test("the signature verifier refuses an executable Microsoft did not sign", (t) 
   );
 });
 
+test("a cached EdgeDriver is verified before its version is read", () => {
+  const setup = read("scripts", "setup-e2e.ps1");
+  // Bounded to the cached branch, ahead of the first `& $driver`. A driver
+  // written by an earlier compromised download used to survive every later
+  // setup run, because the version check executed it before deciding whether
+  // to replace it.
+  const cached = between(
+    setup,
+    "if (Test-Path $driver) {",
+    "$driver --version",
+  );
+  assert.ok(
+    cached.includes(VERIFIER),
+    "the cached driver is executed before its publisher is verified",
+  );
+});
+
 test("a downloaded EdgeDriver is verified before it is executed", () => {
   const setup = read("scripts", "setup-e2e.ps1");
   // Bounded between the extraction and the first execution of the new file, so

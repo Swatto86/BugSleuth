@@ -13,6 +13,7 @@ node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
 node a blank row makes the configuration unrunnable, exactly like the engine
+node a cached EdgeDriver is verified before its version is read
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it

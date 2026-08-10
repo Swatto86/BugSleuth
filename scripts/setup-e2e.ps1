@@ -39,6 +39,11 @@ Write-Host "  installed: $version"
 
 $driver = Join-Path $dest 'msedgedriver.exe'
 if (Test-Path $driver) {
+    # Before the version check runs it. Reading the version is an execution, so
+    # a driver replaced between setup runs would otherwise be run first and
+    # only then compared — persisting a compromise the download check cannot
+    # see, because this branch may exit before reaching it.
+    & (Join-Path $PSScriptRoot 'assert-microsoft-signature.ps1') -Path $driver
     $have = (& $driver --version) -replace '.*WebDriver\s+([\d.]+).*', '$1'
     if ($have -eq $version) {
         Write-Host "  driver already matches ($have)"
