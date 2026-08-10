@@ -46,6 +46,7 @@ test("a save failure is shown in its own region, never gated on a run", async ()
       throw new Error("disk full");
     },
   });
+  saver.allowWrites();
   saver.schedule();
   assert.equal(await saver.flush(), false);
   assert.deepEqual(errors, ["Settings are not being saved: Error: disk full"]);
@@ -115,6 +116,7 @@ test("flushing writes the latest pending settings exactly once", async () => {
     },
   });
 
+  saver.allowWrites();
   saver.schedule();
   settings.repo = "latest";
   assert.equal(await saver.flush(), true);
@@ -172,4 +174,46 @@ test("quit flushes pending settings before it can invoke exit", () => {
   assert.ok(flush >= 0, "requestQuit never flushes settings");
   assert.ok(quit >= 0, "requestQuit no longer reaches the quit command");
   assert.ok(flush < quit, "requestQuit can exit before its settings flush");
+});
+
+/// A failed load must not let the next edit overwrite the file it failed on.
+///
+/// `suppressPersistence` only covers boot's own renders. Every later user edit
+/// reaches `refresh()`, schedules a save, and atomically replaces the unreadable
+/// but potentially recoverable settings file with defaults plus that edit — and
+/// the load warning is not shown until provider discovery finishes, so the
+/// overwrite can happen before any warning appears.
+test("writes stay blocked when saved settings failed to load", async () => {
+  const settings: Settings = {
+    repo: "old",
+    scope: "",
+    models: [],
+    theme: "system",
+    reuse_completed: true,
+    triage_model: "haiku",
+    apply_model: "",
+    apply_effort: "",
+    push_after_apply: false,
+    tag_release_after_push: false,
+  };
+  const saved: string[] = [];
+  const errors: string[] = [];
+  const saver = savingSettings({
+    settings: () => settings,
+    setError: (message) => errors.push(message),
+    save: async (snapshot) => {
+      saved.push(snapshot.repo);
+    },
+  });
+
+  saver.blockWrites("saved settings are invalid");
+  settings.repo = "changed";
+  saver.schedule();
+  assert.equal(await saver.flush(), false);
+  assert.deepEqual(saved, [], "the unreadable settings file was overwritten");
+  assert.match(errors.at(-1) ?? "", /saved settings are invalid/);
+
+  saver.allowWrites();
+  assert.equal(await saver.flush(), true);
+  assert.deepEqual(saved, ["changed"], "the edit was lost as well as blocked");
 });

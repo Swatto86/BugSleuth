@@ -24,6 +24,10 @@ export interface PersistDeps {
 }
 
 export interface SettingsSaver {
+  /** Permit writes. Called once, after the stored settings really loaded. */
+  allowWrites: () => void;
+  /** Refuse writes for the session, and say why in the persistent region. */
+  blockWrites: (reason: string) => void;
   schedule: () => void;
   flush: () => Promise<boolean>;
 }
@@ -41,6 +45,11 @@ export function savingSettings(deps: PersistDeps): SettingsSaver {
   let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let dirty = false;
   let failed = false;
+  // Closed until the stored settings are known to have loaded. `boot` used to
+  // continue with in-memory defaults after a failed `load_settings`, and the
+  // first later edit atomically replaced the unreadable — but often salvageable
+  // — file with those defaults, before any warning had even been shown.
+  let writable = false;
   let tail: Promise<boolean> = Promise.resolve(true);
 
   const cancelTimer = (): void => {
@@ -67,9 +76,19 @@ export function savingSettings(deps: PersistDeps): SettingsSaver {
   };
 
   return {
+    allowWrites: () => {
+      writable = true;
+    },
+    blockWrites: (reason) => {
+      writable = false;
+      failed = true;
+      cancelTimer();
+      deps.setError(`Settings are not being saved: ${reason}`);
+    },
     schedule: () => {
       dirty = true;
       cancelTimer();
+      if (!writable) return;
       timer = globalThis.setTimeout(() => {
         timer = undefined;
         void enqueue();
@@ -77,6 +96,9 @@ export function savingSettings(deps: PersistDeps): SettingsSaver {
     },
     flush: () => {
       cancelTimer();
+      // Reported as "not saved" rather than as a clean flush, so Quit's existing
+      // failed-flush confirmation still asks before discarding the edits.
+      if (!writable) return Promise.resolve(!dirty);
       return dirty ? enqueue() : tail;
     },
   };

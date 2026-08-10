@@ -266,12 +266,18 @@ async function boot(): Promise<void> {
   let loadFailed = "";
   try {
     settings = { ...settings, ...(await invoke<Settings>("load_settings")) };
+    settingsSaver.allowWrites();
   } catch (error) {
     // A first launch genuinely has no settings, and Rust answers with defaults
     // rather than an error for that case — so reaching here means the call
     // itself failed, and starting from defaults would quietly discard whatever
-    // was saved. Say so instead.
+    // was saved. Say so instead — and keep writes closed for the session, or
+    // the first edit replaces the unreadable file with those defaults before
+    // the warning below has even been shown.
     loadFailed = String(error);
+    settingsSaver.blockWrites(
+      `Saved settings could not be read: ${loadFailed}`,
+    );
   }
   settings.models = settings.models.map((model) => {
     const useAgents = supportsAgents(model.id) && (model.use_agents ?? false);
