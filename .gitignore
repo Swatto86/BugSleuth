@@ -29,10 +29,16 @@ tsconfig.tsbuildinfo
 # never a part of this one.
 windows-rdp-keepalive/
 
-# The updater public key. It lives in src-tauri/tauri.conf.json, which is what
-# the app actually compiles in; a second copy here would be a value with two
-# homes and no check that they agree.
+# The updater *private* key. Never committed, under any name.
+#
+# The public half is tracked, and deliberately: `update.rs` compares it against
+# the copy in src-tauri/tauri.conf.json, so the two cannot drift apart. Ignoring
+# it meant that check `include_str!`d a file no clean checkout has — every CI
+# run failed to compile the app's test target, on every platform, since the
+# check was written. A value with two homes and a test that they agree is safer
+# than one home and a test that cannot run.
 bugsleuth-updater.key*
+!bugsleuth-updater.key.pub
 
 # Claude Code accumulates per-session permission grants here, including
 # scratch paths from whatever was being debugged. Not project configuration.
