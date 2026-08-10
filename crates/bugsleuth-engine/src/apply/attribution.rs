@@ -10,9 +10,14 @@
 //! is read back and repaired. The first two are requests; this is the check.
 
 use std::path::Path;
+use std::time::Duration;
+
+use crate::cancel::Cancel;
 
 use super::Baseline;
 use super::observed::{git, git_with_env, range_since};
+
+mod published;
 
 /// Rewrite the commits this apply created, without their tool trailers.
 ///
@@ -28,7 +33,12 @@ use super::observed::{git, git_with_env, range_since};
 /// so it is refused and reported instead, which is the honest outcome.
 ///
 /// Returns the subjects it rewrote.
-pub(super) fn strip_attribution(repo: &Path, base: &Baseline) -> anyhow::Result<Vec<String>> {
+pub(super) async fn strip_attribution(
+    repo: &Path,
+    base: &Baseline,
+    cancel: &Cancel,
+    timeout: Duration,
+) -> anyhow::Result<Vec<String>> {
     let branch = git(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"])
         .map(|b| b.trim().to_string())
         .unwrap_or_default();
@@ -45,14 +55,16 @@ pub(super) fn strip_attribution(repo: &Path, base: &Baseline) -> anyhow::Result<
         return Ok(vec![]);
     };
     let expected_head = git(repo, &["rev-parse", "HEAD"])?.trim().to_string();
-    strip_attribution_at(repo, base, &branch, &expected_head)
+    strip_attribution_at(repo, base, &branch, &expected_head, cancel, timeout).await
 }
 
-fn strip_attribution_at(
+async fn strip_attribution_at(
     repo: &Path,
     base: &Baseline,
     branch: &str,
     expected_head: &str,
+    cancel: &Cancel,
+    timeout: Duration,
 ) -> anyhow::Result<Vec<String>> {
     let range = match base {
         Baseline::Commit(base) => format!("{base}..{expected_head}"),
@@ -64,8 +76,6 @@ fn strip_attribution_at(
         .filter(|line| !line.is_empty())
         .map(str::to_string)
         .collect();
-    refuse_if_published(repo, &ids)?;
-
     // Nothing to do is the common case, and it must cost nothing: rewriting the
     // range unconditionally would give every commit of every apply a new hash
     // for no reason - churn the user would notice and could not explain. A
@@ -81,6 +91,7 @@ fn strip_attribution_at(
     if !any_credited {
         return Ok(vec![]);
     }
+    refuse_if_published(repo, &ids, cancel, timeout).await?;
 
     // The parent each rewrite sits on. A commit base is itself the first parent;
     // an unborn base has none, so the first commit is recreated as a root
@@ -121,18 +132,13 @@ fn strip_attribution_at(
 ///
 /// Forking published history to tidy a trailer is a worse outcome than the
 /// trailer, so this is where the guarantee stops and the report takes over.
-fn refuse_if_published(repo: &Path, ids: &[String]) -> anyhow::Result<()> {
-    for id in ids {
-        let published = git(repo, &["branch", "-r", "--contains", id])?;
-        if !published.trim().is_empty() {
-            anyhow::bail!(
-                "commit {} is already on a remote branch, so its message cannot be rewritten \
-                 without forking published history",
-                &id[..id.len().min(8)]
-            );
-        }
-    }
-    Ok(())
+async fn refuse_if_published(
+    repo: &Path,
+    ids: &[String],
+    cancel: &Cancel,
+    timeout: Duration,
+) -> anyhow::Result<()> {
+    published::refuse(repo, ids, cancel, timeout).await
 }
 
 fn message_of(repo: &Path, id: &str) -> anyhow::Result<String> {
@@ -281,3 +287,7 @@ fn credits_a_tool(line: &str) -> bool {
 #[cfg(test)]
 #[path = "attribution/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "attribution/safety_tests.rs"]
+mod safety_tests;

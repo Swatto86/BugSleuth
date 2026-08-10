@@ -184,21 +184,22 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     if request.cancel.stopped() {
         anyhow::bail!(cancelled_message());
     }
-    let (stripped, attributed) = match strip_attribution(repo, &base) {
-        Ok(stripped) => (stripped, vec![]),
-        // Stripping was refused (published history, or a detached HEAD) — report
-        // what it could not reach. But if the rescan itself cannot read history,
-        // that is not "nothing to report": it means the check never ran, so fail
-        // closed rather than push and tag on an unverified repository.
-        Err(_) => {
-            let attributed = attributed_since(repo, &base).with_context(|| {
+    let (stripped, attributed) =
+        match strip_attribution(repo, &base, &request.cancel, request.timeout).await {
+            Ok(stripped) => (stripped, vec![]),
+            // Stripping was refused (published history, or a detached HEAD) — report
+            // what it could not reach. But if the rescan itself cannot read history,
+            // that is not "nothing to report": it means the check never ran, so fail
+            // closed rather than push and tag on an unverified repository.
+            Err(_) => {
+                let attributed = attributed_since(repo, &base).with_context(|| {
                 "the model's fixes are committed to your repository, but BugSleuth could not read \
                  its history to check them for AI attribution — so nothing was pushed or tagged. \
                  Inspect it with `git log` before publishing."
             })?;
-            (vec![], attributed)
-        }
-    };
+                (vec![], attributed)
+            }
+        };
 
     // Read what git actually shows, once, after the provider and the strip. A
     // failure here is not an empty repository — it means the repository could
