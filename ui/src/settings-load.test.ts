@@ -12,6 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import ts from "typescript";
 
 const root = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -33,11 +34,33 @@ test("startup renders do not persist settings back over the saved file", () => {
     "refresh no longer gates persistence, so a startup render writes defaults back",
   );
 
-  // Exactly the two startup call sites — boot and loadCatalogue — render this
-  // way; the definition uses the name without a call.
-  const calls = (main.match(/renderWithoutPersisting\(\)/g) ?? []).length;
-  assert.ok(
-    calls >= 2,
-    `boot and loadCatalogue should render without persisting, found ${calls} call(s)`,
+  const source = ts.createSourceFile(
+    "main.ts",
+    main,
+    ts.ScriptTarget.ESNext,
+    true,
   );
+  const walk = (node: ts.Node, visit: (candidate: ts.Node) => void): void => {
+    visit(node);
+    node.forEachChild((child) => walk(child, visit));
+  };
+  for (const name of ["boot", "loadCatalogue"]) {
+    let owner: ts.FunctionDeclaration | undefined;
+    walk(source, (node) => {
+      if (ts.isFunctionDeclaration(node) && node.name?.text === name)
+        owner = node;
+    });
+    assert.ok(owner?.body, `${name} is gone from main.ts`);
+    let calls = 0;
+    walk(owner.body, (node) => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "renderWithoutPersisting"
+      ) {
+        calls += 1;
+      }
+    });
+    assert.equal(calls, 1, `${name} must render once without persisting`);
+  }
 });
