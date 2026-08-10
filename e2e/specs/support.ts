@@ -10,6 +10,7 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,6 +26,41 @@ export const RUNS_ROOT = path.join(
 
 /** Model used for the live run. Overridable so the journey is not pinned to one vendor. */
 export const MODEL = process.env["BUGSLEUTH_E2E_MODEL"] ?? "haiku";
+
+/** Stable digest of source content, excluding root-only generated metadata. */
+export function treeDigest(root: string): string {
+  const hash = createHash("sha256");
+  const ignored = new Set([".git", "target", ".bugsleuth-worktrees"]);
+  const frame = (kind: string, relative: string, payload: Buffer): void => {
+    hash.update(`${kind}\0${relative}\0${payload.byteLength}\0`);
+    hash.update(payload);
+    hash.update("\0");
+  };
+  const visit = (directory: string, atRoot: boolean): void => {
+    const entries = fs
+      .readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => !atRoot || !ignored.has(entry.name))
+      .sort((left, right) =>
+        left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+      );
+    for (const entry of entries) {
+      const full = path.join(directory, entry.name);
+      const relative = path.relative(root, full).split(path.sep).join("/");
+      if (entry.isSymbolicLink()) {
+        frame("l", relative, Buffer.from(fs.readlinkSync(full)));
+      } else if (entry.isDirectory()) {
+        frame("d", relative, Buffer.alloc(0));
+        visit(full, false);
+      } else if (entry.isFile()) {
+        frame("f", relative, fs.readFileSync(full));
+      } else {
+        throw new Error(`unsupported source-tree entry: ${full}`);
+      }
+    }
+  };
+  visit(root, true);
+  return hash.digest("hex");
+}
 
 /** Set lane checkboxes without retaining elements invalidated by a matrix redraw. */
 export async function setLaneSelections(

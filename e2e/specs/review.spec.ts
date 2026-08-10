@@ -28,9 +28,12 @@ import {
   providerCliProcesses,
   runsDir,
   setLaneSelections,
+  treeDigest,
 } from "./support";
 
 describe("BugSleuth desktop app", () => {
+  const repoBefore = treeDigest(REPO);
+
   it("shows its window with the shell mounted", async () => {
     // The window starts hidden and the frontend reveals it. If that ever breaks
     // the app is a process with no UI, so this is the first thing to check.
@@ -389,10 +392,8 @@ ${output}`,
   it("leaves the reviewed repository untouched", () => {
     // The promise the whole tool rests on. A review that modified its target
     // would be worse than useless.
-    assert.ok(
-      fs.existsSync(path.join(REPO, "src", "pricing.rs")),
-      `the seeded fixture is missing or empty at ${REPO} — restore it from git history`,
-    );
+    const repoAfter = treeDigest(REPO);
+    assert.equal(repoAfter, repoBefore, "the review modified its target repository");
     assert.ok(!fs.existsSync(path.join(REPO, ".bugsleuth-worktrees")));
   });
 });
