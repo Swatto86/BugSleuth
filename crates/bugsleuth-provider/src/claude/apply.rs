@@ -1,34 +1,14 @@
-//! Handing the fix prompt to Claude, with write access to the real repository.
-//!
-//! Every other invocation in this crate is either read-only or confined to a
-//! throwaway worktree. This one is not, and that is the whole point: the user
-//! asked for the fixes to be applied to their own checkout. What makes that
-//! recoverable is not a sandbox but git — the engine refuses to start unless the
-//! working tree is clean, so everything this does shows up in `git status` and
-//! nothing of the user's can be buried by it.
-//!
-//! No output schema. The answer is a report for a person to read, and forcing it
-//! into a shape would cost a turn and tell them less.
+//! Claude apply is disabled until it can be contained on every supported host.
 
 use std::path::Path;
 use std::time::Duration;
 
-use serde_json::Value;
+use super::ProviderError;
 
-use super::{ProviderError, Run, invoke};
-
-/// Tools applying a fix needs. Writing the change and running the test it leaves
-/// behind is the entire task, so unlike a read-only sweep this list allows
-/// `Edit`, `Write` and `Bash`.
-///
-/// Denying `WebFetch` and `WebSearch` beside `Bash` is not a network restriction
-/// and must not be read as one — `curl` is one command away. It removes the two
-/// most convenient paths and costs nothing.
-const APPLY_TOOLS: &str = "Read,Glob,Grep,Edit,Write,Bash";
-const APPLY_DENIED: &str = "WebFetch,WebSearch";
+const DISABLED_REASON: &str = "BugSleuth cannot prove that Claude's write and shell tools are confined to this repository with network access blocked; apply the generated handoff manually in an isolated environment";
 
 pub struct ApplyRequest<'a> {
-    /// The user's own repository. Written to, deliberately.
+    /// The repository the generated handoff refers to.
     pub repo: &'a Path,
     pub model: &'a str,
     pub effort: &'a str,
@@ -38,62 +18,108 @@ pub struct ApplyRequest<'a> {
     pub max_turns: u32,
 }
 
-/// Run the fixes, returning the model's account of what it did.
-///
-/// That account is not evidence and is never treated as such: the caller reports
-/// it beside the files git says actually changed.
-pub async fn apply(request: ApplyRequest<'_>) -> Result<String, ProviderError> {
-    let outcome = invoke::<Value>(Run {
-        repo: request.repo,
-        model: request.model,
-        effort: request.effort,
-        prompt: request.prompt,
-        schema: Value::Null,
-        available: APPLY_TOOLS,
-        allowed: APPLY_TOOLS,
-        denied: APPLY_DENIED,
-        max_turns: request.max_turns,
-        timeout: request.timeout,
-        binary: None,
-        api_key: None,
-        session_id: None,
-        resume: None,
+/// Refuse the write-capable operation before discovering or starting Claude.
+pub async fn apply(_request: ApplyRequest<'_>) -> Result<String, ProviderError> {
+    Err(ProviderError::CapabilityUnavailable {
+        vendor: "claude",
+        capability: "apply",
+        reason: DISABLED_REASON.to_string(),
     })
-    .await?;
-
-    Ok(report_text(&outcome.result))
-}
-
-/// The reply as text. Without a schema the CLI puts the model's prose in
-/// `result` as a JSON string; anything else is shown raw rather than dropped.
-fn report_text(result: &Value) -> String {
-    match result {
-        Value::String(text) => text.clone(),
-        Value::Null => String::new(),
-        other => other.to_string(),
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn applying_a_fix_may_write_and_run_commands() {
-        for tool in ["Edit", "Write", "Bash"] {
-            assert!(
-                APPLY_TOOLS.split(',').any(|t| t == tool),
-                "applying a fix needs {tool}"
-            );
-        }
-        assert!(APPLY_DENIED.split(',').any(|t| t == "WebFetch"));
-    }
+    const CHILD_RESULT: &str = "BUGSLEUTH_CLAUDE_APPLY_CHILD_RESULT";
 
-    #[test]
-    fn a_prose_reply_survives_having_no_schema_to_fit() {
-        assert_eq!(report_text(&Value::String("fixed 3".into())), "fixed 3");
-        // An empty answer reads as an empty report, not as the word "null".
-        assert_eq!(report_text(&Value::Null), "");
-        assert!(report_text(&serde_json::json!({"done": true})).contains("done"));
+    #[tokio::test]
+    async fn apply_fails_closed_before_launching_claude() {
+        if let Some(result_path) = std::env::var_os(CHILD_RESULT) {
+            let repo = std::env::current_dir().expect("child repository");
+            let outcome = apply(ApplyRequest {
+                repo: &repo,
+                model: "",
+                effort: "",
+                prompt: "untrusted model-produced fix",
+                timeout: Duration::from_secs(10),
+                max_turns: 1,
+            })
+            .await;
+            let result = match outcome {
+                Ok(text) => format!("ok:{text}"),
+                Err(error) => format!("error:{error}"),
+            };
+            std::fs::write(result_path, result).expect("record child result");
+            return;
+        }
+
+        let dir = std::env::temp_dir().join(format!(
+            "bugsleuth-disabled-claude-apply-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = dir.join("repo");
+        let home = dir.join("home");
+        let bin = dir.join("bin");
+        std::fs::create_dir_all(&repo).expect("create fixture repository");
+        std::fs::create_dir_all(&home).expect("create fixture home");
+        std::fs::create_dir_all(&bin).expect("create fixture binary directory");
+
+        #[cfg(windows)]
+        let (stub, script) = (
+            bin.join("claude.cmd"),
+            "@echo off\r\n\
+             echo launched > launched.txt\r\n\
+             echo {\"result\":\"ran\",\"is_error\":false,\"session_id\":\"known-session\"}\r\n",
+        );
+        #[cfg(unix)]
+        let (stub, script) = {
+            let native_bin = home.join(".local/bin");
+            std::fs::create_dir_all(&native_bin).expect("create native CLI directory");
+            (
+                native_bin.join("claude"),
+                "#!/bin/sh\n\
+             printf launched > launched.txt\n\
+                 printf '%s\\n' '{\"result\":\"ran\",\"is_error\":false,\"session_id\":\"known-session\"}'\n",
+            )
+        };
+        std::fs::write(&stub, script).expect("write CLI stub");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&stub)
+                .expect("read stub permissions")
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&stub, permissions).expect("make CLI stub executable");
+        }
+        assert!(stub.is_file(), "fake Claude CLI was not created");
+
+        let result_path = dir.join("result.txt");
+        let child = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .args([
+                "--exact",
+                "claude::apply::tests::apply_fails_closed_before_launching_claude",
+                "--nocapture",
+            ])
+            .current_dir(&repo)
+            .env(CHILD_RESULT, &result_path)
+            .env("HOME", &home)
+            .env("USERPROFILE", &home)
+            .env("PATH", &bin)
+            .output()
+            .expect("run isolated apply attempt");
+        let launched = repo.join("launched.txt").exists();
+        let result = std::fs::read_to_string(&result_path).expect("child apply result");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(child.status.success(), "child failed: {child:?}");
+        assert!(!launched, "the disabled provider still launched Claude");
+        assert!(
+            result.contains("error:claude apply is unavailable"),
+            "{result}"
+        );
+        assert!(result.contains("confined to this repository"), "{result}");
     }
 }

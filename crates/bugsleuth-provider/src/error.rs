@@ -45,6 +45,12 @@ pub enum ProviderError {
         vendor: &'static str,
         detail: String,
     },
+    #[error("{vendor} {capability} is unavailable: {reason}")]
+    CapabilityUnavailable {
+        vendor: &'static str,
+        capability: &'static str,
+        reason: String,
+    },
     /// The run used its whole turn budget before answering.
     ///
     /// Distinct from a plain failure because the review itself may already be

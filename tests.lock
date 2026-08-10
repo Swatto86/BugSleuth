@@ -304,8 +304,7 @@ rust caveats::tests::nothing_is_said_at_all_when_no_sweeps_ran
 rust caveats::tests::the_caution_fires_for_a_kilo_vendor_and_not_for_a_model_merely_named_one
 rust caveats::tests::the_limits_carry_the_surrounding_documents_indent
 rust caveats::tests::the_recovery_caveat_covers_timeouts_as_well_as_turn_limits
-rust claude::apply::tests::a_prose_reply_survives_having_no_schema_to_fit
-rust claude::apply::tests::applying_a_fix_may_write_and_run_commands
+rust claude::apply::tests::apply_fails_closed_before_launching_claude
 rust claude::envelope::tests::a_failure_is_explained_from_the_envelope_when_stderr_says_nothing
 rust claude::envelope::tests::a_legacy_schema_reply_can_still_fall_back_to_result
 rust claude::envelope::tests::a_normal_envelope_is_read_without_complaint
