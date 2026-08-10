@@ -24,8 +24,21 @@ struct SweepFile {
     /// The commit the sweep reviewed, when its report recorded one.
     #[serde(default)]
     commit: Option<String>,
+    /// `Some` only when the sweep ran against a clean, unchanged revision and
+    /// can safely be reused from cache. Absence means the result is unpinned.
+    #[serde(default)]
+    cache_revision: Option<String>,
+    /// The requested path restriction, or the whole repository when absent.
+    #[serde(default)]
+    scope: Option<String>,
     status: SweepStatus,
     findings: Vec<Finding>,
+    /// Merge only needs the count. Keeping entries opaque avoids coupling this
+    /// narrow reader to whichever rejection schema wrote the report.
+    #[serde(default)]
+    rejected: Vec<serde_json::Value>,
+    #[serde(default)]
+    usage: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,6 +60,8 @@ enum SweepStatus {
 pub struct Merged {
     pub ranked: Vec<Ranked>,
     pub sources: Vec<Source>,
+    /// The scope common to every input. Reports with mixed scopes are refused.
+    pub scope: Option<String>,
     /// Distinct commits the merged sweeps reviewed, when recorded. More than
     /// one means the report spans two versions of the code — anchors from one
     /// sweep may simply not exist in the tree another reviewed, and anyone
@@ -62,6 +77,10 @@ pub struct Source {
     pub lane: String,
     pub model: String,
     pub findings: usize,
+    pub rejected: usize,
+    pub commit: Option<String>,
+    pub cache_revision: Option<String>,
+    pub usage: Option<String>,
     /// Whether this sweep was recovered and may be partial. Carried through the
     /// merge because a prefix of a lane's findings must not be presented as the
     /// whole of it.
@@ -80,9 +99,19 @@ pub fn merge(paths: &[PathBuf]) -> Result<Merged> {
     let mut sources = Vec::new();
     let mut unswept = Vec::new();
     let mut commits: Vec<String> = Vec::new();
+    let mut common_scope: Option<Option<String>> = None;
 
     for path in paths {
         let file = read(path)?;
+        match &common_scope {
+            None => common_scope = Some(file.scope.clone()),
+            Some(scope) if scope != &file.scope => anyhow::bail!(
+                "cannot merge sweep reports with different scopes: {} and {}",
+                scope_label(scope),
+                scope_label(&file.scope)
+            ),
+            Some(_) => {}
+        }
         match file.status {
             SweepStatus::NotSwept { reason } => unswept.push(Unswept {
                 lane: file.lane,
@@ -99,6 +128,10 @@ pub fn merge(paths: &[PathBuf]) -> Result<Merged> {
                     lane: file.lane,
                     model: file.model,
                     findings: file.findings.len(),
+                    rejected: file.rejected.len(),
+                    commit: file.commit,
+                    cache_revision: file.cache_revision,
+                    usage: file.usage,
                     salvaged,
                 });
                 all.extend(file.findings);
@@ -109,9 +142,14 @@ pub fn merge(paths: &[PathBuf]) -> Result<Merged> {
     Ok(Merged {
         ranked: rank(cluster(all)),
         sources,
+        scope: common_scope.flatten(),
         unswept,
         commits,
     })
+}
+
+fn scope_label(scope: &Option<String>) -> &str {
+    scope.as_deref().unwrap_or("whole repository")
 }
 
 fn read(path: &Path) -> Result<SweepFile> {
@@ -138,10 +176,24 @@ impl Merged {
         let mut out = String::new();
 
         out.push_str("=== merged report ===\n");
+        out.push_str(&format!("  scope: {}\n", scope_label(&self.scope)));
         for source in &self.sources {
+            let usage = source
+                .usage
+                .as_deref()
+                .filter(|usage| !usage.trim().is_empty())
+                .map(|usage| format!("; usage: {usage}"))
+                .unwrap_or_default();
             out.push_str(&format!(
-                "  swept: {} lane by {} ({} findings)\n",
-                source.lane, source.model, source.findings
+                "  swept: {} lane by {} ({} verified, {} rejected; {}{usage})\n",
+                source.lane,
+                source.model,
+                source.findings,
+                source.rejected,
+                crate::caveats::revision(
+                    source.commit.as_deref(),
+                    source.cache_revision.as_deref(),
+                ),
             ));
         }
         // Learned the expensive way: a set of correct findings was re-graded
@@ -183,6 +235,14 @@ impl Merged {
                 source.lane,
                 source.model,
                 crate::caveats::salvaged(true)
+            ));
+        }
+
+        let rejected: usize = self.sources.iter().map(|source| source.rejected).sum();
+        if rejected > 0 {
+            out.push_str(&format!(
+                "  Caution: {rejected} rejected claims failed anchor verification. They are\n  \
+                 excluded from the verified findings and fix prompt.\n"
             ));
         }
 
@@ -256,6 +316,10 @@ impl Merged {
         crate::handoff::prompt(repo, &self.ranked, &skipped, self.sources.len())
     }
 }
+
+#[cfg(test)]
+#[path = "merge/metadata_tests.rs"]
+mod metadata_tests;
 
 #[cfg(test)]
 #[path = "merge/tests.rs"]

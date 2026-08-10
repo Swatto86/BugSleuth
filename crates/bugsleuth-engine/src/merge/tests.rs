@@ -257,6 +257,7 @@ fn a_multibyte_commit_truncation_does_not_panic() {
     let merged = Merged {
         ranked: vec![],
         sources: vec![],
+        scope: None,
         unswept: vec![],
         commits: vec![
             "aa\u{65e5}\u{672c}\u{8a9e}".to_string(),

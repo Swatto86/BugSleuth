@@ -493,6 +493,8 @@ rust limits::prose_tests::no_user_facing_string_carries_stray_indentation
 rust limits::tests::every_limit_is_a_statement_about_method_rather_than_a_hedge
 rust limits::tests::the_list_renders_one_bullet_per_limit
 rust limits::tests::the_unsandboxed_warning_says_what_is_and_is_not_contained
+rust merge::metadata_tests::rejected_findings_remain_visible_after_merge
+rust merge::metadata_tests::reports_of_different_scopes_are_not_merged_as_one_review
 rust merge::tests::a_complete_sweep_is_not_called_recovered
 rust merge::tests::a_failed_sweep_is_reported_as_unswept_and_never_counted_as_clean
 rust merge::tests::a_merged_report_of_an_unsandboxable_vendor_carries_the_caution_too

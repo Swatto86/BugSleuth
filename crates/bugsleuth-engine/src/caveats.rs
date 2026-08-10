@@ -43,6 +43,32 @@ pub(crate) fn salvaged(was_salvaged: bool) -> &'static str {
     }
 }
 
+/// Which revision a sweep describes, and whether that result was pinned to a
+/// clean tree. Shared by standalone and aggregate reports so an unpinned sweep
+/// cannot look safer merely because it was rendered through a different path.
+pub(crate) fn revision(commit: Option<&str>, cached: Option<&str>) -> String {
+    match (commit, cached) {
+        (Some(commit), Some(cached)) if commit == cached => {
+            format!("revision {}, pinned", short_revision(commit))
+        }
+        (Some(commit), Some(cached)) => format!(
+            "revision {}, cache pinned to {}",
+            short_revision(commit),
+            short_revision(cached)
+        ),
+        (Some(commit), None) => format!("revision {}, unpinned", short_revision(commit)),
+        (None, Some(cached)) => format!(
+            "revision not recorded, cache pinned to {}",
+            short_revision(cached)
+        ),
+        (None, None) => "revision not recorded, unpinned".to_owned(),
+    }
+}
+
+fn short_revision(revision: &str) -> String {
+    revision.chars().take(7).collect()
+}
+
 /// The caution owed when a vendor that cannot be sandboxed actually ran.
 ///
 /// Empty when none did — a caution printed on every report regardless is one
