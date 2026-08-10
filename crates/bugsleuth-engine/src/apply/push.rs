@@ -17,8 +17,11 @@
 //!   exactly the thing that cannot be taken back once it is public.
 
 use std::path::Path;
+use std::time::Duration;
 
-use super::{Baseline, observed::git};
+use crate::cancel::Cancel;
+
+use super::{Baseline, network, observed::git};
 
 /// What became of the request to push. Every variant is a normal outcome of a
 /// successful apply — the fixes are already committed either way, so a refusal
@@ -115,22 +118,29 @@ fn upstream_remote_ref(
 
 /// The single object ID the upstream ref currently points at on the remote, or
 /// a refusal when it cannot be read unambiguously.
-fn upstream_live_tip(
+async fn upstream_live_tip(
     repo: &Path,
     remote: &str,
     reference: &str,
     upstream: &str,
+    cancel: &Cancel,
+    timeout: Duration,
 ) -> Result<String, PushOutcome> {
-    git(repo, &["ls-remote", remote, reference])
+    network::git(repo, &["ls-remote", remote, reference], cancel, timeout)
+        .await
         .and_then(|value| {
             let mut ids = value
                 .lines()
                 .filter_map(|line| line.split_whitespace().next());
             let Some(id) = ids.next().filter(|id| !id.is_empty()) else {
-                anyhow::bail!("the upstream ref does not exist");
+                return Err(network::Error::Failed(
+                    "the upstream ref does not exist".to_string(),
+                ));
             };
             if ids.next().is_some() {
-                anyhow::bail!("git reported more than one upstream object ID");
+                return Err(network::Error::Failed(
+                    "git reported more than one upstream object ID".to_string(),
+                ));
             }
             Ok(id.to_string())
         })
@@ -142,11 +152,13 @@ fn upstream_live_tip(
 }
 
 /// Push the branch the apply committed on, if it may be pushed.
-pub(super) fn push(
+pub(super) async fn push(
     repo: &Path,
     base: &Baseline,
     commits: usize,
     attributed: &[String],
+    cancel: &Cancel,
+    timeout: Duration,
 ) -> PushOutcome {
     if let Some(stop) = blocked(commits, attributed) {
         return stop;
@@ -184,10 +196,11 @@ pub(super) fn push(
         Ok(location) => location,
         Err(refusal) => return refusal,
     };
-    let live_upstream_tip = match upstream_live_tip(repo, &remote, &reference, &upstream) {
-        Ok(tip) => tip,
-        Err(refusal) => return refusal,
-    };
+    let live_upstream_tip =
+        match upstream_live_tip(repo, &remote, &reference, &upstream, cancel, timeout).await {
+            Ok(tip) => tip,
+            Err(refusal) => return refusal,
+        };
 
     let Baseline::Commit(base) = base else {
         return PushOutcome::Refused(
@@ -223,18 +236,33 @@ pub(super) fn push(
         }
     };
 
-    match git(repo, &["-c", "push.default=upstream", "push"]) {
+    match network::git(
+        repo,
+        &["-c", "push.default=upstream", "push"],
+        cancel,
+        timeout,
+    )
+    .await
+    {
         Ok(_) => PushOutcome::Pushed {
             branch,
             upstream,
             remote,
+        },
+        Err(network::Error::Cancelled) => PushOutcome::Unknown {
+            branch,
+            upstream,
+            error: "publication was cancelled while git push was in flight; the remote may have accepted the update before the process was stopped"
+                .to_string(),
         },
         Err(error) => {
             // A push error only means the client got no success reply. The
             // update may already be on the remote, so re-read the ref before
             // calling it a failure.
             let before = Ok(Some(live_upstream_tip));
-            let after = super::remote::remote_oid(repo, &remote, &reference);
+            let after = super::remote::remote_oid(repo, &remote, &reference, cancel, timeout)
+                .await
+                .map_err(|error| error.to_string());
             match super::remote::classify(&before, &desired, &after) {
                 super::remote::UpdateAfterError::Landed => PushOutcome::Pushed {
                     branch,
@@ -255,3 +283,7 @@ pub(super) fn push(
 #[cfg(test)]
 #[path = "push/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "push/cancellation_tests.rs"]
+mod cancellation_tests;

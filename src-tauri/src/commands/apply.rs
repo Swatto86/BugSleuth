@@ -68,17 +68,11 @@ pub async fn apply_fixes(
             prompt: &prompt,
             timeout: APPLY_TIMEOUT,
             max_turns: APPLY_MAX_TURNS,
+            cancel: cancel.clone(),
             push: settings.push_after_apply,
             tag: settings.tag_release_after_push,
         });
-        let report = tokio::select! {
-            biased;
-            () = cancel.cancelled() => Err(anyhow::anyhow!(
-                "the apply was stopped. The model was killed part-way through editing the \
-                 repository — check `git status` and `git log` to see what it had already changed."
-            )),
-            report = request => report,
-        };
+        let report = request.await;
 
         let payload = match report {
             Ok(report) => serde_json::json!({

@@ -9,11 +9,12 @@
 use super::*;
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
 // git is not optional here. The engine cannot apply anything without it, so a
 // missing git is a broken environment rather than a reason to pass quietly —
 // skipping would turn every assertion below into one nobody has ever watched.
-fn git_ok(dir: &Path, args: &[&str]) -> String {
+pub(super) fn git_ok(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
         .args(args)
         .current_dir(dir)
@@ -28,7 +29,7 @@ fn git_ok(dir: &Path, args: &[&str]) -> String {
 }
 
 /// A throwaway directory, unique per call so tests may run in parallel.
-fn scratch(tag: &str) -> std::path::PathBuf {
+pub(super) fn scratch(tag: &str) -> std::path::PathBuf {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("bugsleuth-push-{tag}-{}-{n}", std::process::id()));
@@ -39,7 +40,7 @@ fn scratch(tag: &str) -> std::path::PathBuf {
 
 /// A working repository with one commit, and its identity configured so
 /// committing works on a machine with no global git config (CI).
-fn repo_with_a_commit(tag: &str) -> std::path::PathBuf {
+pub(super) fn repo_with_a_commit(tag: &str) -> std::path::PathBuf {
     let dir = scratch(tag);
     git_ok(&dir, &["init", "-q"]);
     git_ok(&dir, &["config", "user.email", "t@example.com"]);
@@ -51,7 +52,7 @@ fn repo_with_a_commit(tag: &str) -> std::path::PathBuf {
 }
 
 /// `repo` with a bare remote beside it, already set as the branch's upstream.
-fn with_upstream(repo: &Path, tag: &str) -> std::path::PathBuf {
+pub(super) fn with_upstream(repo: &Path, tag: &str) -> std::path::PathBuf {
     let remote = scratch(tag);
     git_ok(&remote, &["init", "-q", "--bare"]);
     git_ok(
@@ -64,8 +65,25 @@ fn with_upstream(repo: &Path, tag: &str) -> std::path::PathBuf {
 }
 
 /// What the remote believes the branch points at.
-fn remote_head(remote: &Path, branch: &str) -> String {
+pub(super) fn remote_head(remote: &Path, branch: &str) -> String {
     git_ok(remote, &["rev-parse", &format!("refs/heads/{branch}")])
+}
+
+async fn push_now(
+    repo: &Path,
+    base: &Baseline,
+    commits: usize,
+    attributed: &[String],
+) -> PushOutcome {
+    push(
+        repo,
+        base,
+        commits,
+        attributed,
+        &crate::cancel::Cancel::new(),
+        Duration::from_secs(10),
+    )
+    .await
 }
 
 #[test]
@@ -102,13 +120,13 @@ fn a_clean_apply_with_commits_is_publishable() {
     assert_eq!(blocked(3, &[]), None);
 }
 
-#[test]
-fn a_detached_head_is_refused_because_there_is_no_branch_to_push() {
+#[tokio::test]
+async fn a_detached_head_is_refused_because_there_is_no_branch_to_push() {
     let repo = repo_with_a_commit("detached");
     let head = git_ok(&repo, &["rev-parse", "HEAD"]);
     git_ok(&repo, &["checkout", "-q", "--detach", &head]);
 
-    let outcome = push(&repo, &Baseline::Commit(head), 1, &[]);
+    let outcome = push_now(&repo, &Baseline::Commit(head), 1, &[]).await;
     let PushOutcome::Refused(reason) = &outcome else {
         panic!("a detached HEAD was pushed: {outcome:?}");
     };
@@ -116,19 +134,20 @@ fn a_detached_head_is_refused_because_there_is_no_branch_to_push() {
     let _ = std::fs::remove_dir_all(&repo);
 }
 
-#[test]
-fn a_branch_with_no_upstream_is_left_alone() {
+#[tokio::test]
+async fn a_branch_with_no_upstream_is_left_alone() {
     // No remote is configured at all, so there is nowhere it has been agreed to
     // publish. Guessing "origin" here is how a private branch reaches a shared
     // remote for the first time without anyone asking for it.
     let repo = repo_with_a_commit("no-upstream");
 
-    let outcome = push(
+    let outcome = push_now(
         &repo,
         &Baseline::Commit(git_ok(&repo, &["rev-parse", "HEAD"])),
         1,
         &[],
-    );
+    )
+    .await;
     let PushOutcome::Refused(reason) = &outcome else {
         panic!("a branch with no upstream was pushed: {outcome:?}");
     };
@@ -137,8 +156,8 @@ fn a_branch_with_no_upstream_is_left_alone() {
     let _ = std::fs::remove_dir_all(&repo);
 }
 
-#[test]
-fn the_commits_actually_reach_the_remote() {
+#[tokio::test]
+async fn the_commits_actually_reach_the_remote() {
     // The wiring test. Everything above proves a decision; this proves the
     // command we build out of that decision moves commits to a remote that can
     // be inspected afterwards.
@@ -153,7 +172,7 @@ fn the_commits_actually_reach_the_remote() {
     let local = git_ok(&repo, &["rev-parse", "HEAD"]);
     assert_ne!(local, before, "the test did not create a new commit");
 
-    let outcome = push(&repo, &Baseline::Commit(before), 1, &[]);
+    let outcome = push_now(&repo, &Baseline::Commit(before), 1, &[]).await;
     assert_eq!(
         outcome,
         PushOutcome::Pushed {
@@ -173,8 +192,8 @@ fn the_commits_actually_reach_the_remote() {
     let _ = std::fs::remove_dir_all(&remote);
 }
 
-#[test]
-fn commits_that_predate_the_apply_are_not_published() {
+#[tokio::test]
+async fn commits_that_predate_the_apply_are_not_published() {
     let repo = repo_with_a_commit("predates");
     let remote = with_upstream(&repo, "predates-remote");
     let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
@@ -188,7 +207,7 @@ fn commits_that_predate_the_apply_are_not_published() {
     git_ok(&repo, &["add", "-A"]);
     git_ok(&repo, &["commit", "-qm", "the fix"]);
 
-    let outcome = push(&repo, &Baseline::Commit(base), 1, &[]);
+    let outcome = push_now(&repo, &Baseline::Commit(base), 1, &[]).await;
     assert!(
         matches!(outcome, PushOutcome::Refused(_)),
         "the unrelated commit was publishable: {outcome:?}"
@@ -199,8 +218,8 @@ fn commits_that_predate_the_apply_are_not_published() {
     let _ = std::fs::remove_dir_all(&remote);
 }
 
-#[test]
-fn only_the_branch_that_was_applied_to_is_published() {
+#[tokio::test]
+async fn only_the_branch_that_was_applied_to_is_published() {
     // `push.default = matching` is git's old default and is still set in plenty
     // of long-lived configs. Under it a bare `git push` publishes *every* local
     // branch whose name matches one on the remote — so fixing a defect on one
@@ -232,7 +251,7 @@ fn only_the_branch_that_was_applied_to_is_published() {
     let ours = git_ok(&repo, &["rev-parse", "HEAD"]);
 
     let base = git_ok(&repo, &["rev-parse", "HEAD~1"]);
-    let outcome = push(&repo, &Baseline::Commit(base), 1, &[]);
+    let outcome = push_now(&repo, &Baseline::Commit(base), 1, &[]).await;
     assert!(
         matches!(outcome, PushOutcome::Pushed { .. }),
         "the push did not succeed: {outcome:?}"
@@ -252,8 +271,8 @@ fn only_the_branch_that_was_applied_to_is_published() {
     let _ = std::fs::remove_dir_all(&remote);
 }
 
-#[test]
-fn a_rejected_push_is_reported_rather_than_forced() {
+#[tokio::test]
+async fn a_rejected_push_is_reported_rather_than_forced() {
     // The remote moves on underneath us, so a plain push is refused as a
     // non-fast-forward. The tool must report that and stop: recovering means a
     // rebase or a force, and a force here would discard whatever the other
@@ -288,7 +307,7 @@ fn a_rejected_push_is_reported_rather_than_forced() {
     git_ok(&repo, &["commit", "-qm", "the fix"]);
 
     let base = git_ok(&repo, &["rev-parse", "HEAD~1"]);
-    let outcome = push(&repo, &Baseline::Commit(base), 1, &[]);
+    let outcome = push_now(&repo, &Baseline::Commit(base), 1, &[]).await;
     let PushOutcome::Refused(reason) = &outcome else {
         panic!("a branch whose upstream moved was not refused: {outcome:?}");
     };
@@ -304,8 +323,8 @@ fn a_rejected_push_is_reported_rather_than_forced() {
     }
 }
 
-#[test]
-fn a_confirmed_rejection_is_reported_as_failed_not_unknown() {
+#[tokio::test]
+async fn a_confirmed_rejection_is_reported_as_failed_not_unknown() {
     // The remote is readable and confirmed unchanged after the push errored, so
     // this is a genuine rejection rather than an ambiguous one — Failed, not
     // Unknown, and the branch on the remote must not have moved.
@@ -328,7 +347,7 @@ fn a_confirmed_rejection_is_reported_as_failed_not_unknown() {
     git_ok(&repo, &["add", "-A"]);
     git_ok(&repo, &["commit", "-qm", "the fix"]);
 
-    let outcome = push(&repo, &Baseline::Commit(base.clone()), 1, &[]);
+    let outcome = push_now(&repo, &Baseline::Commit(base.clone()), 1, &[]).await;
     let PushOutcome::Failed(reason) = &outcome else {
         panic!("a confirmed rejection was not reported as failed: {outcome:?}");
     };

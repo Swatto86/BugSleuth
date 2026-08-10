@@ -12,8 +12,11 @@
 //! remote cannot be read — it is genuinely unknown and must not be retried.
 
 use std::path::Path;
+use std::time::Duration;
 
-use super::observed::git;
+use crate::cancel::Cancel;
+
+use super::network;
 
 /// What a remote ref shows after a push returned an error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,12 +54,14 @@ pub(super) fn classify(
 ///
 /// The peeled `^{}` line an annotated tag adds is skipped, so a tag ref resolves
 /// to its single tag-object ID rather than being seen as two objects.
-pub(super) fn remote_oid(
+pub(super) async fn remote_oid(
     repo: &Path,
     remote: &str,
     reference: &str,
-) -> Result<Option<String>, String> {
-    let listing = git(repo, &["ls-remote", remote, reference]).map_err(|e| e.to_string())?;
+    cancel: &Cancel,
+    timeout: Duration,
+) -> Result<Option<String>, network::Error> {
+    let listing = network::git(repo, &["ls-remote", remote, reference], cancel, timeout).await?;
     let mut ids = listing.lines().filter_map(|line| {
         let mut parts = line.split_whitespace();
         let oid = parts.next()?;
@@ -68,9 +73,9 @@ pub(super) fn remote_oid(
     });
     let first = ids.next();
     if ids.next().is_some() {
-        return Err(format!(
+        return Err(network::Error::Failed(format!(
             "{remote} reported more than one object for {reference}"
-        ));
+        )));
     }
     Ok(first)
 }

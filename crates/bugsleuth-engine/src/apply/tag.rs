@@ -21,8 +21,11 @@
 //! so nothing is guessed for it.
 
 use std::path::Path;
+use std::time::Duration;
 
-use super::observed::git;
+use crate::cancel::Cancel;
+
+use super::{network, observed::git};
 
 /// What became of the request to tag. Like [`super::PushOutcome`], every variant
 /// is a normal outcome — the fixes are committed and published either way, so a
@@ -90,7 +93,13 @@ fn blocked(pushed: bool) -> Option<TagOutcome> {
 /// itself rather than re-derived by splitting an `upstream` display string on
 /// '/' — a remote name may itself contain a slash, and splitting sent the tag to
 /// the wrong place. If the commits went to a fork, so does the tag.
-pub(super) fn tag(repo: &Path, pushed: bool, remote: &str) -> TagOutcome {
+pub(super) async fn tag(
+    repo: &Path,
+    pushed: bool,
+    remote: &str,
+    cancel: &Cancel,
+    timeout: Duration,
+) -> TagOutcome {
     if let Some(stop) = blocked(pushed) {
         return stop;
     }
@@ -154,12 +163,27 @@ pub(super) fn tag(repo: &Path, pushed: bool, remote: &str) -> TagOutcome {
     // this is refused too. A remote that cannot be read is not treated as a
     // collision; the local check above already ran.
     let reference = format!("refs/tags/{next}");
-    let remote_before = super::remote::remote_oid(repo, remote, &reference);
+    let remote_before =
+        match super::remote::remote_oid(repo, remote, &reference, cancel, timeout).await {
+            Ok(oid) => Ok(oid),
+            Err(network::Error::Failed(error)) => Err(error),
+            Err(network::Error::Cancelled) => {
+                return TagOutcome::Refused(
+                    "publication was cancelled before the release tag was created".to_string(),
+                );
+            }
+        };
     if let Ok(Some(_)) = &remote_before {
         return TagOutcome::Refused(format!(
             "{next} already exists on {remote}, so nothing was tagged. Moving a published tag \
              repoints whatever release was built from it."
         ));
+    }
+
+    if cancel.stopped() {
+        return TagOutcome::Refused(
+            "publication was cancelled before the release tag was created".to_string(),
+        );
     }
 
     // Annotated, not lightweight: `git describe` and most release tooling only
@@ -172,48 +196,65 @@ pub(super) fn tag(repo: &Path, pushed: bool, remote: &str) -> TagOutcome {
         return TagOutcome::Failed(error.to_string());
     }
 
-    // The tag object a successful push would place on the remote.
-    let desired = match git(repo, &["rev-parse", &next]) {
+    publish_tag(repo, remote, &next, remote_before, cancel, timeout).await
+}
+
+async fn publish_tag(
+    repo: &Path,
+    remote: &str,
+    tag: &str,
+    remote_before: Result<Option<String>, String>,
+    cancel: &Cancel,
+    timeout: Duration,
+) -> TagOutcome {
+    let desired = match git(repo, &["rev-parse", tag]) {
         Ok(id) if !id.trim().is_empty() => id.trim().to_string(),
         _ => {
-            let _ = git(repo, &["tag", "-d", &next]);
-            return TagOutcome::Failed(format!("could not resolve the new tag {next}"));
+            let _ = git(repo, &["tag", "-d", tag]);
+            return TagOutcome::Failed(format!("could not resolve the new tag {tag}"));
         }
     };
 
-    // By name, never `--tags`. `git push --tags` publishes every local tag,
-    // including private backup tags that were deliberately never pushed — one
-    // bulk push republished history that had been deliberately squashed away.
-    match git(repo, &["push", remote, &next]) {
+    // By name, never `--tags`: bulk publication can expose private backup tags.
+    match network::git(repo, &["push", remote, tag], cancel, timeout).await {
         Ok(_) => TagOutcome::Tagged {
-            tag: next,
+            tag: tag.to_string(),
             remote: remote.to_string(),
+        },
+        Err(network::Error::Cancelled) => TagOutcome::Unknown {
+            tag: tag.to_string(),
+            remote: remote.to_string(),
+            error: "publication was cancelled while the tag push was in flight; the remote may have accepted the tag before the process was stopped"
+                .to_string(),
         },
         Err(error) => {
             // A push error only means the client got no success reply. The tag
             // may already be on the remote and the release already running, so
             // re-read the ref before deciding — and never delete the local tag
             // unless the remote is confirmed to have stayed unchanged.
-            let after = super::remote::remote_oid(repo, remote, &reference);
+            let reference = format!("refs/tags/{tag}");
+            let after = super::remote::remote_oid(repo, remote, &reference, cancel, timeout)
+                .await
+                .map_err(|error| error.to_string());
             match super::remote::classify(&remote_before, &desired, &after) {
                 super::remote::UpdateAfterError::Landed => TagOutcome::Tagged {
-                    tag: next,
+                    tag: tag.to_string(),
                     remote: remote.to_string(),
                 },
                 super::remote::UpdateAfterError::Rejected => {
                     // Confirmed absent on the remote: safe to remove the local
                     // tag so a retry is not blocked by the collision check.
-                    let cleanup = git(repo, &["tag", "-d", &next]);
+                    let cleanup = git(repo, &["tag", "-d", tag]);
                     match cleanup {
                         Ok(_) => TagOutcome::Failed(error.to_string()),
                         Err(cleanup_error) => TagOutcome::Failed(format!(
-                            "{error}; and the local tag {next} could not be removed afterward: \
+                            "{error}; and the local tag {tag} could not be removed afterward: \
                              {cleanup_error}"
                         )),
                     }
                 }
                 super::remote::UpdateAfterError::Unknown => TagOutcome::Unknown {
-                    tag: next,
+                    tag: tag.to_string(),
                     remote: remote.to_string(),
                     error: error.to_string(),
                 },
@@ -225,3 +266,7 @@ pub(super) fn tag(repo: &Path, pushed: bool, remote: &str) -> TagOutcome {
 #[cfg(test)]
 #[path = "tag/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tag/test_support.rs"]
+mod test_support;

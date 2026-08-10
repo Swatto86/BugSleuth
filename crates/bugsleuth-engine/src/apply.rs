@@ -25,6 +25,7 @@ use anyhow::Context;
 use crate::sweep::Vendor;
 
 mod attribution;
+mod network;
 mod observed;
 mod push;
 mod remote;
@@ -62,6 +63,8 @@ pub struct ApplyRequest<'a> {
     pub timeout: Duration,
     /// Turn ceiling, for the vendor that has one.
     pub max_turns: u32,
+    /// Stops the provider and any in-flight remote publication.
+    pub cancel: crate::cancel::Cancel,
     /// Push what the model committed to the branch's existing upstream.
     ///
     /// Off unless the user turned it on. Everything else an apply does is
@@ -146,38 +149,12 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     let base = baseline(repo)?;
 
     let (vendor, model) = Vendor::parse(request.model);
-    let attempt = match vendor {
-        Vendor::Claude => {
-            bugsleuth_provider::claude::apply(bugsleuth_provider::claude::ApplyRequest {
-                repo,
-                model,
-                effort: request.effort,
-                prompt: request.prompt,
-                timeout: request.timeout,
-                max_turns: request.max_turns,
-            })
-            .await
-        }
-        Vendor::Codex => {
-            bugsleuth_provider::codex::apply(
-                repo,
-                model,
-                request.effort,
-                request.prompt,
-                request.timeout,
-            )
-            .await
-        }
-        Vendor::Kilo => {
-            bugsleuth_provider::kilo::apply(
-                repo,
-                model,
-                request.effort,
-                request.prompt,
-                request.timeout,
-            )
-            .await
-        }
+    let provider = run_provider(&request, vendor, model);
+    tokio::pin!(provider);
+    let attempt = tokio::select! {
+        biased;
+        () = request.cancel.cancelled() => anyhow::bail!(cancelled_message()),
+        attempt = &mut provider => attempt,
     };
 
     // A failure is not "nothing happened". The invocation is killed on timeout
@@ -204,6 +181,9 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     // between a tool that quietly forks published history and one that says
     // "these two are yours to deal with". An unborn baseline is included: its
     // initial commit must not escape both the stripping and the report.
+    if request.cancel.stopped() {
+        anyhow::bail!(cancelled_message());
+    }
     let (stripped, attributed) = match strip_attribution(repo, &base) {
         Ok(stripped) => (stripped, vec![]),
         // Stripping was refused (published history, or a detached HEAD) — report
@@ -224,6 +204,9 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     // failure here is not an empty repository — it means the repository could
     // not be inspected at all, so the report must not claim "nothing changed"
     // and nothing may be published. The same values feed the report below.
+    if request.cancel.stopped() {
+        anyhow::bail!(cancelled_message());
+    }
     let changed_files = changed_since(repo, &base).with_context(|| {
         "the model finished, but BugSleuth could not determine what changed in your repository; \
          inspect it manually — nothing was pushed or tagged"
@@ -236,15 +219,28 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     // After stripping, deliberately: the trailers come off before anything is
     // published, and `attributed` is what stripping could not reach — which is
     // itself a reason to refuse the push rather than to publish and mention it.
-    let pushed = if request.push {
-        push::push(repo, &base, commits, &attributed)
+    let pushed = if request.push && request.cancel.stopped() {
+        PushOutcome::Refused("publication was cancelled before the push started".to_string())
+    } else if request.push {
+        push::push(
+            repo,
+            &base,
+            commits,
+            &attributed,
+            &request.cancel,
+            request.timeout,
+        )
+        .await
     } else {
         PushOutcome::NotRequested
     };
 
     let tagged = match to_tag(request.tag, &pushed) {
-        Some(remote) => tag::tag(repo, true, remote),
-        None if request.tag => tag::tag(repo, false, ""),
+        Some(_) if request.cancel.stopped() => {
+            TagOutcome::Refused("publication was cancelled before tagging started".to_string())
+        }
+        Some(remote) => tag::tag(repo, true, remote, &request.cancel, request.timeout).await,
+        None if request.tag => tag::tag(repo, false, "", &request.cancel, request.timeout).await,
         None => TagOutcome::NotRequested,
     };
 
@@ -257,6 +253,50 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         push: pushed,
         tag: tagged,
     })
+}
+
+async fn run_provider(
+    request: &ApplyRequest<'_>,
+    vendor: Vendor,
+    model: &str,
+) -> Result<String, bugsleuth_provider::ProviderError> {
+    match vendor {
+        Vendor::Claude => {
+            bugsleuth_provider::claude::apply(bugsleuth_provider::claude::ApplyRequest {
+                repo: request.repo,
+                model,
+                effort: request.effort,
+                prompt: request.prompt,
+                timeout: request.timeout,
+                max_turns: request.max_turns,
+            })
+            .await
+        }
+        Vendor::Codex => {
+            bugsleuth_provider::codex::apply(
+                request.repo,
+                model,
+                request.effort,
+                request.prompt,
+                request.timeout,
+            )
+            .await
+        }
+        Vendor::Kilo => {
+            bugsleuth_provider::kilo::apply(
+                request.repo,
+                model,
+                request.effort,
+                request.prompt,
+                request.timeout,
+            )
+            .await
+        }
+    }
+}
+
+fn cancelled_message() -> &'static str {
+    "the apply was stopped. The model was killed part-way through editing the repository — check `git status` and `git log` to see what it had already changed."
 }
 
 /// The upstream a tag may be published to, or `None` when this must not be

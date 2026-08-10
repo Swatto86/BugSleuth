@@ -12,6 +12,9 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 
+mod tree;
+use tree::KillTree;
+
 /// Per-stream memory ceiling. An agentic CLI on a large repo can emit a lot of
 /// stream-json; past this we keep reading (so the child never blocks on a full
 /// pipe) but stop retaining.
@@ -90,6 +93,19 @@ pub struct Invocation<'a> {
 /// Non-zero exit is *not* an error here — the caller decides, because some CLIs
 /// report a usable result alongside a non-zero code.
 pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> {
+    run_inner(invocation, false).await
+}
+
+/// Run a subprocess in an isolated process group where the platform supports
+/// it, so dropping this future also terminates helpers it started.
+pub async fn run_with_process_group(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> {
+    run_inner(invocation, true).await
+}
+
+async fn run_inner(
+    invocation: Invocation<'_>,
+    isolate_process_group: bool,
+) -> Result<CliOutput, ProcessError> {
     let mut command = Command::new(invocation.binary);
     command
         .args(invocation.args)
@@ -104,6 +120,7 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
         command.env(key, value);
     }
     no_console_window(&mut command);
+    tree::prepare(&mut command, isolate_process_group);
 
     let mut child = command.spawn().map_err(|source| ProcessError::Spawn {
         binary: invocation.binary.to_string(),
@@ -112,7 +129,7 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
     // Declared *after* `child`, so it runs first when this function unwinds: a
     // tree can only be walked from a process that is still alive, and dropping
     // `child` kills the one at the top of it.
-    let mut tree = KillTree(child.id());
+    let mut tree = KillTree::new(child.id(), isolate_process_group);
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -195,74 +212,6 @@ pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> 
         }
     }
 }
-
-/// Kills a spawned process *and everything it started*, however this function
-/// leaves — timeout, cancellation, or an error on the way out.
-///
-/// `Child::kill` and `kill_on_drop` reach only the process we spawned, which on
-/// Windows is the `cmd.exe` running an npm shim: the CLI doing the work is two
-/// levels below it. Measured on 2026-08-06 — a sweep killed at its 45s timeout
-/// left `kilo.exe` and two language servers running seven minutes later, holding
-/// open the throwaway worktree the caller then tries to delete.
-///
-/// Armed only while the child might still be running. A pid the OS has already
-/// reaped can have been handed to somebody else by the time this fires, and
-/// killing a stranger's process tree is a worse bug than the one being fixed.
-struct KillTree(Option<u32>);
-
-impl KillTree {
-    /// Kill now, and not again.
-    fn fire(&mut self) {
-        if let Some(pid) = self.0.take() {
-            kill_tree(pid);
-        }
-    }
-
-    /// The child has been reaped; its pid is no longer ours to signal.
-    fn disarm(&mut self) {
-        self.0 = None;
-    }
-}
-
-impl Drop for KillTree {
-    fn drop(&mut self) {
-        self.fire();
-    }
-}
-
-/// `taskkill /T` walks the process tree downwards from `pid`, so `pid` has to be
-/// alive when it runs — killing the direct child first orphans the rest and
-/// leaves nothing to walk from.
-///
-/// The platform's own tool rather than a job object because this workspace
-/// forbids `unsafe`, and a job object cannot be created without FFI.
-///
-/// **Waited on, not spawned.** Fire-and-forget loses the race it exists to win:
-/// the caller kills the child immediately afterwards, `taskkill` then finds
-/// nothing at that pid, and the tree below it survives — which is what the test
-/// for this caught. A blocking wait of a few tens of milliseconds is the price,
-/// paid only when something is being killed. `std` rather than `tokio` because
-/// this is called from `Drop` too, where there is nothing to await with.
-#[cfg(windows)]
-fn kill_tree(pid: u32) {
-    use std::os::windows::process::CommandExt;
-
-    let _ = std::process::Command::new("taskkill")
-        .args(["/T", "/F", "/PID", &pid.to_string()])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
-}
-
-/// Nothing to do: every other platform is handed the CLI's own executable to
-/// spawn, so the direct kill already reaches it — there is no shell shim in
-/// between. ponytail: a CLI that spawns helpers of its own can still leak them
-/// here; the fix is a process group per child, which costs Ctrl-C reaching the
-/// child from a terminal.
-#[cfg(not(windows))]
-fn kill_tree(_pid: u32) {}
 
 /// Windows' "start this console program without a console window".
 ///

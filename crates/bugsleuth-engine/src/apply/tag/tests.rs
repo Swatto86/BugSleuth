@@ -6,72 +6,19 @@
 //! triggers no workflow at all — and that failure is invisible to any test that
 //! only inspects the decision.
 
+use super::test_support::{git_ok, published, published_on, remote_tags};
 use super::*;
-use std::process::Command;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
-fn git_ok(dir: &Path, args: &[&str]) -> String {
-    let out = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .unwrap_or_else(|e| panic!("git {args:?} could not run: {e}"));
-    assert!(
-        out.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    String::from_utf8_lossy(&out.stdout).trim().to_string()
-}
-
-fn scratch(tag: &str) -> std::path::PathBuf {
-    static NEXT: AtomicU32 = AtomicU32::new(0);
-    let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("bugsleuth-tag-{tag}-{}-{n}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("a scratch directory");
-    dir
-}
-
-/// A repository with one commit and a bare remote it already pushes to — the
-/// state this code only ever runs in, since it runs after a successful push.
-///
-/// Returns the exact remote name (`origin`), which is what `tag` now receives —
-/// the push threads the real remote through rather than a `remote/branch`
-/// display string for `tag` to split.
-fn published(tag: &str) -> (std::path::PathBuf, std::path::PathBuf, String) {
-    published_on(tag, "origin")
-}
-
-/// Like [`published`], but with a remote whose name you choose — used to prove a
-/// slash in the remote name is not mistaken for the `remote/branch` separator.
-fn published_on(tag: &str, remote_name: &str) -> (std::path::PathBuf, std::path::PathBuf, String) {
-    let repo = scratch(tag);
-    git_ok(&repo, &["init", "-q"]);
-    git_ok(&repo, &["config", "user.email", "t@example.com"]);
-    git_ok(&repo, &["config", "user.name", "Tester"]);
-    std::fs::write(repo.join("a.txt"), "one\n").expect("write");
-    git_ok(&repo, &["add", "-A"]);
-    git_ok(&repo, &["commit", "-qm", "first"]);
-
-    let remote = scratch(&format!("{tag}-remote"));
-    git_ok(&remote, &["init", "-q", "--bare"]);
-    git_ok(
-        &repo,
-        &["remote", "add", remote_name, &remote.to_string_lossy()],
-    );
-    let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
-    git_ok(&repo, &["push", "-q", "-u", remote_name, &branch]);
-    (repo, remote, remote_name.to_string())
-}
-
-/// Every tag the remote actually has.
-fn remote_tags(remote: &Path) -> Vec<String> {
-    git_ok(remote, &["tag", "--list"])
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
-        .collect()
+async fn tag_now(repo: &Path, pushed: bool, remote: &str) -> TagOutcome {
+    tag(
+        repo,
+        pushed,
+        remote,
+        &crate::cancel::Cancel::new(),
+        Duration::from_secs(10),
+    )
+    .await
 }
 
 #[test]
@@ -112,11 +59,11 @@ fn nothing_is_tagged_when_the_commits_were_never_published() {
     assert_eq!(blocked(true), None);
 }
 
-#[test]
-fn a_branch_with_no_release_tag_has_no_scheme_to_follow() {
+#[tokio::test]
+async fn a_branch_with_no_release_tag_has_no_scheme_to_follow() {
     let (repo, remote, remote_name) = published("unversioned");
 
-    let outcome = tag(&repo, true, &remote_name);
+    let outcome = tag_now(&repo, true, &remote_name).await;
     let TagOutcome::Refused(reason) = &outcome else {
         panic!("a repository with no tags invented a version: {outcome:?}");
     };
@@ -131,8 +78,8 @@ fn a_branch_with_no_release_tag_has_no_scheme_to_follow() {
     }
 }
 
-#[test]
-fn a_tag_on_another_branch_is_never_moved() {
+#[tokio::test]
+async fn a_tag_on_another_branch_is_never_moved() {
     // The collision that actually reaches this code. The tag list is filtered
     // to `--merged HEAD`, so a release tagged on a branch this one does not
     // contain is invisible when the next version is worked out — and the name
@@ -160,7 +107,7 @@ fn a_tag_on_another_branch_is_never_moved() {
     git_ok(&repo, &["commit", "-qm", "the fix"]);
     git_ok(&repo, &["push", "-q"]);
 
-    let outcome = tag(&repo, true, &remote_name);
+    let outcome = tag_now(&repo, true, &remote_name).await;
     let TagOutcome::Refused(reason) = &outcome else {
         panic!("an existing tag was reused: {outcome:?}");
     };
@@ -181,8 +128,8 @@ fn a_tag_on_another_branch_is_never_moved() {
     }
 }
 
-#[test]
-fn the_tag_reaches_the_remote_and_points_at_the_fixes() {
+#[tokio::test]
+async fn the_tag_reaches_the_remote_and_points_at_the_fixes() {
     // The wiring test. Everything above proves a decision; this proves the tag
     // actually lands on the remote, on the right commit — which is the only
     // thing that makes CI build a release at all.
@@ -196,7 +143,7 @@ fn the_tag_reaches_the_remote_and_points_at_the_fixes() {
     git_ok(&repo, &["push", "-q"]);
     let head = git_ok(&repo, &["rev-parse", "HEAD"]);
 
-    let outcome = tag(&repo, true, &remote_name);
+    let outcome = tag_now(&repo, true, &remote_name).await;
     assert_eq!(
         outcome,
         TagOutcome::Tagged {
@@ -222,8 +169,8 @@ fn the_tag_reaches_the_remote_and_points_at_the_fixes() {
     }
 }
 
-#[test]
-fn slash_in_remote_name_does_not_redirect_release_tag() {
+#[tokio::test]
+async fn slash_in_remote_name_does_not_redirect_release_tag() {
     // Git allows a remote named `team/origin`. The tag path used to split the
     // upstream `team/origin/branch` on '/' and derive the non-existent remote
     // `team`, so the release never fired; the exact remote the push used must
@@ -237,13 +184,21 @@ fn slash_in_remote_name_does_not_redirect_release_tag() {
     git_ok(&repo, &["commit", "-qm", "fix: the defect"]);
 
     // The push must report the exact remote, and the tag must use it verbatim.
-    let pushed = super::super::push::push(&repo, &super::super::Baseline::Commit(base), 1, &[]);
+    let pushed = super::super::push::push(
+        &repo,
+        &super::super::Baseline::Commit(base),
+        1,
+        &[],
+        &crate::cancel::Cancel::new(),
+        Duration::from_secs(10),
+    )
+    .await;
     let super::super::PushOutcome::Pushed { remote: got, .. } = &pushed else {
         panic!("the fix was not pushed: {pushed:?}");
     };
     assert_eq!(got, &remote_name, "the push lost the exact remote");
 
-    let outcome = tag(&repo, true, got);
+    let outcome = tag_now(&repo, true, got).await;
     assert_eq!(
         outcome,
         TagOutcome::Tagged {
@@ -262,8 +217,8 @@ fn slash_in_remote_name_does_not_redirect_release_tag() {
     }
 }
 
-#[test]
-fn only_the_release_tag_is_published() {
+#[tokio::test]
+async fn only_the_release_tag_is_published() {
     // `git push --tags` sends every local tag, including private backup tags
     // that were deliberately never pushed. One bulk push republished history
     // that had been squashed away on purpose.
@@ -280,7 +235,7 @@ fn only_the_release_tag_is_published() {
     git_ok(&repo, &["commit", "-qm", "fix: the defect"]);
     git_ok(&repo, &["push", "-q"]);
 
-    let outcome = tag(&repo, true, &remote_name);
+    let outcome = tag_now(&repo, true, &remote_name).await;
     assert!(
         matches!(outcome, TagOutcome::Tagged { .. }),
         "the tag was not published: {outcome:?}"
@@ -301,8 +256,8 @@ fn only_the_release_tag_is_published() {
     }
 }
 
-#[test]
-fn an_unreadable_remote_after_a_failed_tag_push_is_unknown_and_keeps_the_tag() {
+#[tokio::test]
+async fn an_unreadable_remote_after_a_failed_tag_push_is_unknown_and_keeps_the_tag() {
     // A push error only means the client got no acknowledgement. If the remote
     // then cannot be read, whether the tag — and the release — landed is
     // genuinely unknown, so the local tag is kept rather than deleted and the
@@ -314,7 +269,7 @@ fn an_unreadable_remote_after_a_failed_tag_push_is_unknown_and_keeps_the_tag() {
     // The remote goes away, so both the push and the reconciliation read fail.
     std::fs::remove_dir_all(&remote).expect("remove the remote");
 
-    let outcome = tag(&repo, true, &remote_name);
+    let outcome = tag_now(&repo, true, &remote_name).await;
     let TagOutcome::Unknown { tag, .. } = &outcome else {
         panic!("an unconfirmable tag push was not reported as unknown: {outcome:?}");
     };
@@ -328,8 +283,8 @@ fn an_unreadable_remote_after_a_failed_tag_push_is_unknown_and_keeps_the_tag() {
     let _ = std::fs::remove_dir_all(&repo);
 }
 
-#[test]
-fn a_confirmed_rejection_reports_failure_and_removes_the_local_tag() {
+#[tokio::test]
+async fn a_confirmed_rejection_reports_failure_and_removes_the_local_tag() {
     // When the remote is readable and the tag is confirmed still absent after a
     // failed push, that is a genuine rejection: reported as failed, and the
     // local tag removed so a retry is not blocked by the collision check.
@@ -348,7 +303,7 @@ fn a_confirmed_rejection_reports_failure_and_removes_the_local_tag() {
         std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).expect("chmod");
     }
 
-    let outcome = tag(&repo, true, &remote_name);
+    let outcome = tag_now(&repo, true, &remote_name).await;
     let TagOutcome::Failed(reason) = &outcome else {
         panic!("a confirmed rejection was not reported as failed: {outcome:?}");
     };
@@ -368,8 +323,8 @@ fn a_confirmed_rejection_reports_failure_and_removes_the_local_tag() {
     }
 }
 
-#[test]
-fn a_tag_already_on_the_remote_is_refused_even_when_absent_locally() {
+#[tokio::test]
+async fn a_tag_already_on_the_remote_is_refused_even_when_absent_locally() {
     // Another machine may have published the next version. Tagging over it would
     // repoint a release, so a name already on the remote is refused even when
     // this checkout has never seen it.
@@ -383,7 +338,7 @@ fn a_tag_already_on_the_remote_is_refused_even_when_absent_locally() {
     git_ok(&repo, &["push", "-q", "origin", "v1.0.1"]);
     git_ok(&repo, &["tag", "-d", "v1.0.1"]);
 
-    let outcome = tag(&repo, true, &remote_name);
+    let outcome = tag_now(&repo, true, &remote_name).await;
     let TagOutcome::Refused(reason) = &outcome else {
         panic!("a remote tag collision was not refused: {outcome:?}");
     };

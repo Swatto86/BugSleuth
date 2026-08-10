@@ -99,6 +99,7 @@ async fn a_repository_without_git_is_refused_before_anything_is_spent() {
         prompt: "fix it",
         timeout: Duration::from_secs(1),
         max_turns: 1,
+        cancel: crate::cancel::Cancel::new(),
         push: false,
         tag: false,
     })

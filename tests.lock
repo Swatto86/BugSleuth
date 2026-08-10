@@ -225,6 +225,7 @@ rust apply::observed::tests::git_observation_failure_is_not_clean
 rust apply::observed::tests::git_paths_preserve_unicode_and_arrow
 rust apply::observed::tests::the_refusal_names_a_few_files_rather_than_all_of_them
 rust apply::observed::tests::unborn_repository_reports_its_initial_commit_as_a_change
+rust apply::push::cancellation_tests::cancel_during_publication_stops_push_and_tag
 rust apply::push::tests::a_branch_with_no_upstream_is_left_alone
 rust apply::push::tests::a_clean_apply_with_commits_is_publishable
 rust apply::push::tests::a_commit_that_credits_a_tool_is_never_published
