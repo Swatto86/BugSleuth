@@ -14,11 +14,24 @@ import {
   type Settings,
   MAX_PASSES,
   canRun,
+  effortIsValid,
   passChoices,
   preset,
   supportsAgents,
   usesUltracode,
 } from "./model.ts";
+import type { Catalogue } from "./view.ts";
+
+const base = {
+  scope: "",
+  theme: "system" as const,
+  reuse_completed: true,
+  triage_model: "haiku",
+  apply_model: "",
+  apply_effort: "",
+  push_after_apply: false,
+  tag_release_after_push: false,
+} satisfies Omit<Settings, "repo" | "models">;
 
 function row(id: string, lanes: string[]): ModelSetting {
   return { id, lanes, effort: "", passes: 1 };
@@ -36,12 +49,12 @@ test("a run needs both a repository and at least one sweep", () => {
     tag_release_after_push: false,
   } satisfies Omit<Settings, "repo" | "models">;
   assert.equal(
-    canRun({ ...base, repo: "", models: preset("balanced") }),
+    canRun({ ...base, repo: "", models: preset("balanced") }, {}),
     false,
   );
-  assert.equal(canRun({ ...base, repo: "C:/x", models: [] }), false);
+  assert.equal(canRun({ ...base, repo: "C:/x", models: [] }, {}), false);
   assert.equal(
-    canRun({ ...base, repo: "C:/x", models: preset("balanced") }),
+    canRun({ ...base, repo: "C:/x", models: preset("balanced") }, {}),
     true,
   );
 });
@@ -58,20 +71,26 @@ test("a blank row makes the configuration unrunnable, exactly like the engine", 
     tag_release_after_push: false,
   } satisfies Omit<Settings, "repo" | "models">;
   assert.equal(
-    canRun({
-      ...base,
-      repo: "C:/x",
-      models: [row("sonnet", ["correctness"]), row("  ", [])],
-    }),
+    canRun(
+      {
+        ...base,
+        repo: "C:/x",
+        models: [row("sonnet", ["correctness"]), row("  ", [])],
+      },
+      {},
+    ),
     false,
     "Run must not be enabled with a half-typed row",
   );
   assert.equal(
-    canRun({
-      ...base,
-      repo: "C:/x",
-      models: [row("sonnet", ["correctness", "nonsense"])],
-    }),
+    canRun(
+      {
+        ...base,
+        repo: "C:/x",
+        models: [row("sonnet", ["correctness", "nonsense"])],
+      },
+      {},
+    ),
     false,
     "an unknown lane must not be silently ignored",
   );
@@ -106,7 +125,7 @@ test("agents are available for Claude and Codex but not Kilo Ask", () => {
     push_after_apply: false,
     tag_release_after_push: false,
   };
-  assert.equal(canRun(settings), false);
+  assert.equal(canRun(settings, {}), false);
 
   settings.models[0] = {
     id: "fable",
@@ -115,7 +134,11 @@ test("agents are available for Claude and Codex but not Kilo Ask", () => {
     use_agents: true,
     passes: 1,
   };
-  assert.equal(canRun(settings), false, "Ultracode replaces explicit effort");
+  assert.equal(
+    canRun(settings, {}),
+    false,
+    "Ultracode replaces explicit effort",
+  );
 });
 
 test("a stored pass count outside the picker presets remains visible", () => {
@@ -143,13 +166,16 @@ test("a passes count above the backend cap is not runnable and is clamped in the
     tag_release_after_push: false,
   } satisfies Omit<Settings, "repo" | "models">;
   assert.equal(
-    canRun({
-      ...base,
-      repo: "C:/x",
-      models: [
-        { id: "sonnet", lanes: ["correctness"], effort: "", passes: 26 },
-      ],
-    }),
+    canRun(
+      {
+        ...base,
+        repo: "C:/x",
+        models: [
+          { id: "sonnet", lanes: ["correctness"], effort: "", passes: 26 },
+        ],
+      },
+      {},
+    ),
     false,
     "Run must be disabled for a config the backend would refuse",
   );
@@ -157,4 +183,55 @@ test("a passes count above the backend cap is not runnable and is clamped in the
     !passChoices(40).some((n) => n > MAX_PASSES),
     "the picker must not advertise a pass count above the backend cap",
   );
+});
+
+/// A stored effort the backend will reject must not leave the action enabled.
+///
+/// The frontend preserves an unlisted stored effort and then disables the
+/// selector whenever the model has no levels — so Haiku with a persisted `high`
+/// showed `high`, locked the only control that could clear it, and left Run
+/// enabled for a configuration `plan::check_effort` rejects outright. The Apply
+/// panel had the same shape through `apply_model`/`apply_effort`.
+test("an effort the model does not accept blocks the action", () => {
+  const catalogue: Catalogue = {
+    claude: {
+      vendor: "claude",
+      error: "",
+      groups: [],
+      efforts: [],
+      efforts_by_model: { haiku: [], sonnet: ["high", "low"] },
+    },
+  };
+  const withModel = (id: string, effort: string): Settings => ({
+    ...base,
+    repo: "C:/x",
+    models: [{ id, lanes: ["correctness"], effort, passes: 1 }],
+  });
+
+  assert.equal(
+    canRun(withModel("haiku", "high"), catalogue),
+    false,
+    "Run was enabled for an effort Rust rejects before the sweep starts",
+  );
+  assert.equal(canRun(withModel("haiku", ""), catalogue), true);
+  assert.equal(canRun(withModel("sonnet", "high"), catalogue), true);
+  // Deliberately open: the backend cannot enumerate Kilo variants or the
+  // efforts of a custom Claude model, so neither may be refused here.
+  assert.equal(
+    canRun(withModel("kilo:some/model", "anything"), catalogue),
+    true,
+  );
+  assert.equal(
+    canRun(withModel("custom-claude-model", "high"), catalogue),
+    true,
+  );
+
+  // The exported helper the Apply gate uses answers the same way.
+  assert.equal(effortIsValid("haiku", "high", catalogue), false);
+  assert.equal(effortIsValid("haiku", "", catalogue), true);
+  assert.equal(effortIsValid("sonnet", "low", catalogue), true);
+  assert.equal(effortIsValid("kilo:some/model", "anything", catalogue), true);
+  // With no catalogue at all, backend validation stays authoritative rather
+  // than every configured action being disabled for the session.
+  assert.equal(effortIsValid("haiku", "high", {}), true);
 });

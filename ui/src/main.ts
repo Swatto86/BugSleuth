@@ -88,7 +88,7 @@ function renderPlanSummary(): void {
   if (ui.planSummary.textContent !== summary)
     ui.planSummary.textContent = summary;
   const busy = isRunning() || isApplying() || isClearing() || isUpdating();
-  ui.run.disabled = busy || !canRun(settings);
+  ui.run.disabled = busy || !canRun(settings, catalogue);
   ui.clearSaved.disabled = busy;
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
 }

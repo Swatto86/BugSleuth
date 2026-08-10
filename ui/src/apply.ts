@@ -19,6 +19,7 @@ import { confirmDialog } from "./dialog";
 import {
   VENDORS,
   applyStatus,
+  effortIsValid,
   joinId,
   settingsForApply,
   splitId,
@@ -168,6 +169,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
         onChange: (effort) => {
           deps.settings().apply_effort = effort;
           deps.refresh();
+          setButtonState();
         },
       }),
     );
@@ -191,11 +193,22 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
    * this only saves the click.
    */
   const setButtonState = (): void => {
-    const chosen = deps.settings().apply_model.trim() !== "";
-    ui.button.disabled = applying || deps.busy() || !chosen;
-    ui.button.title = chosen
-      ? "Run the fix prompt against this repository, editing files in place."
-      : "Choose a provider and model first.";
+    const live = deps.settings();
+    const chosen = live.apply_model.trim() !== "";
+    // The same catalogue-aware rule the Run gate uses. Checking only that a
+    // model was chosen enabled Apply for a stored effort the provider rejects,
+    // and the failure then arrived hours later, asynchronously.
+    const validEffort = effortIsValid(
+      live.apply_model,
+      live.apply_effort,
+      deps.catalogue(),
+    );
+    ui.button.disabled = applying || deps.busy() || !chosen || !validEffort;
+    ui.button.title = !chosen
+      ? "Choose a provider and model first."
+      : validEffort
+        ? "Run the fix prompt against this repository, editing files in place."
+        : "This model does not accept the stored effort; choose Default first.";
   };
 
   ui.vendor.addEventListener("change", () => {

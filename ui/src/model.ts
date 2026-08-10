@@ -5,6 +5,8 @@
  * a window. Nothing here talks to Tauri.
  */
 
+import type { Catalogue } from "./view";
+
 /**
  * The most passes a model may request.
  *
@@ -275,8 +277,40 @@ export function batchCount(models: ModelSetting[]): number {
   return perVendor.size === 0 ? 0 : Math.max(...perVendor.values());
 }
 
+/**
+ * Whether this model accepts this effort, as the backend judges it.
+ *
+ * The window kept a stored effort the catalogue no longer lists and disabled
+ * the selector whenever the model had no levels — so a persisted `high` on
+ * Haiku displayed `high`, locked the only control that could clear it, and left
+ * Run and Apply enabled for a configuration Rust rejects in `plan::check_effort`
+ * and the providers' own `validate_effort`.
+ *
+ * Deliberately permissive where the backend is: Kilo variants and the efforts of
+ * an unlisted custom Claude model cannot be enumerated, so neither is refused
+ * here. When the catalogue itself failed to load there is nothing to judge
+ * against, and backend validation stays authoritative rather than every
+ * configured action being disabled for the session.
+ */
+export function effortIsValid(
+  id: string,
+  rawEffort: string,
+  catalogue: Catalogue,
+): boolean {
+  const effort = rawEffort.trim();
+  if (effort === "") return true;
+  const { vendor, model } = splitId(id);
+  if (vendor === "kilo") return true;
+  const menu = catalogue[vendor];
+  if (!menu) return true;
+  if (menu.efforts.length > 0) return menu.efforts.includes(effort);
+  const accepted = menu.efforts_by_model[model];
+  if (accepted !== undefined) return accepted.includes(effort);
+  return vendor === "claude";
+}
+
 /** Whether a configuration could run at all. */
-export function canRun(settings: Settings): boolean {
+export function canRun(settings: Settings, catalogue: Catalogue): boolean {
   if (settings.repo.trim().length === 0) return false;
   // Mirrors plan::plan: a blank model id or an unknown lane makes the whole
   // configuration unrunnable, not a row to be ignored. The engine refuses such
@@ -287,6 +321,7 @@ export function canRun(settings: Settings): boolean {
     !settings.models.every(
       (model) =>
         model.id.trim() !== "" &&
+        effortIsValid(model.id, model.effort, catalogue) &&
         (!model.use_agents || supportsAgents(model.id)) &&
         (!model.use_agents ||
           !usesUltracode(model.id) ||

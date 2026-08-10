@@ -10,7 +10,13 @@
  * there is no import cycle at runtime.
  */
 
-import { joinId, passChoices, splitId, type ModelSetting } from "./model";
+import {
+  effortIsValid,
+  joinId,
+  passChoices,
+  splitId,
+  type ModelSetting,
+} from "./model";
 import type { Catalogue, MatrixHandlers, VendorModels } from "./view";
 
 export function option(
@@ -220,9 +226,19 @@ export function effortPicker(opts: {
   if (forced) {
     select.replaceChildren(option("", forced.label, true));
   }
-  if (forced || levels.length === 0) {
+  // A stored effort the backend will reject leaves the control usable, so
+  // Default can be chosen. Disabling it whenever the model has no levels locked
+  // Haiku's selector on a persisted `high` — the only control that could clear
+  // it — while Run and Apply stayed enabled for a configuration Rust refuses.
+  const invalid = !effortIsValid(opts.id, effort, catalogue);
+  if (forced || (levels.length === 0 && !invalid)) {
     select.disabled = true;
     select.title = forced?.title ?? unavailable;
+  }
+  if (invalid) {
+    select.setAttribute("aria-invalid", "true");
+    select.title =
+      "This model does not accept the stored effort; choose Default.";
   }
   select.addEventListener("change", () => onChange(select.value));
   return select;
