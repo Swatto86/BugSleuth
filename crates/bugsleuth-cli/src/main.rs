@@ -23,8 +23,13 @@ async fn main() -> Result<()> {
 }
 
 async fn run_all(args: RunArgs) -> Result<()> {
-    let repo = real_path(&args.repo)?;
     let plan = plan::load(&args.config)?;
+    let uses_claude = plan
+        .units
+        .iter()
+        .any(|unit| matches!(sweep::Vendor::parse(&unit.model).0, sweep::Vendor::Claude));
+    let max_turns = claude_turn_budget(args.max_turns, uses_claude, 40)?;
+    let repo = real_path(&args.repo)?;
 
     // Print progress as it happens rather than after the fact.
     let (progress, mut events) = tokio::sync::mpsc::unbounded_channel();
@@ -39,7 +44,7 @@ async fn run_all(args: RunArgs) -> Result<()> {
         orchestrate::RunOptions {
             repo: &repo,
             scope: args.scope.as_deref(),
-            max_turns: args.max_turns,
+            max_turns,
             timeout: Duration::from_secs(args.timeout_secs),
             api_key: api_key(args.use_api_key)?.as_deref(),
             out_dir: args.out_dir.as_deref(),
@@ -181,6 +186,16 @@ fn api_key(requested: bool) -> Result<Option<String>> {
         .map_err(|_| anyhow::anyhow!("--use-api-key was given but ANTHROPIC_API_KEY is not set"))
 }
 
+fn claude_turn_budget(requested: Option<u32>, uses_claude: bool, default: u32) -> Result<u32> {
+    if requested.is_some() && !uses_claude {
+        anyhow::bail!(
+            "--max-turns is only supported by Claude; Codex and Kilo use a per-invocation \
+             --timeout-secs limit plus one bounded recovery"
+        );
+    }
+    Ok(requested.unwrap_or(default))
+}
+
 fn sweep_start_message(
     repo: &Path,
     lane: bugsleuth_domain::Lane,
@@ -194,6 +209,8 @@ fn sweep_start_message(
 }
 
 async fn run_sweep(args: SweepArgs) -> Result<()> {
+    let uses_claude = matches!(sweep::Vendor::parse(&args.model).0, sweep::Vendor::Claude);
+    let max_turns = claude_turn_budget(args.max_turns, uses_claude, 30)?;
     let repo = real_path(&args.repo)?;
 
     // The same check `run` makes, from the same function. `sweep` skipped it,
@@ -214,7 +231,7 @@ async fn run_sweep(args: SweepArgs) -> Result<()> {
         model: &args.model,
         scope: args.scope.as_deref(),
         effort: &args.effort,
-        max_turns: args.max_turns,
+        max_turns,
         timeout: Duration::from_secs(args.timeout_secs),
         api_key: api_key.as_deref(),
         binary: None,
@@ -246,6 +263,8 @@ async fn run_sweep(args: SweepArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use clap::Parser as _;
+
     // No `use super::*`: only the Windows-only block below reaches into `super`
     // (for `real_path`), so importing it unconditionally is an unused import on
     // other platforms — which fails a `-D warnings` build.
@@ -260,6 +279,81 @@ mod tests {
                 7,
             ),
             "Starting UX sweep of repo with haiku (timeout 7s)…"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_non_claude_sweep_rejects_an_explicit_turn_budget_before_repo_work() {
+        let cli = super::Cli::try_parse_from([
+            "bugsleuth",
+            "sweep",
+            "--repo",
+            "missing-turn-budget-test-repo",
+            "--lane",
+            "security",
+            "--model",
+            "codex:",
+            "--max-turns",
+            "1",
+        ])
+        .expect("arguments parse");
+        let super::Command::Sweep(args) = cli.command else {
+            panic!("sweep command parsed as another command");
+        };
+
+        let error = super::run_sweep(args)
+            .await
+            .expect_err("budget is rejected");
+        assert!(
+            error.to_string().contains("only supported by Claude"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_claude_turn_budget_defaults_and_applies_when_claude_is_present() {
+        assert_eq!(super::claude_turn_budget(None, false, 30).unwrap(), 30);
+        assert_eq!(super::claude_turn_budget(Some(7), true, 40).unwrap(), 7);
+        assert!(super::claude_turn_budget(Some(1), false, 30).is_err());
+    }
+
+    #[tokio::test]
+    async fn a_non_claude_run_rejects_an_explicit_turn_budget_before_repo_work() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("the clock is after 1970")
+            .as_nanos();
+        let config = std::env::temp_dir().join(format!(
+            "bugsleuth-turn-budget-{}-{unique}.json",
+            std::process::id()
+        ));
+        std::fs::write(
+            &config,
+            r#"{"models":[{"id":"kilo:","lanes":["security"]}]}"#,
+        )
+        .expect("write config");
+        let repo = config.with_extension("missing-repo");
+        assert!(!repo.exists(), "the missing-repo control exists");
+
+        let result = super::run_all(super::RunArgs {
+            repo,
+            config: config.clone(),
+            scope: None,
+            max_turns: Some(1),
+            timeout_secs: 1,
+            out_dir: None,
+            resume: false,
+            use_api_key: false,
+            triage_model: String::new(),
+            prompt_out: None,
+        })
+        .await;
+        std::fs::remove_file(config).expect("remove config");
+
+        let error = result.expect_err("budget is rejected");
+        assert!(
+            error.to_string().contains("only supported by Claude"),
+            "{error}"
         );
     }
 

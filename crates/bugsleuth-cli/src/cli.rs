@@ -43,8 +43,10 @@ pub(crate) struct RunArgs {
     /// Limit the review to these paths.
     #[arg(long)]
     pub(crate) scope: Option<String>,
-    #[arg(long, default_value_t = 40)]
-    pub(crate) max_turns: u32,
+    /// Claude-only hard ceiling on agent turns. In a mixed run this applies
+    /// only to Claude; Codex and Kilo use the per-invocation timeout instead.
+    #[arg(long)]
+    pub(crate) max_turns: Option<u32>,
     /// Per-sweep timeout. Generous on purpose: on a real crate, Claude finished
     /// in about five minutes while Codex was still working at twenty-five and
     /// was killed. Vendors differ by far more than seems reasonable, and a
@@ -110,10 +112,10 @@ pub(crate) struct SweepArgs {
     /// Limit the review to these paths (passed to the model as guidance).
     #[arg(long)]
     pub(crate) scope: Option<String>,
-    /// Hard ceiling on agent turns, the main guard against one lane consuming
-    /// the whole subscription quota.
-    #[arg(long, default_value_t = 30)]
-    pub(crate) max_turns: u32,
+    /// Claude-only hard ceiling on agent turns. Codex and Kilo instead have a
+    /// per-invocation timeout plus one bounded recovery attempt.
+    #[arg(long)]
+    pub(crate) max_turns: Option<u32>,
     #[arg(long, default_value_t = 900)]
     pub(crate) timeout_secs: u64,
     /// Write the machine-readable report here in addition to printing text.
