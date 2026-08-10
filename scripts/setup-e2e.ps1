@@ -53,6 +53,11 @@ $zip = Join-Path $dest 'edgedriver.zip'
 Invoke-WebRequest -Uri "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" `
     -OutFile $zip -UseBasicParsing
 Expand-Archive $zip -DestinationPath $dest -Force
+# Before anything executes it. A modified archive served for the requested
+# version would otherwise become arbitrary code execution here, on the line that
+# reads the version back. The verifier throws; there is no $LASTEXITCODE to
+# consult, because that belongs to the last native command and not to a .ps1.
+& (Join-Path $PSScriptRoot 'assert-microsoft-signature.ps1') -Path $driver
 Remove-Item $zip -Force
 Write-Host "  installed: $(& $driver --version)"
 

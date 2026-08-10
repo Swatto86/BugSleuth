@@ -24,6 +24,7 @@ node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a class built from a prefix counts as used, not as dead style
+node a downloaded EdgeDriver is verified before it is executed
 node a failed catalogue load is told to the user rather than swallowed
 node a lane is spelled the same way in the window as in the engine
 node a model listed twice with different passes counts like the engine: max, not sum
@@ -189,6 +190,7 @@ node the release uses the lockfile's Tauri CLI
 node the runbook derives the installer name from Tauri's version
 node the scans find things at all, so a passing run means something
 node the settings the window writes are the settings Rust reads
+node the signature verifier refuses an executable Microsoft did not sign
 node the two calls this rule was wrong about are classified correctly
 node the two themes are actually different
 node the updater is blocked while a review or an apply is in flight
