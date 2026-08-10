@@ -19,8 +19,12 @@ use crate::plan::{Plan, Unit};
 /// versions at once and the merged report would silently span them. Surfacing
 /// the mismatch is the whole point of the caution below.
 pub(super) fn repository_is_not_confirmed_clean(repo: &std::path::Path) -> bool {
+    // `--untracked-files=all` overrides `status.showUntrackedFiles`, which is a
+    // presentation setting and has no business deciding a correctness question:
+    // with it set to `no`, an untracked source file vanished from this answer
+    // and the run silently reviewed two different trees.
     bugsleuth_verify::hide_console_window(&mut std::process::Command::new("git"))
-        .args(["status", "--porcelain"])
+        .args(["status", "--porcelain", "--untracked-files=all"])
         .current_dir(repo)
         .output()
         .map(|out| !out.status.success() || !out.stdout.is_empty())
@@ -156,6 +160,51 @@ mod tests {
         assert!(
             repository_is_not_confirmed_clean(&dir),
             "an edited working tree is dirty, and a mixed-version review would silently miss it"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Presentation config must not decide a correctness question.
+    ///
+    /// `status.showUntrackedFiles=no` is a perfectly ordinary local setting. It
+    /// hid an untracked source file from this check, so a mixed Kilo/Codex run
+    /// reviewed two different trees and the caution this function exists to
+    /// produce never appeared.
+    #[test]
+    fn hidden_untracked_files_still_make_the_repository_dirty() {
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-hidden-untracked")
+            .join(format!("{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .is_ok()
+        };
+        if !git(&["init", "-q"]) {
+            return; // no usable git here; the rest of the suite still covers the logic
+        }
+        let _ = git(&["config", "user.email", "t@example.invalid"]);
+        let _ = git(&["config", "user.name", "test"]);
+        let _ = git(&["config", "status.showUntrackedFiles", "no"]);
+        let _ = std::fs::write(dir.join("a.txt"), "hello\n");
+        let _ = git(&["add", "-A"]);
+        let _ = git(&["commit", "-qm", "base"]);
+        assert!(
+            !repository_is_not_confirmed_clean(&dir),
+            "a freshly committed tree is clean even with untracked files hidden"
+        );
+
+        let _ = std::fs::create_dir_all(dir.join("src"));
+        let _ = std::fs::write(dir.join("src").join("new.rs"), "fn main() {}\n");
+        assert!(
+            repository_is_not_confirmed_clean(&dir),
+            "an untracked source file the local config hides is still work Kilo's \
+             HEAD checkout cannot see"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
