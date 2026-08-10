@@ -62,7 +62,7 @@ pub(super) fn changed_since(repo: &Path, base: &Baseline) -> anyhow::Result<Vec<
 pub(super) fn range_since(repo: &Path, base: &Baseline) -> anyhow::Result<Option<String>> {
     match base {
         Baseline::Commit(base) => Ok(Some(format!("{base}..HEAD"))),
-        Baseline::Unborn => Ok(super::current_head(repo)?.map(|_| "HEAD".to_string())),
+        Baseline::Unborn => Ok(super::preflight::current_head(repo)?.map(|_| "HEAD".to_string())),
     }
 }
 
