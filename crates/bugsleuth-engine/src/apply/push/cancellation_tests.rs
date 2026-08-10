@@ -86,8 +86,16 @@ async fn cancel_during_publication_stops_push_and_tag() {
     );
 
     let tagged = match super::super::to_tag(true, &outcome) {
-        Some(remote_name) => {
-            super::super::tag::tag(&repo, true, remote_name, &cancel, Duration::from_secs(10)).await
+        Some((remote_name, oid)) => {
+            super::super::tag::tag(
+                &repo,
+                true,
+                remote_name,
+                oid,
+                &cancel,
+                Duration::from_secs(10),
+            )
+            .await
         }
         None => super::super::TagOutcome::NotPushed,
     };

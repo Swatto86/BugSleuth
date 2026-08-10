@@ -236,12 +236,14 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         PushOutcome::NotRequested
     };
 
+    let cancel = &request.cancel;
+    let timeout = request.timeout;
     let tagged = match to_tag(request.tag, &pushed) {
         Some(_) if request.cancel.stopped() => {
             TagOutcome::Refused("publication was cancelled before tagging started".to_string())
         }
-        Some(remote) => tag::tag(repo, true, remote, &request.cancel, request.timeout).await,
-        None if request.tag => tag::tag(repo, false, "", &request.cancel, request.timeout).await,
+        Some((remote, oid)) => tag::tag(repo, true, remote, oid, cancel, timeout).await,
+        None if request.tag => tag::tag(repo, false, "", "", cancel, timeout).await,
         None => TagOutcome::NotRequested,
     };
 
@@ -309,16 +311,16 @@ fn cancelled_message() -> &'static str {
 ///
 /// A tag is the trigger for someone else's release pipeline. Pushed ahead of its
 /// commits it starts a build of a ref the runner cannot fetch, so it is only
-/// ever reached through a push that actually succeeded — and the upstream comes
-/// from that push rather than being worked out a second time. Every other push
+/// ever reached through a push that actually succeeded — and the remote plus
+/// exact published commit come from that push rather than being worked out a
+/// second time. Every other push
 /// outcome (a detached HEAD, no upstream, a rejected push, a commit still
 /// crediting a tool) is a reason not to release, not merely a reason not to push.
-fn to_tag(requested: bool, pushed: &PushOutcome) -> Option<&str> {
+fn to_tag(requested: bool, pushed: &PushOutcome) -> Option<(&str, &str)> {
     match (requested, pushed) {
-        // The exact remote the push used, never re-derived from the `upstream`
-        // display string: a remote name may itself contain a '/', so splitting
-        // it would send the release tag somewhere the commits never went.
-        (true, PushOutcome::Pushed { remote, .. }) => Some(remote),
+        // The exact remote and confirmed object from the push. Neither is
+        // re-derived from mutable repository state before release selection.
+        (true, PushOutcome::Pushed { remote, oid, .. }) => Some((remote, oid)),
         _ => None,
     }
 }

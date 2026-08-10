@@ -20,6 +20,7 @@
 //! release by definition. A repository with no such tag has no scheme to follow,
 //! so nothing is guessed for it.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
 
@@ -87,16 +88,106 @@ fn blocked(pushed: bool) -> Option<TagOutcome> {
     None
 }
 
+fn parse_version_tags(listing: &str) -> Result<BTreeMap<String, String>, String> {
+    let mut tags = BTreeMap::new();
+    for line in listing.lines().filter(|line| !line.trim().is_empty()) {
+        let mut fields = line.split_whitespace();
+        let oid = fields.next().unwrap_or_default();
+        let reference = fields.next().unwrap_or_default();
+        let Some(name) = reference.strip_prefix("refs/tags/") else {
+            return Err("a tag listing contained a non-tag reference".to_string());
+        };
+        if fields.next().is_some()
+            || !name.starts_with('v')
+            || !matches!(oid.len(), 40 | 64)
+            || !oid.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err("a tag listing was malformed".to_string());
+        }
+        if tags.insert(name.to_string(), oid.to_string()).is_some() {
+            return Err(format!("a tag listing repeated {name}"));
+        }
+    }
+    Ok(tags)
+}
+
+async fn confirm_version_tags(
+    repo: &Path,
+    remote: &str,
+    cancel: &Cancel,
+    timeout: Duration,
+) -> Result<(), TagOutcome> {
+    let local = git(
+        repo,
+        &[
+            "for-each-ref",
+            "--format=%(objectname)%09%(refname)",
+            "refs/tags/v*",
+        ],
+    )
+    .map_err(|error| {
+        TagOutcome::Refused(format!(
+            "local release tags could not be read: {error}. Nothing was tagged."
+        ))
+    })?;
+    let remote_listing = match network::git(
+        repo,
+        &[
+            "ls-remote",
+            "--tags",
+            "--refs",
+            "--",
+            remote,
+            "refs/tags/v*",
+        ],
+        cancel,
+        timeout,
+    )
+    .await
+    {
+        Ok(listing) => listing,
+        Err(network::Error::Cancelled) => {
+            return Err(TagOutcome::Refused(
+                "publication was cancelled before release tags could be checked".to_string(),
+            ));
+        }
+        Err(network::Error::Failed(error)) => {
+            return Err(TagOutcome::Refused(format!(
+                "release tags on {remote} could not be read: {error}. Nothing was tagged."
+            )));
+        }
+    };
+    let local = parse_version_tags(&local).map_err(|error| {
+        TagOutcome::Refused(format!(
+            "local release tags could not be understood: {error}. Nothing was tagged."
+        ))
+    })?;
+    let remote_tags = parse_version_tags(&remote_listing).map_err(|error| {
+        TagOutcome::Refused(format!(
+            "release tags on {remote} could not be understood: {error}. Nothing was tagged."
+        ))
+    })?;
+    if local != remote_tags {
+        return Err(TagOutcome::Refused(format!(
+            "local `v*` tag names and objects do not match {remote}, so the next version cannot be chosen safely. Nothing was tagged — fetch the remote's tags and reconcile any conflicting or local-only tags before retrying."
+        )));
+    }
+    Ok(())
+}
+
 /// Tag the pushed commits and publish the tag, if it may be published.
 ///
 /// `remote` is the exact remote the push used, threaded through from the push
 /// itself rather than re-derived by splitting an `upstream` display string on
 /// '/' — a remote name may itself contain a slash, and splitting sent the tag to
-/// the wrong place. If the commits went to a fork, so does the tag.
+/// the wrong place. `commit` is the exact object confirmed there and anchors
+/// version-history selection if local HEAD moves. If the commits went to a fork,
+/// so does the tag.
 pub(super) async fn tag(
     repo: &Path,
     pushed: bool,
     remote: &str,
+    commit: &str,
     cancel: &Cancel,
     timeout: Duration,
 ) -> TagOutcome {
@@ -109,11 +200,20 @@ pub(super) async fn tag(
             "the push did not report which remote it used, so nothing was tagged.".to_string(),
         );
     }
+    if commit.is_empty() {
+        return TagOutcome::Refused(
+            "the push did not report the exact commit it published, so nothing was tagged."
+                .to_string(),
+        );
+    }
+
+    if let Err(stop) = confirm_version_tags(repo, remote, cancel, timeout).await {
+        return stop;
+    }
 
     // `--sort=-v:refname` orders by version rather than by string, so v1.10.0
-    // sorts after v1.9.0 instead of before it. `--merged HEAD` keeps it to tags
-    // in this branch's history: a tag on an unrelated branch is not the version
-    // these fixes follow.
+    // sorts after v1.9.0 instead of before it. The confirmed pushed commit keeps
+    // it to that published history even if local HEAD moves afterward.
     let latest = match git(
         repo,
         &[
@@ -122,7 +222,7 @@ pub(super) async fn tag(
             "v*",
             "--sort=-v:refname",
             "--merged",
-            "HEAD",
+            commit,
         ],
     ) {
         Ok(list) => list.lines().next().unwrap_or("").trim().to_string(),
@@ -270,3 +370,7 @@ mod tests;
 #[cfg(test)]
 #[path = "tag/test_support.rs"]
 mod test_support;
+
+#[cfg(test)]
+#[path = "tag/safety_tests.rs"]
+mod safety_tests;

@@ -247,6 +247,10 @@ rust apply::push::tests::the_commits_actually_reach_the_remote
 rust apply::remote::tests::a_desired_object_on_the_remote_is_a_landing_whatever_was_there_before
 rust apply::remote::tests::a_remote_that_moved_elsewhere_or_could_not_be_read_is_unknown
 rust apply::remote::tests::an_unchanged_remote_is_a_genuine_rejection
+rust apply::tag::safety_tests::an_unreadable_remote_tag_view_is_refused_before_selecting_a_version
+rust apply::tag::safety_tests::same_name_tags_with_different_objects_are_refused
+rust apply::tag::safety_tests::stale_local_tags_cannot_publish_an_older_release
+rust apply::tag::safety_tests::the_confirmed_pushed_commit_controls_version_history
 rust apply::tag::tests::a_branch_with_no_release_tag_has_no_scheme_to_follow
 rust apply::tag::tests::a_confirmed_rejection_reports_failure_and_removes_the_local_tag
 rust apply::tag::tests::a_tag_already_on_the_remote_is_refused_even_when_absent_locally

@@ -11,10 +11,12 @@ use super::*;
 use std::time::Duration;
 
 async fn tag_now(repo: &Path, pushed: bool, remote: &str) -> TagOutcome {
+    let commit = git_ok(repo, &["rev-parse", "HEAD"]);
     tag(
         repo,
         pushed,
         remote,
+        &commit,
         &crate::cancel::Cancel::new(),
         Duration::from_secs(10),
     )
@@ -193,12 +195,23 @@ async fn slash_in_remote_name_does_not_redirect_release_tag() {
         Duration::from_secs(10),
     )
     .await;
-    let super::super::PushOutcome::Pushed { remote: got, .. } = &pushed else {
+    let super::super::PushOutcome::Pushed {
+        remote: got, oid, ..
+    } = &pushed
+    else {
         panic!("the fix was not pushed: {pushed:?}");
     };
     assert_eq!(got, &remote_name, "the push lost the exact remote");
 
-    let outcome = tag_now(&repo, true, got).await;
+    let outcome = tag(
+        &repo,
+        true,
+        got,
+        oid,
+        &crate::cancel::Cancel::new(),
+        Duration::from_secs(10),
+    )
+    .await;
     assert_eq!(
         outcome,
         TagOutcome::Tagged {
@@ -266,8 +279,16 @@ async fn an_unreadable_remote_after_a_failed_tag_push_is_unknown_and_keeps_the_t
     git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
     git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
 
-    // The remote goes away, so both the push and the reconciliation read fail.
-    std::fs::remove_dir_all(&remote).expect("remove the remote");
+    // Tag-state preflight succeeds. The receive hook then rejects the tag and
+    // makes the repository unreadable before reconciliation can inspect it.
+    let hook = remote.join("hooks").join("pre-receive");
+    std::fs::write(&hook, "#!/bin/sh\nmv objects objects-unreadable\nexit 1\n")
+        .expect("write hook");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
 
     let outcome = tag_now(&repo, true, &remote_name).await;
     let TagOutcome::Unknown { tag, .. } = &outcome else {
@@ -280,7 +301,9 @@ async fn an_unreadable_remote_after_a_failed_tag_push_is_unknown_and_keeps_the_t
         "the local tag was deleted despite the outcome being unknown"
     );
 
-    let _ = std::fs::remove_dir_all(&repo);
+    for dir in [&repo, &remote] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
 
 #[tokio::test]
@@ -342,7 +365,10 @@ async fn a_tag_already_on_the_remote_is_refused_even_when_absent_locally() {
     let TagOutcome::Refused(reason) = &outcome else {
         panic!("a remote tag collision was not refused: {outcome:?}");
     };
-    assert!(reason.contains("already exists on origin"), "{reason}");
+    assert!(
+        reason.contains("tag names and objects do not match origin"),
+        "{reason}"
+    );
 
     for dir in [&repo, &remote] {
         let _ = std::fs::remove_dir_all(dir);

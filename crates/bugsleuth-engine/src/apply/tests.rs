@@ -67,7 +67,7 @@ fn only_a_push_that_succeeded_can_lead_to_a_tag() {
     };
     // The exact remote, not the `origin/main` display string, so a remote
     // whose own name contains a slash is not truncated on the way to the tag.
-    assert_eq!(to_tag(true, &pushed), Some("origin"));
+    assert_eq!(to_tag(true, &pushed), Some(("origin", "abc123")));
 
     // Every other outcome means the commits are not on the remote, so a tag
     // would start a build of a ref the runner cannot fetch.
