@@ -16,7 +16,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use bugsleuth_domain::{RawFindings, finding_schema};
+use bugsleuth_domain::RawFindings;
 
 use crate::error::ProviderError;
 use crate::process::{self, Invocation, preview};
@@ -31,6 +31,7 @@ pub use apply::apply;
 use scratch::{event_error, not_found, scratch_dir, write_file};
 
 pub(crate) const VENDOR: &str = "codex";
+const REVIEW_DISABLED_REASON: &str = "Codex's read-only sandbox permits reads outside the repository, and the installed CLI has no verified repository-only read boundary";
 
 pub struct CodexSweep<'a> {
     pub repo: &'a Path,
@@ -51,10 +52,9 @@ pub struct CodexResult {
 
 /// What the sandbox is allowed to do.
 ///
-/// A sweep is read-only: the operating system refuses a write, which is a far
-/// stronger guarantee than asking the agent not to. Applying fixes genuinely has
-/// to write, so it gets `workspace-write` — and is only ever pointed at the
-/// user's own checkout, which they were shown and chose to hand over.
+/// `read-only` blocks writes but still permits host-wide reads, so untrusted
+/// repository reviews never reach it. `workspace-write` also permits those
+/// reads; the separate apply boundary decides whether that capability is safe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Sandbox {
     ReadOnly,
@@ -70,20 +70,13 @@ impl Sandbox {
     }
 }
 
-/// Run one read-only lane sweep through Codex.
-pub async fn sweep(spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
-    let (findings, salvaged) = invoke(Invoke {
-        dir: spec.repo,
-        model: spec.model,
-        effort: spec.effort,
-        brief: spec.brief,
-        timeout: spec.timeout,
-        binary: spec.binary,
-        schema: finding_schema(),
-        sandbox: Sandbox::ReadOnly,
+/// Refuse repository-driven review before discovering or starting Codex.
+pub async fn sweep(_spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
+    Err(ProviderError::CapabilityUnavailable {
+        vendor: VENDOR,
+        capability: "repository review",
+        reason: REVIEW_DISABLED_REASON.to_string(),
     })
-    .await?;
-    Ok(CodexResult { findings, salvaged })
 }
 
 pub(crate) struct Invoke<'a> {
@@ -99,14 +92,6 @@ pub(crate) struct Invoke<'a> {
     /// turn to say less.
     pub(crate) schema: serde_json::Value,
     pub(crate) sandbox: Sandbox,
-}
-
-async fn invoke<T: serde::de::DeserializeOwned>(
-    spec: Invoke<'_>,
-) -> Result<(T, bool), ProviderError> {
-    let (answer, salvaged) = invoke_text(spec).await?;
-    let value = serde_json::from_str(&answer).unwrap_or(serde_json::Value::String(answer));
-    crate::json::structured(&value).map(|value| (value, salvaged))
 }
 
 /// One invocation, answering with whatever the CLI's final message was.
@@ -362,3 +347,7 @@ mod tests;
 #[cfg(test)]
 #[path = "codex/output_tests.rs"]
 mod output_tests;
+
+#[cfg(test)]
+#[path = "codex/capability_tests.rs"]
+mod capability_tests;

@@ -348,6 +348,7 @@ rust cluster::tests::two_different_defects_one_line_apart_stay_separate
 rust cluster::tests::two_models_in_one_lane_still_merge
 rust cluster::tests::two_vendors_reporting_the_same_defect_become_one_cluster_with_agreement_two
 rust cluster::tests::without_a_triage_pass_the_models_own_grade_stands
+rust codex::capability_tests::repository_review_fails_closed_before_launching_codex
 rust codex::output_tests::codex_only_accepts_truncation_when_the_answer_file_is_authoritative
 rust codex::recover::tests::the_started_thread_is_the_only_event_worth_resuming
 rust codex::scratch::tests::a_directory_already_sitting_at_the_chosen_name_is_never_adopted
@@ -357,8 +358,6 @@ rust codex::scratch::tests::each_scratch_directory_is_new_rather_than_reused
 rust codex::scratch::tests::output_that_is_not_events_yields_no_error_rather_than_a_wrong_one
 rust codex::scratch::tests::the_scratch_directory_is_outside_the_reviewed_repository
 rust codex::tests::a_sweep_runs_read_only_and_ignores_the_reviewed_repos_own_config
-rust codex::tests::a_timed_out_sweep_resumes_the_thread_reported_by_the_cli
-rust codex::tests::a_transient_failed_turn_resumes_the_thread_reported_by_the_cli
 rust codex::tests::an_apply_may_write_because_it_has_to_edit_files
 rust codex::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
 rust codex::tests::an_invocation_that_must_write_does_not_also_ignore_the_machines_config

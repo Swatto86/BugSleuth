@@ -154,7 +154,7 @@ fn echoing_stub(name: &str) -> String {
         let path = dir.join("stub.cmd");
         std::fs::write(
             &path,
-            "@echo off\r\nfindstr /C:\"subagent\" 1>&2\r\necho %* | findstr /C:\"--effort ultracode\" > nul && echo --effort ultracode 1>&2\r\necho %* 1>&2\r\nexit /b 1\r\n",
+            "@echo off\r\necho %* | findstr /C:\"--model sonnet\" > nul && echo model=sonnet 1>&2\r\nfindstr /C:\"subagent\" 1>&2\r\necho %* | findstr /C:\"--effort ultracode\" > nul && echo --effort ultracode 1>&2\r\necho %* 1>&2\r\nexit /b 1\r\n",
         )
         .expect("write stub");
         path
@@ -165,7 +165,7 @@ fn echoing_stub(name: &str) -> String {
         let path = dir.join("stub.sh");
         std::fs::write(
             &path,
-            "#!/bin/sh\ngrep subagent >&2\ncase \" $* \" in *\"--effort ultracode\"*) echo --effort ultracode >&2;; esac\necho \"$@\" >&2\nexit 1\n",
+            "#!/bin/sh\ncase \" $* \" in *\" --model sonnet \"*) echo model=sonnet >&2;; esac\ngrep subagent >&2\ncase \" $* \" in *\"--effort ultracode\"*) echo --effort ultracode >&2;; esac\necho \"$@\" >&2\nexit 1\n",
         )
         .expect("write stub");
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
@@ -178,14 +178,13 @@ fn echoing_stub(name: &str) -> String {
 async fn the_vendor_prefix_never_reaches_the_cli() {
     // 0.2.19 passed the whole spec to `-m`, so every Kilo and Codex sweep in a
     // run was refused with `Model not found: kilo:kilo/kimi-coding/...` before
-    // it read a line of code. Codex is the arm exercised here because it needs
-    // neither a worktree nor any particular machine config; all three arms are
-    // handed the same variable.
+    // it read a line of code. Claude exercises the shared split without Kilo's
+    // worktree/config preflight or the deliberately disabled Codex review.
     let stub = echoing_stub("model-arg");
     let report = run(Request {
         repo: Path::new("."),
         lane: Lane::Correctness,
-        model: "codex:gpt-5.6-codex",
+        model: "claude:sonnet",
         scope: None,
         effort: "",
         max_turns: 1,
@@ -205,15 +204,15 @@ async fn the_vendor_prefix_never_reaches_the_cli() {
     // at all — an unspawnable stub, an undelivered prompt — would satisfy the
     // assertion below by saying nothing.
     assert!(
-        reason.contains("gpt-5.6-codex"),
+        reason.contains("sonnet"),
         "the stub should have echoed the model it was given: {reason}"
     );
     assert!(
-        !reason.contains("codex:gpt-5.6-codex"),
+        !reason.contains("claude:sonnet"),
         "`vendor:model` is BugSleuth's own notation and no CLI knows it: {reason}"
     );
     assert_eq!(
-        report.model, "codex:gpt-5.6-codex",
+        report.model, "claude:sonnet",
         "the report still records which vendor was asked"
     );
 }
@@ -221,38 +220,31 @@ async fn the_vendor_prefix_never_reaches_the_cli() {
 #[tokio::test]
 async fn agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_policy() {
     let stub = echoing_stub("agent-mode");
-    for (model, wording) in [
-        ("sonnet", "foreground Explore subagents"),
-        ("codex:gpt-5.6-codex", "Codex subagents"),
-    ] {
-        let report = run_with_agents(
-            Request {
-                repo: Path::new("."),
-                lane: Lane::Security,
-                model,
-                scope: None,
-                effort: "",
-                max_turns: 1,
-                timeout: Duration::from_secs(60),
-                api_key: None,
-                binary: Some(&stub),
-            },
-            true,
-        )
-        .await;
-        let Status::NotSwept { reason } = report.status else {
-            panic!("a failing stub cannot complete a sweep");
-        };
-        assert!(reason.contains(wording), "{model}: {reason}");
-        if model == "sonnet" {
-            assert!(
-                reason.contains("--tools Read,Glob,Grep,Agent")
-                    || reason.contains("--tools \"Read,Glob,Grep,Agent\""),
-                "{reason}"
-            );
-            assert!(reason.contains("--effort ultracode"), "{reason}");
-        }
-    }
+    let report = run_with_agents(
+        Request {
+            repo: Path::new("."),
+            lane: Lane::Security,
+            model: "sonnet",
+            scope: None,
+            effort: "",
+            max_turns: 1,
+            timeout: Duration::from_secs(60),
+            api_key: None,
+            binary: Some(&stub),
+        },
+        true,
+    )
+    .await;
+    let Status::NotSwept { reason } = report.status else {
+        panic!("a failing stub cannot complete a sweep");
+    };
+    assert!(reason.contains("foreground Explore subagents"), "{reason}");
+    assert!(
+        reason.contains("--tools Read,Glob,Grep,Agent")
+            || reason.contains("--tools \"Read,Glob,Grep,Agent\""),
+        "{reason}"
+    );
+    assert!(reason.contains("--effort ultracode"), "{reason}");
 }
 
 #[test]
