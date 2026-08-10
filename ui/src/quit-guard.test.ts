@@ -67,20 +67,24 @@ test("quit rechecks active work after its settings flush", () => {
   const request = functionText(source, "requestQuit");
   assert.ok(request, "requestQuit is gone from actions.ts");
 
-  const flush = request.indexOf("await deps.flushSettings()");
-  const busy = request.indexOf("isRunning() || isApplying()");
-  const quit = request.indexOf('await invoke("quit")');
+  // The complete condition, not a prefix of it. `isRunning() || isApplying()`
+  // matched a recheck that had lost `clearing` and `updating()`, so a clear or
+  // an update starting during the flush was exited through without a warning.
+  const normalized = request.replace(/\s+/g, " ");
+  const flush = normalized.indexOf("await deps.flushSettings()");
+  const busy = normalized.indexOf(
+    "!acknowledged && (isRunning() || isApplying() || clearing || deps.updating())",
+  );
+  const quit = normalized.indexOf('await invoke("quit")');
   assert.ok(flush >= 0, "requestQuit no longer flushes settings");
-  assert.ok(busy >= 0, "requestQuit never rechecks whether work started");
+  assert.ok(
+    busy >= 0,
+    "requestQuit does not recheck all four active-work states after the flush",
+  );
   assert.ok(quit >= 0, "requestQuit no longer reaches the quit command");
   assert.ok(
     flush < busy && busy < quit,
     "the busy recheck must happen after the flush and before exit",
-  );
-  assert.match(
-    request,
-    /!acknowledged/,
-    "a confirmed quit would loop back into the warning forever",
   );
 
   const guard = functionText(source, "askBeforeQuitting");
