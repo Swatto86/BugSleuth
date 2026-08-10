@@ -24,8 +24,9 @@ want the app in your start menu.
 
 Checksums for each platform are published beside them as `SHA256SUMS-*.txt`.
 
-**It updates itself.** BugSleuth checks GitHub for a newer release when you
-press *Check for updates*, and installs it if you agree. Updates are signed; a
+**It updates itself.** Open *About* to see the running version and press
+*Check for updates*. BugSleuth checks GitHub and installs a newer release if
+you agree. Updates are signed; a
 release that does not verify against the key built into the app is refused
 before anything runs, so a tampered or unsigned download cannot install itself.
 The check is a button rather than a background task because installing restarts

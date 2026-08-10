@@ -119,7 +119,7 @@ describe("BugSleuth desktop app", () => {
 
     // Removal raises the guard rather than deleting on the spot.
     await removeButton().click();
-    await expect($(".dialog")).toBeDisplayed();
+    await expect($(".dialog-overlay .dialog")).toBeDisplayed();
     assert.equal(
       await rowCount(),
       before + 1,
@@ -128,7 +128,7 @@ describe("BugSleuth desktop app", () => {
 
     // Cancelling keeps the row exactly as it was.
     await clickDialogButton("Cancel");
-    await expect($(".dialog")).not.toBeExisting();
+    await expect($(".dialog-overlay .dialog")).not.toBeExisting();
     assert.equal(
       await rowCount(),
       before + 1,
@@ -142,7 +142,7 @@ describe("BugSleuth desktop app", () => {
 
     // Confirming removes it.
     await removeButton().click();
-    await expect($(".dialog")).toBeDisplayed();
+    await expect($(".dialog-overlay .dialog")).toBeDisplayed();
     await clickDialogButton("Remove model");
     await browser.waitUntil(async () => (await rowCount()) === before, {
       timeout: 5_000,
@@ -266,8 +266,8 @@ describe("BugSleuth desktop app", () => {
     await $("#stop").click();
     // An in-app dialog, not a browser one: a native confirm would block the
     // webview and WebDriver would see nothing here at all.
-    await expect($(".dialog")).toBeDisplayed();
-    const buttons = await $$(".dialog-buttons button");
+    await expect($(".dialog-overlay .dialog")).toBeDisplayed();
+    const buttons = await $$(".dialog-overlay .dialog-buttons button");
     let confirmed = false;
     for (const button of buttons) {
       if ((await button.getText()) === "Stop the review") {

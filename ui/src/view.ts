@@ -98,7 +98,7 @@ export interface MatrixHandlers {
 
 import { effortPicker, modelPicker, option, passPicker } from "./pickers";
 
-/** One row per configured model: provider, model, effort, passes, agents, then lanes. */
+/** One row per model: provider, model, agents, effort, passes, then lanes. */
 export function matrixRows(
   models: ModelSetting[],
   catalogue: Catalogue,
@@ -217,13 +217,9 @@ export function matrixRows(
         },
       }),
     );
-    row.append(idCell);
-    row.append(effortCell);
-
     const passCell = document.createElement("td");
     passCell.className = "effort-cell";
     passCell.append(passPicker(index, model, handlers));
-    row.append(passCell);
 
     const agentCell = document.createElement("td");
     agentCell.className = "agent-cell";
@@ -243,7 +239,7 @@ export function matrixRows(
     );
     agentControl = agentBox;
     agentCell.append(agentBox);
-    row.append(agentCell);
+    row.append(idCell, agentCell, effortCell, passCell);
 
     for (const lane of LANES) {
       const cell = document.createElement("td");

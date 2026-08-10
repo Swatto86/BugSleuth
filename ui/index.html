@@ -27,9 +27,7 @@
         </svg>
         <h1>BugSleuth</h1>
         <span class="spacer"></span>
-        <button id="check-update" type="button" title="Ask GitHub whether a newer release exists. Installing replaces this copy and restarts.">
-          Check for updates
-        </button>
+        <button id="about" type="button">About</button>
         <button id="quit" type="button" title="Exit BugSleuth completely. To keep it running in the tray, close the window instead.">
           Quit
         </button>
@@ -42,6 +40,23 @@
           </select>
         </label>
       </header>
+
+      <dialog
+        id="about-dialog"
+        class="dialog"
+        aria-labelledby="about-title"
+        aria-describedby="app-version"
+        style="margin: auto; color: var(--text)"
+      >
+        <h2 id="about-title">About BugSleuth</h2>
+        <p id="app-version">Version…</p>
+        <div class="dialog-buttons">
+          <button id="check-update" type="button" title="Ask GitHub whether a newer release exists. Installing replaces this copy and restarts.">
+            Check for updates
+          </button>
+          <button id="about-close" type="button" autofocus>Close</button>
+        </div>
+      </dialog>
 
       <main id="main">
         <section class="panel">
@@ -100,8 +115,6 @@
               <tr>
                 <th>Provider</th>
                 <th>Model</th>
-                <th>Effort</th>
-                <th>Passes</th>
                 <th
                   class="agent-cell"
                   title="Ask supported providers to delegate independent parts of each lane to parallel subagents. This uses more tokens."
@@ -109,6 +122,8 @@
                 >
                   Agents
                 </th>
+                <th>Effort</th>
+                <th>Passes</th>
                 <th
                   class="lane-cell"
                   data-lane="correctness"

@@ -11,6 +11,7 @@
  * there is no second place that can decide what the settings are.
  */
 
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { Settings } from "./model";
@@ -27,6 +28,11 @@ export interface ControlDeps {
     browse: HTMLButtonElement;
     checkSignin: HTMLButtonElement;
     vendors: HTMLDivElement;
+    about: HTMLButtonElement;
+    aboutDialog: HTMLDialogElement;
+    aboutClose: HTMLButtonElement;
+    appVersion: HTMLParagraphElement;
+    checkUpdate: HTMLButtonElement;
     addModel: HTMLButtonElement;
     copyReport: HTMLButtonElement;
     copyPrompt: HTMLButtonElement;
@@ -69,6 +75,29 @@ function bindCopy(
 export function bindControls(deps: ControlDeps): void {
   const { ui, refresh, render } = deps;
   const settings = deps.settings;
+
+  document.addEventListener(
+    "contextmenu",
+    (event) => event.preventDefault(),
+    true,
+  );
+  void getVersion().then(
+    (version) => (ui.appVersion.textContent = `Version ${version}`),
+    (error: unknown) => {
+      ui.appVersion.textContent = "Version unavailable";
+      deps.setStatus(
+        `Could not read the app version: ${String(error)}`,
+        "error",
+      );
+    },
+  );
+  ui.about.addEventListener("click", () => ui.aboutDialog.showModal());
+  ui.aboutClose.addEventListener("click", () => ui.aboutDialog.close());
+  ui.aboutDialog.addEventListener("close", () => ui.about.focus());
+  ui.checkUpdate.addEventListener("click", () => {
+    ui.aboutDialog.close();
+    deps.focusStatus();
+  });
 
   ui.theme.addEventListener("change", () => {
     settings().theme = ui.theme.value as Settings["theme"];

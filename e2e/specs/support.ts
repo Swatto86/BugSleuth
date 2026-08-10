@@ -59,10 +59,10 @@ export async function configureOneSweep(modelSpec: string): Promise<void> {
   ).selectByAttribute("value", vendor);
   await $("#matrix-body tr:first-child td.model-id input").setValue(model);
   await $(
-    "#matrix-body tr:first-child td:nth-child(3) select",
+    '#matrix-body tr:first-child select[aria-label="Effort for row 1"]',
   ).selectByAttribute("value", "");
   await $(
-    "#matrix-body tr:first-child td:nth-child(4) select",
+    '#matrix-body tr:first-child select[aria-label="Passes for row 1"]',
   ).selectByAttribute("value", "1");
   await setLaneSelections("#matrix-body tr:first-child td.lane-cell input", [
     0,
@@ -148,7 +148,7 @@ export function assertSweepWritten(): void {
 
 /** Click the in-app dialog's button whose label matches, failing loudly if none. */
 export async function clickDialogButton(label: string): Promise<void> {
-  const buttons = await $$(".dialog-buttons button");
+  const buttons = await $$(".dialog-overlay .dialog-buttons button");
   for (const button of buttons) {
     if ((await button.getText()) === label) {
       await button.click();
