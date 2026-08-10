@@ -64,3 +64,25 @@ test("long-running actions wait for their completion listeners", () => {
   // Disabled in shipped markup too, so the pre-JavaScript window is not a way in.
   assert.match(html, /id="run"[^>]*disabled/);
 });
+
+/// Readiness has to be redrawn once it changes, on every path.
+///
+/// Run is disabled in shipped markup and re-enabled by `renderPlanSummary`.
+/// Boot's later `loadCatalogue()` renders on success but returns early on
+/// failure — an ordinary, already-handled condition — so without an explicit
+/// redraw the Run button stayed dead for the whole session.
+test("boot redraws the Run gate as soon as its listener is ready", () => {
+  const main = read("ui", "src", "main.ts");
+  const listened = main.indexOf("await listenForRunEvents(");
+  assert.ok(listened >= 0, "boot no longer subscribes to run events");
+  const redrawn = main.indexOf("renderPlanSummary();", listened);
+  const catalogue = main.indexOf("await loadCatalogue()", listened);
+  assert.ok(
+    redrawn >= 0,
+    "nothing redraws the Run gate after it becomes ready",
+  );
+  assert.ok(
+    catalogue < 0 || redrawn < catalogue,
+    "the redraw is left to the catalogue load, which does not happen when it fails",
+  );
+});

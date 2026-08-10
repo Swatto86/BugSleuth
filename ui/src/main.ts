@@ -311,6 +311,11 @@ async function boot(): Promise<void> {
   void invoke("frontend_ready");
 
   await listenForRunEvents(runDeps());
+  // Redrawn here, not left to the catalogue load below: Run is gated on this
+  // subscription, and `loadCatalogue` returns early without rendering when it
+  // fails — which would leave Run dead for the session on an ordinary,
+  // already-handled failure.
+  renderPlanSummary();
 
   // Filled before the status settles, so a failure here is part of what
   // "Ready" means: the effort controls stay disabled and the model menus stay
