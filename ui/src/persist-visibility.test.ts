@@ -25,16 +25,30 @@ const root = path.join(
 const read = (...parts: string[]) =>
   fs.readFileSync(path.join(root, ...parts), "utf8").replace(/\r\n?/g, "\n");
 
-test("a save failure is shown in its own region, never gated on a run", () => {
-  const persist = read("ui", "src", "persist.ts");
-  assert.ok(
-    persist.includes("deps.setError("),
-    "the save handler no longer reports through a dedicated error region",
-  );
-  assert.ok(
-    !/quiet/.test(persist),
-    "the save error is still suppressed while a run is in progress",
-  );
+test("a save failure is shown in its own region, never gated on a run", async () => {
+  const settings: Settings = {
+    repo: "repo",
+    scope: "",
+    models: [],
+    theme: "system",
+    reuse_completed: true,
+    triage_model: "haiku",
+    apply_model: "",
+    apply_effort: "",
+    push_after_apply: false,
+    tag_release_after_push: false,
+  };
+  const errors: string[] = [];
+  const saver = savingSettings({
+    settings: () => settings,
+    setError: (text) => errors.push(text),
+    save: async () => {
+      throw new Error("disk full");
+    },
+  });
+  saver.schedule();
+  assert.equal(await saver.flush(), false);
+  assert.deepEqual(errors, ["Settings are not being saved: Error: disk full"]);
 
   const html = read("ui", "index.html");
   assert.match(
