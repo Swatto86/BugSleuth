@@ -201,8 +201,11 @@ fn acknowledgement(reason: &str, repo: &Path, cluster: &Cluster) -> Option<(Stri
         return None;
     }
 
-    let file = repo.join(&cluster.representative().anchor.file);
-    let source = std::fs::read_to_string(file).ok()?;
+    // The same bounded commentary block the prompt offered for this defect, not
+    // the whole file. Searching the file accepted a comment written about an
+    // unrelated defect further down, which took this one out of the actionable
+    // findings and out of every fix prompt.
+    let source = commentary_at(repo, cluster.representative())?;
     let flatten = |text: &str| {
         text.split_whitespace()
             .map(|word| word.trim_matches(|c: char| c == '/' || c == '*'))

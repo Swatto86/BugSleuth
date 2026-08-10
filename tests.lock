@@ -671,6 +671,7 @@ rust the_two_vendors_findings_load_and_are_the_expected_size
 rust three_different_defects_within_ten_lines_are_not_collapsed_into_one
 rust tray::tests::a_visible_window_updates_the_tooltip_without_a_notification
 rust tray::tests::hidden_completion_requests_a_notification_with_distinct_text
+rust triage::tests::a_quote_elsewhere_in_the_file_does_not_acknowledge_this_defect
 rust triage::tests::a_quote_that_is_in_the_file_settles_it
 rust triage::tests::a_quote_that_is_not_in_the_file_is_refused
 rust triage::tests::a_quote_too_short_to_be_evidence_is_refused

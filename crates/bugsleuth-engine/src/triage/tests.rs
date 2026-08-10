@@ -232,6 +232,32 @@ const SOURCE: &str = "// Kilo cannot be restricted per invocation, so it is\n\
                           // pointed at an empty private directory instead.\n\
                           fn code() {}\n";
 
+/// Evidence has to sit at the defect, not merely in the same file.
+///
+/// The containment check read the whole file, so a comment written about a
+/// different defect further down settled this one — the finding left the
+/// actionable list and every fix prompt on the strength of somebody else's
+/// documented trade-off.
+#[test]
+fn a_quote_elsewhere_in_the_file_does_not_acknowledge_this_defect() {
+    let elsewhere = "fn code() {}\n\
+                     \n\
+                     // A different defect, and this comment is about that one:\n\
+                     // the retry budget is deliberately fixed at three attempts.\n\
+                     fn other() {}\n";
+    let dir = scratch("elsewhere", elsewhere);
+    let mut far = cluster();
+    // Anchored at line 1, with no commentary above it at all.
+    far.findings[0].anchor.line = 1;
+    let reason = "ACKNOWLEDGED: \"the retry budget is deliberately fixed at three attempts\" \
+                  — a recorded decision.";
+    assert!(
+        acknowledgement(reason, &dir, &far).is_none(),
+        "a comment about another defect in the same file dismissed this one"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A dismissal backed by words really in the file is accepted.
 #[test]
 fn a_quote_that_is_in_the_file_settles_it() {
