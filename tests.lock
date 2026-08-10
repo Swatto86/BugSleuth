@@ -211,6 +211,7 @@ rust apply::attribution::tests::a_commit_crediting_the_tool_is_spotted_and_an_or
 rust apply::attribution::tests::a_credit_in_the_subject_line_is_still_reported
 rust apply::attribution::tests::an_unborn_repositorys_initial_commit_is_stripped_as_a_root
 rust apply::attribution::tests::attribution_read_errors_fail_closed
+rust apply::attribution::tests::concurrent_branch_move_is_not_clobbered_by_attribution_strip
 rust apply::attribution::tests::stripping_removes_the_trailer_and_changes_nothing_else
 rust apply::attribution::tests::the_format_string_is_the_one_git_actually_produces
 rust apply::observed::tests::a_clean_tree_reads_as_clean_rather_than_as_one_empty_path

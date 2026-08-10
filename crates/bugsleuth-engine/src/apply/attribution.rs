@@ -41,8 +41,22 @@ pub(super) fn strip_attribution(repo: &Path, base: &Baseline) -> anyhow::Result<
     // root with no parent. An unborn start that committed nothing has no range
     // and nothing to strip — and any failure to establish that is an error, not
     // an empty range that would quietly skip the whole guard.
-    let Some(range) = range_since(repo, base)? else {
+    let Some(_) = range_since(repo, base)? else {
         return Ok(vec![]);
+    };
+    let expected_head = git(repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    strip_attribution_at(repo, base, &branch, &expected_head)
+}
+
+fn strip_attribution_at(
+    repo: &Path,
+    base: &Baseline,
+    branch: &str,
+    expected_head: &str,
+) -> anyhow::Result<Vec<String>> {
+    let range = match base {
+        Baseline::Commit(base) => format!("{base}..{expected_head}"),
+        Baseline::Unborn => expected_head.to_string(),
     };
     let ids: Vec<String> = git(repo, &["rev-list", "--reverse", &range])?
         .lines()
@@ -85,9 +99,8 @@ pub(super) fn strip_attribution(repo: &Path, base: &Baseline) -> anyhow::Result<
         parent = Some(new);
     }
 
-    // `update-ref` with the expected old value, so a branch that moved while
-    // this ran is left alone rather than clobbered.
-    let head = git(repo, &["rev-parse", "HEAD"])?.trim().to_string();
+    // `update-ref` with the frozen old value, so a branch that moved while this
+    // ran is left alone rather than clobbered.
     // `any_credited` above guaranteed the loop ran at least once, so `parent` is
     // now `Some`; treat the impossible `None` as an error rather than unwrap.
     let new_head = parent
@@ -98,7 +111,7 @@ pub(super) fn strip_attribution(repo: &Path, base: &Baseline) -> anyhow::Result<
             "update-ref",
             &format!("refs/heads/{branch}"),
             &new_head,
-            &head,
+            expected_head,
         ],
     )?;
     Ok(rewritten)

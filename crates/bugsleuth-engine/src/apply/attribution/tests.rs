@@ -192,6 +192,68 @@ fn stripping_removes_the_trailer_and_changes_nothing_else() {
 }
 
 #[test]
+fn concurrent_branch_move_is_not_clobbered_by_attribution_strip() {
+    let dir = std::env::temp_dir().join(format!("bugsleuth-strip-race-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create test repository");
+    let run = |args: &[&str]| {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("run git");
+        assert!(output.status.success(), "git {args:?}: {output:?}");
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.email", "t@example.com"]);
+    run(&["config", "user.name", "Tester"]);
+    std::fs::write(dir.join("a.txt"), "base").expect("write base");
+    run(&["add", "-A"]);
+    run(&["commit", "-qm", "base"]);
+    let base = git(&dir, &["rev-parse", "HEAD"])
+        .expect("read base")
+        .trim()
+        .to_string();
+
+    std::fs::write(dir.join("a.txt"), "fix").expect("write fix");
+    run(&["add", "-A"]);
+    run(&[
+        "commit",
+        "-qm",
+        "fix\n\nCo-Authored-By: Claude <noreply@anthropic.com>",
+    ]);
+    let expected_head = git(&dir, &["rev-parse", "HEAD"])
+        .expect("read expected HEAD")
+        .trim()
+        .to_string();
+
+    std::fs::write(dir.join("concurrent.txt"), "keep me").expect("write concurrent change");
+    run(&["add", "-A"]);
+    run(&["commit", "-qm", "concurrent commit"]);
+    let concurrent_head = git(&dir, &["rev-parse", "HEAD"])
+        .expect("read concurrent HEAD")
+        .trim()
+        .to_string();
+    let branch = git(&dir, &["symbolic-ref", "--quiet", "--short", "HEAD"])
+        .expect("read branch")
+        .trim()
+        .to_string();
+
+    assert!(
+        strip_attribution_at(&dir, &Baseline::Commit(base), &branch, &expected_head,).is_err(),
+        "moving the branch after HEAD was frozen must abort the rewrite"
+    );
+    assert_eq!(
+        git(&dir, &["rev-parse", "HEAD"])
+            .expect("read final HEAD")
+            .trim(),
+        concurrent_head,
+        "the concurrent commit must remain the branch tip"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn an_unborn_repositorys_initial_commit_is_stripped_as_a_root() {
     // The initial commit of an unborn repository has no parent, so its rewrite
     // must be a root commit — `commit-tree` with no `-p`. Before the Baseline
