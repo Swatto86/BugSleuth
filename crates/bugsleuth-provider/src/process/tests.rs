@@ -340,3 +340,37 @@ async fn the_result_of_writing_the_prompt_is_still_consumed() {
         "a failed prompt write was not propagated: {result:?}"
     );
 }
+
+#[tokio::test]
+async fn a_failed_prompt_write_keeps_what_the_child_said() {
+    // A CLI that refuses at startup — signed out, an unrecognised flag — never
+    // reads stdin, so a prompt larger than the pipe buffer fails to write. The
+    // broken pipe is the symptom; the CLI's own line is the reason, and it must
+    // survive into the reported error rather than being dropped with the buffers.
+    let (binary, mut args) = shell();
+    args.push(if cfg!(windows) {
+        "echo sign-in-required 1>&2 & exit /b 1".into()
+    } else {
+        "echo sign-in-required >&2; exit 1".into()
+    });
+    let prompt = vec![b'x'; 8 * 1024 * 1024];
+    let result = run(Invocation {
+        binary,
+        args: &args,
+        cwd: Path::new("."),
+        stdin: Some(prompt.as_slice()),
+        env: &[],
+        timeout: Duration::from_secs(30),
+        what: "closed stdin test",
+    })
+    .await;
+    let error = result.expect_err("a failed prompt write must still be an error");
+    assert!(
+        error.to_string().contains("sign-in-required"),
+        "the child's own explanation was discarded: {error}"
+    );
+    assert!(
+        error.to_string().contains("writing the prompt"),
+        "the failure no longer names the undelivered prompt: {error}"
+    );
+}

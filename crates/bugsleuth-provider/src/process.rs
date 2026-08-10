@@ -241,10 +241,23 @@ async fn run_inner(
             // A prompt that never arrived is not a sweep. Reported as a failed
             // invocation, which the caller already renders as NOT SWEPT with a
             // reason, rather than as an answer to a question never asked.
-            fed.map_err(|source| ProcessError::Wait {
-                what: format!("{} (writing the prompt)", invocation.what),
-                source,
-            })?;
+            if let Err(source) = fed {
+                // The child may already have exited saying why — signed out, a
+                // flag it no longer recognises. Its own words are the useful
+                // reason; the broken pipe is only the symptom of it never
+                // reading stdin. `preview` redacts credential-shaped tokens and
+                // bounds the length, because this text reaches a stored report.
+                let said = preview(String::from_utf8_lossy(&err.bytes).trim(), 500);
+                let what = if said.is_empty() {
+                    format!("{} (writing the prompt)", invocation.what)
+                } else {
+                    format!(
+                        "{} (writing the prompt; the process had already exited saying: {said})",
+                        invocation.what
+                    )
+                };
+                return Err(ProcessError::Wait { what, source });
+            }
             capture::result(invocation.what, output_cap, status.code(), out, err, None)
         }
         Err(_) => {

@@ -634,6 +634,7 @@ rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
 rust process::environment_tests::child_does_not_inherit_unapproved_environment
 rust process::tests::a_descendant_holding_pipes_cannot_outlive_the_deadline
+rust process::tests::a_failed_prompt_write_keeps_what_the_child_said
 rust process::tests::a_timeout_keeps_output_written_before_the_cutoff
 rust process::tests::a_timeout_kills_what_the_child_started_and_not_only_the_child
 rust process::tests::a_vendors_own_credential_dump_is_redacted_from_previewed_output
