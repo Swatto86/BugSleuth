@@ -135,6 +135,15 @@ fn build_args(spec: &KimiSweep<'_>, brief: &brief_file::BriefFile) -> Vec<String
     args.push("--add-dir".into());
     args.push(brief.dir().to_string_lossy().into_owned());
 
+    // Pointed at an empty directory, which is what disables discovery: the flag
+    // loads skills from the given directory *instead of* the auto-discovered
+    // user and project ones. A project-level skill in the reviewed tree is the
+    // repository handing instructions to its own reviewer — the same hole the
+    // engine strips `.kimi` and `KIMI.md` for, closed from the other side too
+    // because auto-discovery also reaches outside the worktree.
+    args.push("--skills-dir".into());
+    args.push(brief.skills_dir().to_string_lossy().into_owned());
+
     let model = spec.model.trim();
     if !model.is_empty() {
         args.push("-m".into());

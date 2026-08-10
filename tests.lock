@@ -500,6 +500,7 @@ rust kimi::tests::a_failing_cli_is_an_error_rather_than_no_findings
 rust kimi::tests::a_real_invocation_returns_the_findings_the_cli_printed
 rust kimi::tests::discovery_finds_a_real_installation
 rust kimi::tests::no_approval_flag_is_passed_because_prompt_mode_refuses_them
+rust kimi::tests::project_skill_discovery_is_disabled
 rust kimi::tests::the_brief_directory_is_granted_to_the_session
 rust kimi::tests::the_brief_never_reaches_the_command_line
 rust kimi::tests::the_findings_survive_the_cli_s_own_banner_and_resume_hint
@@ -669,6 +670,7 @@ rust similarity::tests::two_different_defects_in_the_same_function_score_far_low
 rust sweep::isolate::tests::a_repository_cannot_redefine_the_agent_that_reviews_it
 rust sweep::isolate::tests::a_rules_directory_goes_whole
 rust sweep::isolate::tests::an_instruction_directory_name_is_removed_regardless_of_entry_type
+rust sweep::isolate::tests::each_vendors_own_instruction_file_is_stripped
 rust sweep::isolate::tests::external_skill_directories_go_whole
 rust sweep::isolate::tests::instruction_files_go_and_code_stays
 rust sweep::isolate::tests::kilo_project_control_files_are_removed

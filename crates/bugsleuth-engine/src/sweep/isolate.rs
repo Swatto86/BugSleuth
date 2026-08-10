@@ -35,6 +35,7 @@ const INSTRUCTION_FILES: &[&str] = &[
     "context.md",
     "claude.md",
     "kilo.md",
+    "kimi.md",
     "kilo.json",
     "kilo.jsonc",
     "opencode.json",
@@ -57,6 +58,11 @@ const INSTRUCTION_FILES: &[&str] = &[
 const INSTRUCTION_DIRS: &[&str] = &[
     ".kilo",
     ".kilocode",
+    // Kimi discovers agent profiles and skills from project directories, which
+    // is the same hole `.kilo` is here for: a profile in the reviewed tree
+    // would redefine the agent its own review runs as.
+    ".kimi",
+    ".kimi-code",
     ".agents",
     ".claude",
     ".cursor",
@@ -349,6 +355,29 @@ mod tests {
         assert!(root.join(".git/CONTEXT.md").exists());
         assert!(root.join("target/AGENTS.md").exists());
         assert!(removed.is_empty(), "removed {removed:?}");
+    }
+
+    /// Every vendor BugSleuth can sweep with must have its own instruction
+    /// files stripped, or that vendor's reviews are briefed by the code they
+    /// review.
+    ///
+    /// Named per vendor rather than inferred, so adding a vendor and forgetting
+    /// this fails here instead of silently shipping the hole.
+    #[test]
+    fn each_vendors_own_instruction_file_is_stripped() {
+        let root = scratch("per-vendor");
+        for name in ["CLAUDE.md", "KILO.md", "KIMI.md", "AGENTS.md"] {
+            write(&root, name, "standing orders from the reviewed repository");
+        }
+        let removed = strip_agent_instructions(&root).expect("strip instructions");
+        assert_eq!(
+            removed.len(),
+            4,
+            "a vendor's own instruction file survived: {removed:?}"
+        );
+        for name in ["CLAUDE.md", "KILO.md", "KIMI.md", "AGENTS.md"] {
+            assert!(!root.join(name).exists(), "{name} was left behind");
+        }
     }
 
     #[test]

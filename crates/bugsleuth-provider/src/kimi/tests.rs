@@ -278,3 +278,34 @@ fn no_approval_flag_is_passed_because_prompt_mode_refuses_them() {
     assert!(args.iter().any(|arg| arg == "-p"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Skill auto-discovery is disabled, or the reviewed repository briefs its own
+/// reviewer.
+///
+/// `--skills-dir` loads from the given directory *instead of* the discovered
+/// user and project ones, so passing a directory that holds only the brief is
+/// what turns discovery off.
+#[test]
+fn project_skill_discovery_is_disabled() {
+    let dir = scratch("skills");
+    let brief = brief_file::BriefFile::write("brief").expect("write brief");
+    let args = build_args(&spec("", &dir), &brief);
+    let at = args
+        .iter()
+        .position(|arg| arg == "--skills-dir")
+        .expect("without this, a skill committed to the reviewed tree is loaded");
+    let pointed = args.get(at + 1).map(String::as_str).unwrap_or_default();
+    assert_eq!(
+        pointed,
+        brief.skills_dir().to_string_lossy().as_ref(),
+        "skills were pointed somewhere that could contain some"
+    );
+    assert_eq!(
+        std::fs::read_dir(pointed)
+            .expect("the skills directory must exist or the flag is ignored")
+            .count(),
+        0,
+        "the directory skill discovery is pointed at is not empty"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

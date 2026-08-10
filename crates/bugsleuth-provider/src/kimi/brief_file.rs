@@ -47,6 +47,10 @@ impl BriefFile {
             detail: format!("could not write the review brief: {error}"),
         };
         std::fs::create_dir_all(&dir).map_err(scratch)?;
+        // An empty directory to point skill discovery at. Deliberately not the
+        // brief's own: pointed there, Kimi listed the brief as a *skill*, which
+        // is not what it is and not a classification worth depending on.
+        std::fs::create_dir_all(dir.join("skills")).map_err(scratch)?;
         let path = dir.join("brief.md");
         std::fs::write(&path, brief).map_err(scratch)?;
         Ok(Self { dir, path })
@@ -62,6 +66,13 @@ impl BriefFile {
     /// brief deliberately lives outside that, so it needs `--add-dir`.
     pub(super) fn dir(&self) -> &Path {
         &self.dir
+    }
+
+    /// An empty directory, whose emptiness is the point: `--skills-dir` loads
+    /// from here *instead of* the auto-discovered user and project ones, so
+    /// nothing the reviewed repository ships is loaded.
+    pub(super) fn skills_dir(&self) -> PathBuf {
+        self.dir.join("skills")
     }
 }
 
