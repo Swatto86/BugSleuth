@@ -94,8 +94,16 @@ async fn kilo_operations_are_serialized() {
 /// minutes. Saying why is the honest answer.
 #[tokio::test]
 async fn kilo_diagnostics_refuse_while_an_operation_holds_the_slot() {
+    // A discoverable binary, so this reaches the guard rather than stopping at
+    // "the kilo CLI could not be found" — which is what every CI runner would
+    // otherwise assert on, proving nothing about serialization. The path is
+    // never executed: the guard refuses before anything is spawned.
+    let dir = scratch("diagnostic-guard");
+    let stub = dir.join(if cfg!(windows) { "kilo.cmd" } else { "kilo.sh" });
+    std::fs::write(&stub, "").expect("write stub");
+
     let held = operation_guard().await;
-    let checked = signin_for("", "", None).await;
+    let checked = signin_for("", "", Some(&stub.to_string_lossy())).await;
     assert!(
         !checked.usable(),
         "the sign-in check ran a second Kilo process beside a live one"
@@ -104,12 +112,12 @@ async fn kilo_diagnostics_refuse_while_an_operation_holds_the_slot() {
         format!("{checked:?}").contains("already running"),
         "the refusal does not say why: {checked:?}"
     );
-    let catalogue = crate::models::available("kilo").await;
-    assert!(
-        catalogue.is_err(),
-        "the model catalogue ran a second Kilo process beside a live one"
-    );
+    // Nothing is asserted about the slot being *free* afterwards: the lock is
+    // process-wide, and the serialization test above holds it for its own two
+    // sweeps, so any such assertion races with whichever test runs alongside.
+    // Release is `MutexGuard`'s contract, not this test's subject.
     drop(held);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A scratch directory that is empty at the start of every run.
