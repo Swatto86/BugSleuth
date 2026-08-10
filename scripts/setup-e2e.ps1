@@ -23,12 +23,21 @@ $dest = Join-Path $root '.webdriver'
 New-Item -ItemType Directory -Force $dest | Out-Null
 
 Write-Host '== tauri-driver ==' -ForegroundColor Cyan
-if (Get-Command tauri-driver -ErrorAction SilentlyContinue) {
-    Write-Host '  already installed'
+# The reviewed release, pinned. `--locked` only pins the crate's own
+# dependencies: without a version, a newly published compromised release is the
+# newest compatible one, and its build script runs here before its binary runs
+# the E2E suite. Cargo's own record is read rather than executing whatever
+# binary happens to be on PATH under that name.
+$wantedTauriDriver = '2.0.6'
+$installedTauriDriver = cargo install --list |
+    Select-String -Pattern "^tauri-driver v$([regex]::Escape($wantedTauriDriver)):"
+if ($LASTEXITCODE -ne 0) { throw 'could not list installed Cargo binaries' }
+if ($installedTauriDriver) {
+    Write-Host "  already installed ($wantedTauriDriver)"
 }
 else {
-    cargo install tauri-driver --locked
-    if ($LASTEXITCODE -ne 0) { throw 'could not install tauri-driver' }
+    cargo install tauri-driver --version "=$wantedTauriDriver" --locked --force
+    if ($LASTEXITCODE -ne 0) { throw "could not install tauri-driver $wantedTauriDriver" }
 }
 
 Write-Host '== WebView2 runtime ==' -ForegroundColor Cyan

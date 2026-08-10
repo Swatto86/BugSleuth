@@ -72,6 +72,31 @@ test("the signature verifier refuses an executable Microsoft did not sign", (t) 
   );
 });
 
+test("tauri-driver is installed at one reviewed version", () => {
+  const setup = read("scripts", "setup-e2e.ps1");
+  // `--locked` pins the crate's own dependencies, not the crate. Without a
+  // top-level version a newly published compromised release is simply the
+  // newest compatible one, and setup installs and runs it.
+  assert.ok(
+    !/cargo install tauri-driver --locked/.test(setup),
+    "setup still installs whichever tauri-driver release Cargo picks",
+  );
+  const pin = /\$wantedTauriDriver = '([\d.]+)'/.exec(setup);
+  assert.ok(pin, "setup-e2e.ps1 no longer declares a reviewed tauri-driver");
+  // One variable, read by both the install and the already-installed check, so
+  // the two cannot drift into installing one version and accepting another.
+  assert.ok(
+    setup.includes(
+      'cargo install tauri-driver --version "=$wantedTauriDriver" --locked --force',
+    ),
+    `the install command does not pin tauri-driver ${pin[1]!}`,
+  );
+  assert.ok(
+    setup.includes("^tauri-driver v$([regex]::Escape($wantedTauriDriver)):"),
+    "the installed-version check does not use the reviewed version",
+  );
+});
+
 test("a cached EdgeDriver is verified before its version is read", () => {
   const setup = read("scripts", "setup-e2e.ps1");
   // Bounded to the cached branch, ahead of the first `& $driver`. A driver
