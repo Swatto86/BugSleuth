@@ -321,7 +321,8 @@ rust caveats::tests::nothing_is_said_at_all_when_no_sweeps_ran
 rust caveats::tests::the_caution_fires_for_a_kilo_vendor_and_not_for_a_model_merely_named_one
 rust caveats::tests::the_limits_carry_the_surrounding_documents_indent
 rust caveats::tests::the_recovery_caveat_covers_timeouts_as_well_as_turn_limits
-rust claude::apply::tests::apply_fails_closed_before_launching_claude
+rust claude::apply::tests::applying_a_fix_may_write_and_run_commands
+rust claude::apply::tests::writes_are_granted_only_inside_the_repository
 rust claude::envelope::tests::a_failure_is_explained_from_the_envelope_when_stderr_says_nothing
 rust claude::envelope::tests::a_legacy_schema_reply_can_still_fall_back_to_result
 rust claude::envelope::tests::a_normal_envelope_is_read_without_complaint
@@ -332,6 +333,7 @@ rust claude::envelope::tests::an_error_envelope_becomes_an_error_not_an_empty_sw
 rust claude::envelope::tests::any_other_envelope_error_is_still_an_ordinary_failure
 rust claude::envelope::tests::output_that_is_not_an_envelope_is_still_shown_rather_than_dropped
 rust claude::envelope::tests::usage_token_counts_are_surfaced_as_text
+rust claude::permission_tests::apply_may_write_but_only_inside_the_repository
 rust claude::permission_tests::read_only_tools_are_repo_scoped
 rust claude::salvage::tests::a_turn_limit_failure_offers_its_session_for_salvage
 rust claude::salvage::tests::a_turn_limit_with_no_session_id_cannot_be_salvaged

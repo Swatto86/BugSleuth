@@ -266,6 +266,7 @@ async fn run_provider(
                 prompt: request.prompt,
                 timeout: request.timeout,
                 max_turns: request.max_turns,
+                binary: None,
             })
             .await
         }
