@@ -21,6 +21,7 @@ fn report(swept: Vec<Swept>) -> RunReport {
         triage: Default::default(),
         swept,
         gaps: vec![],
+        cancelled: false,
     }
 }
 

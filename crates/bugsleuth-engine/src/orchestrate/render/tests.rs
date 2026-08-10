@@ -20,6 +20,7 @@ fn report(gaps: Vec<Gap>) -> RunReport {
             salvaged: false,
         }],
         gaps,
+        cancelled: false,
     }
 }
 
@@ -86,6 +87,7 @@ fn a_multi_lane_report_warns_that_severities_are_not_comparable() {
         ],
         triage: Default::default(),
         gaps: vec![],
+        cancelled: false,
     };
     assert_eq!(multi.lanes_swept(), 2);
     assert!(multi.to_text().contains("NOT directly comparable"));
@@ -121,6 +123,7 @@ fn two_models_on_one_lane_is_still_one_lane() {
         ],
         triage: Default::default(),
         gaps: vec![],
+        cancelled: false,
     };
     assert_eq!(same_lane.lanes_swept(), 1);
     assert!(!same_lane.to_text().contains("NOT directly comparable"));
@@ -182,6 +185,7 @@ fn graded_report(triage: Outcome) -> RunReport {
             salvaged: false,
         }],
         gaps: vec![],
+        cancelled: false,
     }
 }
 

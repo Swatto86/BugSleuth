@@ -23,6 +23,7 @@ fn report(gaps: Vec<Gap>) -> RunReport {
             salvaged: false,
         }],
         gaps,
+        cancelled: false,
     }
 }
 
@@ -76,6 +77,7 @@ fn a_fully_graded_multi_lane_report_stops_warning_that_lanes_cannot_be_compared(
             },
         ],
         gaps: vec![],
+        cancelled: false,
     };
     // Nothing graded: the warning stands.
     assert!(multi.to_text().contains("NOT directly comparable"));
@@ -152,6 +154,7 @@ fn a_moved_grade_is_shown_with_what_it_moved_from_and_why() {
             salvaged: false,
         }],
         gaps: vec![],
+        cancelled: false,
     };
     let text = unchanged.to_text();
     assert!(text.contains("[LOW]"), "{text}");
@@ -190,6 +193,7 @@ fn rejected_findings_are_counted_in_the_sweep_line() {
             salvaged: false,
         }],
         gaps: vec![],
+        cancelled: false,
     };
     let text = with_rejects.to_text();
     assert!(text.contains("2 rejected as unverifiable"), "{text}");
@@ -233,6 +237,7 @@ fn a_salvaged_sweep_does_not_read_like_a_clean_one() {
             salvaged: true,
         }],
         gaps: vec![],
+        cancelled: false,
     };
     let text = salvaged.to_text();
     assert!(text.contains("RECOVERED"), "{text}");
@@ -261,6 +266,7 @@ fn a_run_that_used_an_unsandboxable_vendor_says_so_in_the_report() {
             salvaged: false,
         }],
         gaps: vec![],
+        cancelled: false,
     };
     let text = with_kilo.to_text();
     assert!(text.contains("Caution:"), "{text}");
@@ -333,6 +339,7 @@ fn agreement_is_counted_against_models_not_sweeps() {
         triage: Default::default(),
         swept: two_models_two_lanes,
         gaps: vec![],
+        cancelled: false,
     };
     assert_eq!(report.models_on("correctness"), 2);
     assert_eq!(report.models_on("ux"), 2);
@@ -373,6 +380,7 @@ fn repeating_a_model_does_not_inflate_the_model_count() {
             },
         ],
         gaps: vec![],
+        cancelled: false,
     };
     assert_eq!(repeated.models_on("correctness"), 1);
 }

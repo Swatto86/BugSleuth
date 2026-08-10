@@ -281,15 +281,16 @@ describe("BugSleuth desktop app", () => {
     }
     assert.ok(confirmed, "the stop dialog offered no way to confirm");
 
+    // Exactly "Review stopped", not either of the two the timing used to
+    // produce. A mid-sweep Stop returned a partial report and read as
+    // "Finished"; one during pre-check returned an error and read as
+    // "Run failed". Accepting both was accepting the defect.
     await browser.waitUntil(
-      async () => {
-        const status = await $("#status").getText();
-        return status.startsWith("Finished") || status.startsWith("Run failed");
-      },
+      async () => (await $("#status").getText()).startsWith("Review stopped"),
       {
         timeout: 4 * 60_000,
         interval: 2_000,
-        timeoutMsg: `the run never came back after Stop; status: ${await $("#status").getText()}`,
+        timeoutMsg: `the run never reported being stopped; status: ${await $("#status").getText()}`,
       },
     );
 
@@ -393,7 +394,11 @@ ${output}`,
     // The promise the whole tool rests on. A review that modified its target
     // would be worse than useless.
     const repoAfter = treeDigest(REPO);
-    assert.equal(repoAfter, repoBefore, "the review modified its target repository");
+    assert.equal(
+      repoAfter,
+      repoBefore,
+      "the review modified its target repository",
+    );
     assert.ok(!fs.existsSync(path.join(REPO, ".bugsleuth-worktrees")));
   });
 });

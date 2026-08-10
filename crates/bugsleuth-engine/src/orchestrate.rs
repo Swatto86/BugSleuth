@@ -115,6 +115,16 @@ pub struct RunReport {
     pub swept: Vec<Swept>,
     /// Every hole, with why. Both kinds: no model assigned, and sweep failed.
     pub gaps: Vec<Gap>,
+    /// Whether the run was stopped part-way rather than reaching its end.
+    ///
+    /// Captured here, in the engine, at the moment the gaps are written — not
+    /// sampled by the Tauri layer afterwards. A cancellation arriving after the
+    /// engine has already recorded completion must remain completed, and only
+    /// the engine knows which of those happened. Stopping mid-run produced an
+    /// `Ok(RunReport)` with cancellation gaps and stopping during pre-check
+    /// produced an `Err`, so the same Stop action was reported as "Finished" or
+    /// "Run failed" purely by timing.
+    pub cancelled: bool,
 }
 
 /// One sweep that ran, and what came of it.
@@ -266,7 +276,10 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
     let mut clusters = cluster(findings);
     let triage = crate::triage::grade(&mut clusters, &options).await;
 
-    gaps::note_cancelled(&options, &remaining_units, &mut gaps);
+    // Read once, and used for both the gaps and the report's own flag, so the
+    // two cannot disagree about whether this run was stopped.
+    let cancelled = options.cancel.stopped();
+    gaps::note_cancelled(cancelled, &remaining_units, &mut gaps);
     gaps::note_panicked(&panicked, &mut gaps);
 
     Ok(RunReport {
@@ -274,6 +287,7 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         triage,
         swept,
         gaps,
+        cancelled,
     })
 }
 

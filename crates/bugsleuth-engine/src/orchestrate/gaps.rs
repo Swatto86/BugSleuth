@@ -8,7 +8,7 @@
 
 use bugsleuth_domain::Lane;
 
-use super::{Gap, RunOptions};
+use super::Gap;
 use crate::plan::{Plan, Unit};
 
 /// Whether git cannot confirm that the repository is clean.
@@ -91,8 +91,8 @@ pub(super) fn caution(plan: &Plan, repo: &std::path::Path) {
 /// A cancelled run must never read as a finished one. Each unit that never ran
 /// becomes a gap with its reason, exactly like a lane nobody assigned to — the
 /// report's whole discipline is that an absent finding is never silent.
-pub(super) fn note_cancelled(options: &RunOptions<'_>, remaining: &[Unit], gaps: &mut Vec<Gap>) {
-    if !options.cancel.stopped() {
+pub(super) fn note_cancelled(cancelled: bool, remaining: &[Unit], gaps: &mut Vec<Gap>) {
+    if !cancelled {
         return;
     }
     for unit in remaining {

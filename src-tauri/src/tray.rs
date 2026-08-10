@@ -32,18 +32,43 @@ pub(crate) struct CompletionPlan {
     pub notification: Option<(String, String)>,
 }
 
+/// How a piece of background work ended.
+///
+/// Three states, not a boolean. A stopped run is neither a success nor a
+/// failure, and folding it into either meant the same Stop action was announced
+/// as "finished" or "failed" depending only on how far the run had got.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Completion {
+    Succeeded,
+    Stopped,
+    Failed,
+}
+
 /// Decide what to show for finished work. Pure, so the tooltip/notification
 /// choice can be tested without a running app.
 pub(crate) fn completion_plan(
     work: BackgroundWork,
-    success: bool,
+    outcome: Completion,
     window_hidden: bool,
 ) -> CompletionPlan {
-    let (tooltip, body) = match (work, success) {
-        (BackgroundWork::Review, true) => ("BugSleuth — review finished", "Your review finished."),
-        (BackgroundWork::Review, false) => ("BugSleuth — review failed", "Your review failed."),
-        (BackgroundWork::Apply, true) => ("BugSleuth — fixes applied", "The fixes were applied."),
-        (BackgroundWork::Apply, false) => {
+    let (tooltip, body) = match (work, outcome) {
+        (BackgroundWork::Review, Completion::Succeeded) => {
+            ("BugSleuth — review finished", "Your review finished.")
+        }
+        (BackgroundWork::Review, Completion::Stopped) => {
+            ("BugSleuth — review stopped", "Your review was stopped.")
+        }
+        (BackgroundWork::Review, Completion::Failed) => {
+            ("BugSleuth — review failed", "Your review failed.")
+        }
+        (BackgroundWork::Apply, Completion::Succeeded) => {
+            ("BugSleuth — fixes applied", "The fixes were applied.")
+        }
+        (BackgroundWork::Apply, Completion::Stopped) => (
+            "BugSleuth — apply stopped",
+            "Applying the fixes was stopped.",
+        ),
+        (BackgroundWork::Apply, Completion::Failed) => {
             ("BugSleuth — apply failed", "Applying the fixes failed.")
         }
     };
@@ -72,13 +97,13 @@ pub fn work_started<R: Runtime>(app: &AppHandle<R>, work: BackgroundWork) {
 /// Mark background work as finished: always update the tray tooltip, and when
 /// the window is hidden send a native notification so the completion is visible
 /// without reopening the window.
-pub fn work_finished<R: Runtime>(app: &AppHandle<R>, work: BackgroundWork, success: bool) {
+pub fn work_finished<R: Runtime>(app: &AppHandle<R>, work: BackgroundWork, outcome: Completion) {
     let hidden = app
         .get_webview_window("main")
         .and_then(|window| window.is_visible().ok())
         .map(|visible| !visible)
         .unwrap_or(false);
-    let plan = completion_plan(work, success, hidden);
+    let plan = completion_plan(work, outcome, hidden);
     // The tooltip is set first and unconditionally: if the OS refuses the
     // notification — disabled by the user, or the portable exe is not a
     // registered application — the tray's accessible name still carries the
@@ -189,8 +214,8 @@ mod tests {
 
     #[test]
     fn hidden_completion_requests_a_notification_with_distinct_text() {
-        let ok = completion_plan(BackgroundWork::Review, true, true);
-        let failed = completion_plan(BackgroundWork::Review, false, true);
+        let ok = completion_plan(BackgroundWork::Review, Completion::Succeeded, true);
+        let failed = completion_plan(BackgroundWork::Review, Completion::Failed, true);
         assert!(
             ok.notification.is_some() && failed.notification.is_some(),
             "a hidden window got no completion notification"
@@ -204,13 +229,33 @@ mod tests {
             "success and failure share a tooltip"
         );
         // Apply is distinguished from review, so the notification says which.
-        let apply = completion_plan(BackgroundWork::Apply, true, true);
+        let apply = completion_plan(BackgroundWork::Apply, Completion::Succeeded, true);
         assert_ne!(ok.notification, apply.notification);
+    }
+
+    /// A stopped job is announced as stopped, not as finished or failed.
+    ///
+    /// The tray took a boolean, so Stop reached it as whichever of the two the
+    /// timing happened to produce: a review stopped mid-sweep still returns a
+    /// partial report and was announced as having finished, while one stopped
+    /// during pre-check was announced as having failed.
+    #[test]
+    fn a_stopped_job_is_announced_as_neither_finished_nor_failed() {
+        for work in [BackgroundWork::Review, BackgroundWork::Apply] {
+            let succeeded = completion_plan(work, Completion::Succeeded, true);
+            let stopped = completion_plan(work, Completion::Stopped, true);
+            let failed = completion_plan(work, Completion::Failed, true);
+            assert!(stopped.tooltip.contains("stopped"), "{}", stopped.tooltip);
+            assert_ne!(stopped.tooltip, succeeded.tooltip);
+            assert_ne!(stopped.tooltip, failed.tooltip);
+            assert_ne!(stopped.notification, succeeded.notification);
+            assert_ne!(stopped.notification, failed.notification);
+        }
     }
 
     #[test]
     fn a_visible_window_updates_the_tooltip_without_a_notification() {
-        let plan = completion_plan(BackgroundWork::Apply, true, false);
+        let plan = completion_plan(BackgroundWork::Apply, Completion::Succeeded, false);
         assert!(
             plan.notification.is_none(),
             "a visible window fired a duplicate notification"

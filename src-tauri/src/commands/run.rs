@@ -13,7 +13,6 @@ use bugsleuth_engine::{orchestrate, plan, sweep};
 use tauri::{Emitter, Manager};
 
 use super::CommandResult;
-use crate::outcome::{fix_prompt, gap_lines};
 use crate::settings::{self, Settings};
 
 mod control;
@@ -66,9 +65,16 @@ pub async fn start_run(
     });
 
     tauri::async_runtime::spawn(async move {
-        let checked = tokio::select! {
-            result = sweep::precheck_selected(&selected_units) => result,
-            _ = cancel.cancelled() => Err("Provider pre-check stopped; no lane started.".into())
+        // The pre-check's own cancellation is carried out, not inferred: a Stop
+        // during it produces an `Err`, while a Stop mid-run produces an
+        // `Ok(RunReport)` with gaps — so without this the same action was
+        // reported as "Run failed" or "Finished" purely by timing.
+        let (checked, precheck_cancelled) = tokio::select! {
+            result = sweep::precheck_selected(&selected_units) => (result, false),
+            _ = cancel.cancelled() => (
+                Err("Provider pre-check stopped; no lane started.".to_string()),
+                true,
+            )
         };
         let report = match checked {
             Ok(()) => {
@@ -92,64 +98,30 @@ pub async fn start_run(
             Err(error) => Err(anyhow::anyhow!(error)),
         };
 
-        let payload = match report {
-            Ok(report) => {
-                let mut text = report.to_text();
+        // The engine's own record where there is one, because a cancellation
+        // arriving after it recorded completion must remain completed.
+        let cancelled = report
+            .as_ref()
+            .map_or(precheck_cancelled, |report| report.cancelled);
 
-                // The prompt is the thing that gets used, so it is written to
-                // disk as well as handed to the window. A run is tens of
-                // minutes and the window can be closed; losing the output to a
-                // stray click would be the worst possible ending.
-                let prompt = fix_prompt(&repo, &report);
-                // A save that half-failed used to be swallowed by `.ok()`, so the
-                // window said Finished over a handoff that was missing files. Both
-                // a hard failure and a partial one are surfaced now.
-                let (prompt_path, save_error) = match bugsleuth_engine::handoff::write_all(
-                    &out_dir,
-                    &repo.display().to_string(),
-                    &report.ranked,
-                    &gap_lines(&report),
-                    report.swept.len(),
-                ) {
-                    Ok(written) => {
-                        let warning = (!written.warnings.is_empty()).then(|| {
-                            format!(
-                                "The review finished, but some fix prompts were not saved: {}",
-                                written.warnings.join("; ")
-                            )
-                        });
-                        (Some(written.bundle.display().to_string()), warning)
-                    }
-                    Err(error) => (
-                        None,
-                        Some(format!(
-                            "The review finished, but its fix prompt could not be saved to {}: {error}",
-                            out_dir.display()
-                        )),
-                    ),
-                };
-                if let Some(warning) = &save_error {
-                    text.push_str("\n\n");
-                    text.push_str(warning);
-                }
-                serde_json::json!({
-                    "ok": true,
-                    "text": text,
-                    "prompt": prompt,
-                    "promptPath": prompt_path,
-                    "saveError": save_error,
-                    "findings": crate::payload::findings(&repo.display().to_string(), &report),
-                })
-            }
-            Err(error) => serde_json::json!({ "ok": false, "text": error.to_string() }),
-        };
+        let payload = crate::outcome::run_payload(report, cancelled, &repo, &out_dir);
+
         // Announce completion to the tray, and to the desktop when the window is
         // hidden — a review that finished while closed to the tray otherwise
         // left no visible sign it was done.
         crate::tray::work_finished(
             &app,
             crate::tray::BackgroundWork::Review,
-            payload["ok"].as_bool().unwrap_or(false),
+            // Stopped is decided before success, because a stopped run still
+            // produces a usable partial report and would otherwise be announced
+            // as having finished.
+            if cancelled {
+                crate::tray::Completion::Stopped
+            } else if payload["ok"].as_bool().unwrap_or(false) {
+                crate::tray::Completion::Succeeded
+            } else {
+                crate::tray::Completion::Failed
+            },
         );
         let _ = app.emit("run-finished", payload);
         // Cleared here, at the real end of the work — after the triage pass and

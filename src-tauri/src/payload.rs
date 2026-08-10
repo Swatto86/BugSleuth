@@ -68,6 +68,7 @@ mod tests {
 
     fn report(triaged: Option<Severity>, reason: Option<&str>) -> RunReport {
         RunReport {
+            cancelled: false,
             ranked: vec![Ranked {
                 position: 1,
                 cluster: Cluster {

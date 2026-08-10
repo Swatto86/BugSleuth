@@ -70,16 +70,30 @@ pub async fn apply_fixes(
             push: settings.push_after_apply,
             tag: settings.tag_release_after_push,
         });
-        let report = request.await;
+        // Cancellation is carried out of the select rather than folded into the
+        // error, which made a deliberate Stop indistinguishable from a provider
+        // failure — the apply's `ok: false` said only that there was no report.
+        let (report, cancelled) = tokio::select! {
+            biased;
+            () = cancel.cancelled() => (
+                Err(anyhow::anyhow!(
+                    "the apply was stopped. The model was killed part-way through editing the repository — check `git status` and `git log` to see what it had already changed."
+                )),
+                true,
+            ),
+            report = request => (report, false),
+        };
 
         let payload = match report {
             Ok(report) => serde_json::json!({
                 "ok": true,
+                "cancelled": cancelled,
                 "text": describe(&report),
                 "changed": report.changed_files,
             }),
             Err(error) => serde_json::json!({
                 "ok": false,
+                "cancelled": cancelled,
                 "text": error.to_string(),
                 "changed": Vec::<String>::new(),
             }),
@@ -89,7 +103,13 @@ pub async fn apply_fixes(
         crate::tray::work_finished(
             &app,
             crate::tray::BackgroundWork::Apply,
-            payload["ok"].as_bool().unwrap_or(false),
+            if cancelled {
+                crate::tray::Completion::Stopped
+            } else if payload["ok"].as_bool().unwrap_or(false) {
+                crate::tray::Completion::Succeeded
+            } else {
+                crate::tray::Completion::Failed
+            },
         );
         let _ = app.emit("apply-finished", payload);
         if let Some(control) = app.try_state::<RunControl>() {

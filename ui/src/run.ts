@@ -137,6 +137,8 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
 
   await listen<{
     ok: boolean;
+    /** Whether Stop was pressed, independently of whether a report exists. */
+    cancelled: boolean;
     text: string;
     prompt?: string;
     promptPath?: string | null;
@@ -153,7 +155,14 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // A finished run whose fix prompts did not fully save is not a plain
     // "Finished": the detail is in the output text, but the status has to say
     // the save was incomplete rather than letting the window read as all-clear.
-    if (event.payload.ok && event.payload.saveError) {
+    // Stopped is its own outcome, checked before ok. Rust returns a partial
+    // report for a mid-run Stop and an error for one during pre-check, so the
+    // same action used to read as "Finished" or "Run failed" by timing alone.
+    // `currentReport` still keys off `ok`, because a stopped review's partial
+    // report is worth copying.
+    if (event.payload.cancelled) {
+      deps.setStatus("Review stopped");
+    } else if (event.payload.ok && event.payload.saveError) {
       deps.setStatus(
         "Finished, but the fix prompts were not completely saved",
         "error",

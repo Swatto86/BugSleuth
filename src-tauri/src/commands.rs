@@ -163,6 +163,7 @@ mod tests {
             ranked: vec![],
             triage: Default::default(),
             swept: vec![],
+            cancelled: false,
             gaps: vec![
                 orchestrate::Gap {
                     lane: bugsleuth_domain::Lane::Security,

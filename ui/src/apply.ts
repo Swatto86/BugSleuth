@@ -310,21 +310,29 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
     });
   });
 
-  void listen<{ ok: boolean; text: string; changed?: string[] }>(
-    "apply-finished",
-    (event) => {
-      applying = false;
-      append(ui.output, event.payload.text);
-      const changed = event.payload.changed?.length ?? 0;
-      deps.setStatus(
-        applyStatus(event.payload.ok, changed),
-        event.payload.ok ? "" : "error",
-      );
-      if (document.activeElement === ui.stop) deps.focusStatus();
-      deps.refresh();
-      draw();
-    },
-  ).then(
+  void listen<{
+    ok: boolean;
+    /** Whether Stop was pressed, as opposed to the provider failing. */
+    cancelled: boolean;
+    text: string;
+    changed?: string[];
+  }>("apply-finished", (event) => {
+    applying = false;
+    append(ui.output, event.payload.text);
+    const changed = event.payload.changed?.length ?? 0;
+    // Stopping an apply is a deliberate act, not a provider failure — both
+    // arrived as `ok: false` and were reported as "applying failed".
+    const failed = !event.payload.ok && !event.payload.cancelled;
+    deps.setStatus(
+      event.payload.cancelled
+        ? "Applying the fixes was stopped"
+        : applyStatus(event.payload.ok, changed),
+      failed ? "error" : "",
+    );
+    if (document.activeElement === ui.stop) deps.focusStatus();
+    deps.refresh();
+    draw();
+  }).then(
     () => {
       completionEventsReady = true;
       ui.listenerError.textContent = "";
