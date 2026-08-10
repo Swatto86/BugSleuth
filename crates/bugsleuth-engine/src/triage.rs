@@ -135,12 +135,7 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
     };
 
     let salvaged = verdicts.salvaged;
-    let by_id: BTreeMap<String, (Severity, String)> = verdicts
-        .verdicts
-        .verdicts
-        .into_iter()
-        .map(|v| (v.id, (v.severity, v.reason)))
-        .collect();
+    let by_id = unique_verdicts(verdicts.verdicts.verdicts);
 
     let mut changed = 0;
     let mut graded = 0;
@@ -220,6 +215,34 @@ fn acknowledgement(reason: &str, repo: &Path, cluster: &Cluster) -> Option<(Stri
         return None;
     }
     Some((quote, rest.to_string()))
+}
+
+/// The verdicts that can be applied, keyed by the id they name.
+///
+/// A repeated id is ambiguous input and is dropped entirely, both grades with
+/// it. Collecting straight into the map instead let whichever verdict came last
+/// win by response order, and — because every offered id had still appeared —
+/// the pass counted as complete grading with no note. Dropping it leaves the
+/// defect ungraded, which the existing partial-grading note then reports.
+fn unique_verdicts(
+    verdicts: Vec<bugsleuth_domain::SeverityVerdict>,
+) -> BTreeMap<String, (Severity, String)> {
+    let mut by_id: BTreeMap<String, (Severity, String)> = BTreeMap::new();
+    let mut duplicates: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for verdict in verdicts {
+        match by_id.entry(verdict.id) {
+            std::collections::btree_map::Entry::Occupied(entry) => {
+                duplicates.insert(entry.key().clone());
+            }
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert((verdict.severity, verdict.reason));
+            }
+        }
+    }
+    for id in duplicates {
+        by_id.remove(&id);
+    }
+    by_id
 }
 
 /// The id a defect is offered under. Its position, which is stable for the

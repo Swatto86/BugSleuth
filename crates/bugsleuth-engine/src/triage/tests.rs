@@ -35,6 +35,43 @@ fn cluster_at(severity: Severity, title: &str) -> Cluster {
     }
 }
 
+fn verdict(id: &str, severity: Severity, reason: &str) -> bugsleuth_domain::SeverityVerdict {
+    bugsleuth_domain::SeverityVerdict {
+        id: id.into(),
+        severity,
+        reason: reason.into(),
+    }
+}
+
+/// A repeated id is ambiguous input, not a late correction.
+///
+/// Collecting straight into a map let the last verdict for an id win by
+/// response order, and every id still appeared at least once — so the report
+/// counted the grading complete and said nothing about the one it had picked
+/// arbitrarily.
+#[test]
+fn duplicate_triage_ids_are_not_applied_or_counted() {
+    let by_id = unique_verdicts(vec![
+        verdict("1", Severity::High, "first opinion"),
+        verdict("1", Severity::Low, "second opinion"),
+        verdict("2", Severity::Medium, "only opinion"),
+    ]);
+    assert!(
+        !by_id.contains_key("1"),
+        "a defect graded two different ways was applied anyway"
+    );
+    assert_eq!(
+        by_id.get("2").map(|(severity, _)| *severity),
+        Some(Severity::Medium),
+        "the unambiguous verdict must still be applied"
+    );
+    assert_eq!(
+        grading_note(false, by_id.len(), 2),
+        "the triage pass graded 1 of 2 defects; the other 1 keep the grade the \
+         model that found them gave"
+    );
+}
+
 #[test]
 fn every_defect_is_offered_under_an_id_the_reply_can_name() {
     let clusters = vec![
