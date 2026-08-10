@@ -61,3 +61,7 @@ test("only the release publisher receives repository write authority", () => {
 test("the release checkout is pinned to an immutable revision", () => {
   assert.match(actionRef("actions/checkout"), /^[0-9a-f]{40}$/);
 });
+
+test("the release Node setup is pinned to an immutable revision", () => {
+  assert.match(actionRef("actions/setup-node"), /^[0-9a-f]{40}$/);
+});
