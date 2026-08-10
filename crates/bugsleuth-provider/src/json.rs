@@ -21,7 +21,7 @@ pub(crate) fn structured<T: serde::de::DeserializeOwned>(
 ) -> Result<T, ProviderError> {
     let value = match result {
         Value::Object(_) => result.clone(),
-        Value::String(text) => parse_embedded(text)?,
+        Value::String(text) => return parse_embedded(text),
         Value::Null => return Err(ProviderError::Schema("the reply was empty".into())),
         other => {
             return Err(ProviderError::Schema(format!(
@@ -39,19 +39,31 @@ pub(crate) fn structured<T: serde::de::DeserializeOwned>(
     })
 }
 
-fn parse_embedded(text: &str) -> Result<Value, ProviderError> {
+fn parse_embedded<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, ProviderError> {
     let trimmed = strip_fence(text.trim());
-    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
-        return Ok(value);
+    let exact_error = match serde_json::from_str::<T>(trimmed) {
+        Ok(value) => return Ok(value),
+        Err(error) => error,
+    };
+    // Last resort: try each object start directly as the requested type. The
+    // deserializer deliberately does not require EOF, so trailing prose or a
+    // later object cannot make a complete typed answer disappear.
+    // ponytail: this can be quadratic in brace-heavy malformed output; use a
+    // streaming tokenizer only if the bounded provider output makes that real.
+    for (start, _) in trimmed.char_indices().filter(|(_, ch)| *ch == '{') {
+        let mut deserializer = serde_json::Deserializer::from_str(&trimmed[start..]);
+        if let Ok(value) = T::deserialize(&mut deserializer) {
+            return Ok(value);
+        }
     }
-    // Last resort: the model prefixed or suffixed prose around the object.
-    let start = trimmed.find('{');
-    let end = trimmed.rfind('}');
-    if let (Some(start), Some(end)) = (start, end)
-        && end > start
-        && let Ok(value) = serde_json::from_str::<Value>(&trimmed[start..=end])
-    {
-        return Ok(value);
+    // Preserve the useful field-level diagnostic for a complete JSON value
+    // that simply has the wrong shape. Parsing as Value here affects only the
+    // error text; an arbitrary object is never accepted as the answer.
+    if serde_json::from_str::<Value>(trimmed).is_ok() {
+        return Err(ProviderError::Schema(format!(
+            "{exact_error}; reply began {:?}",
+            head(trimmed, 300)
+        )));
     }
     Err(ProviderError::Schema(format!(
         "the reply contained no JSON object; it began {:?}",
@@ -134,6 +146,27 @@ mod tests {
         })
         .to_string();
         let parsed = structured::<RawFindings>(&Value::String(with_ticks));
+        assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
+    }
+
+    #[test]
+    fn braces_in_leading_prose_do_not_hide_the_json_object() {
+        let value = Value::String(["Expected shape {findings:[...]\n", ONE].concat());
+        let parsed = structured::<RawFindings>(&value);
+        assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
+    }
+
+    #[test]
+    fn an_unrelated_json_object_does_not_win_over_the_typed_answer() {
+        let value = Value::String([r#"Metadata: {"note":"example"}. Final: "#, ONE].concat());
+        let parsed = structured::<RawFindings>(&value);
+        assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
+    }
+
+    #[test]
+    fn candidate_offsets_follow_utf8_boundaries() {
+        let value = Value::String(["Résumé 🔎 {not JSON; answer: ", ONE].concat());
+        let parsed = structured::<RawFindings>(&value);
         assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
     }
 
