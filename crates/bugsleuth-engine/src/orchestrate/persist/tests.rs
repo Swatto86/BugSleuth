@@ -144,6 +144,45 @@ fn a_report_written_under_the_old_naming_is_still_reused() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Every grammar this project has ever written a report under is still read.
+///
+/// Literal filenames, not the compatibility builders, because a builder that
+/// reconstructs a historical name incorrectly passes a test written against
+/// itself. `runs/selfreview-0802/security-codex_3a.json` is one of these on disk
+/// right now: the reader asked for `security-codex_3a_.json` and then
+/// `security-codex-.json`, found neither, and charged for the sweep again.
+#[test]
+fn every_historical_filename_grammar_is_still_reused() {
+    for (name, model, effort, pass) in [
+        // The escaping before the trailing `_` was added.
+        ("correctness-codex_3a.json", "codex:", "", 1),
+        // The original lossy grammar, with its own effort and pass spelling.
+        ("correctness-sonnet-high-pass2.json", "sonnet", "high", 2),
+        // The lossy grammar after the positional `~` delimiters arrived.
+        ("correctness-sonnet~high~p3.json", "sonnet", "high", 3),
+    ] {
+        let dir = scratch(&format!("historical-{pass}-{}", model.len()));
+        let mut report = lane_report(Status::Swept {
+            turns: Some(2),
+            salvaged: false,
+        });
+        report.model = crate::sweep::resolved_label(model);
+        let unit = Unit {
+            model: model.into(),
+            lane: Lane::Correctness,
+            effort: effort.into(),
+            use_agents: false,
+            pass,
+        };
+        assert!(write_report(&dir, name, &report).is_ok());
+        assert!(
+            reusable(&unit, &options(&dir, true)).is_some(),
+            "a paid sweep stored as {name} was not found, so it would be run again"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
 #[test]
 fn a_legacy_file_belonging_to_a_different_model_is_not_adopted() {
     // The old encoding could not tell `codex:a/b` from `codex:a-b`, so a

@@ -33,16 +33,25 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
             if unit.use_agents {
                 return None;
             }
-            let legacy = read_swept(&dir.join(legacy_file_name_for(unit)))?;
-            // The scope check belongs on this path too. Adding it only to the
-            // branch above would leave the whole defect reachable through the
-            // legacy name, which is exactly the "fixed the first sink, missed
-            // the second" shape the correctness mandate hunts for.
-            let same_sweep = legacy.lane == unit.lane.title()
-                && legacy.model.ends_with(model_of(&unit.model))
-                && same_scope(&legacy, options.scope)
-                && same_revision(&legacy, options);
-            same_sweep.then_some(legacy)
+            // Every grammar, not just the most recent one. The writer changed
+            // twice, and probing only the latest predecessor left reports on
+            // disk right now — `security-codex_3a.json` among them — invisible,
+            // so a resumed run paid for those sweeps a second time.
+            historical_file_names_for(unit)
+                .into_iter()
+                .find_map(|name| {
+                    let legacy = read_swept(&dir.join(name))?;
+                    // The scope check belongs on this path too. Adding it only
+                    // to the branch above would leave the whole defect reachable
+                    // through the legacy name, which is exactly the "fixed the
+                    // first sink, missed the second" shape the correctness
+                    // mandate hunts for.
+                    let same_sweep = legacy.lane == unit.lane.title()
+                        && legacy.model.ends_with(model_of(&unit.model))
+                        && same_scope(&legacy, options.scope)
+                        && same_revision(&legacy, options);
+                    same_sweep.then_some(legacy)
+                })
         })
 }
 
@@ -114,19 +123,58 @@ pub(super) fn file_name_for(unit: &Unit) -> String {
     )
 }
 
-/// The name a report would have had under the old, lossy encoding.
+/// Every name this unit's report could be stored under by a previous release,
+/// newest grammar first.
 ///
-/// Only ever read, never written. A sweep costs tens of minutes, so a run
-/// resumed after this changed should still find what it already paid for —
-/// but the old encoding could not tell `codex:a/b` from `codex:a-b`, which is
-/// why anything found here is checked against the report's own recorded lane
-/// and model before it is believed.
-pub(super) fn legacy_file_name_for(unit: &Unit) -> String {
-    let lossy = |text: &str| -> String {
-        text.chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-            .collect()
+/// Each one is a complete read format, not a variation on the current writer:
+/// the escaping changed, and before that the delimiters, and before that the
+/// escaping did not exist at all. Reconstructing only the most recent
+/// predecessor left reports written by the other two — `security-codex_3a.json`
+/// is in this repository right now — unfindable, and a resumed run paid for
+/// those sweeps a second time.
+///
+/// Only ever read, never written, and never for an agent-enabled unit: all
+/// three predate agent mode. Every candidate is validated against the report's
+/// own recorded lane, model, scope and revision before it is believed, because
+/// two of the three encodings were lossy — they could not tell `codex:a/b` from
+/// `codex:a-b`.
+fn historical_file_names_for(unit: &Unit) -> Vec<String> {
+    vec![
+        prior_escaped_file_name_for(unit),
+        legacy_file_name_for(unit),
+        original_lossy_file_name_for(unit),
+    ]
+}
+
+/// Escaping without the terminating `_`, and the positional `~` delimiters.
+fn prior_escaped_file_name_for(unit: &Unit) -> String {
+    let escaped = |text: &str| -> String {
+        let mut out = String::with_capacity(text.len());
+        for c in text.chars() {
+            if c.is_ascii_alphanumeric() {
+                out.push(c);
+            } else if c == '-' {
+                out.push_str("_2d");
+            } else {
+                out.push_str(&format!("_{:x}", c as u32));
+            }
+        }
+        out
     };
+    if unit.effort.trim().is_empty() && unit.pass <= 1 {
+        return format!("{}-{}.json", unit.lane.slug(), escaped(&unit.model));
+    }
+    format!(
+        "{}-{}~{}~p{}.json",
+        unit.lane.slug(),
+        escaped(&unit.model),
+        escaped(unit.effort.trim()),
+        unit.pass.max(1)
+    )
+}
+
+/// Lossy dash-mapping, with the positional `~` delimiters.
+pub(super) fn legacy_file_name_for(unit: &Unit) -> String {
     if unit.effort.trim().is_empty() && unit.pass <= 1 {
         return format!("{}-{}.json", unit.lane.slug(), lossy(&unit.model));
     }
@@ -137,6 +185,32 @@ pub(super) fn legacy_file_name_for(unit: &Unit) -> String {
         lossy(unit.effort.trim()),
         unit.pass.max(1)
     )
+}
+
+/// Lossy dash-mapping, before the delimiters: `-<effort>` and `-pass<N>`.
+fn original_lossy_file_name_for(unit: &Unit) -> String {
+    let effort = if unit.effort.trim().is_empty() {
+        String::new()
+    } else {
+        format!("-{}", lossy(unit.effort.trim()))
+    };
+    let pass = if unit.pass <= 1 {
+        String::new()
+    } else {
+        format!("-pass{}", unit.pass)
+    };
+    format!(
+        "{}-{}{effort}{pass}.json",
+        unit.lane.slug(),
+        lossy(&unit.model)
+    )
+}
+
+/// The encoding both lossy grammars share: every non-alphanumeric is a dash.
+fn lossy(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect()
 }
 
 /// A filename-safe encoding of one component, from which no two distinct

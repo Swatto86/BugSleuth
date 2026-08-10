@@ -541,6 +541,7 @@ rust orchestrate::persist::tests::a_sweep_from_an_earlier_revision_is_not_reused
 rust orchestrate::persist::tests::a_sweep_is_not_reused_while_the_working_tree_is_dirty
 rust orchestrate::persist::tests::a_sweep_of_a_different_scope_is_not_reused
 rust orchestrate::persist::tests::a_truncated_report_is_swept_again_rather_than_failing_the_run
+rust orchestrate::persist::tests::every_historical_filename_grammar_is_still_reused
 rust orchestrate::persist::tests::every_sweep_writes_to_its_own_file
 rust orchestrate::persist::tests::nothing_is_reused_unless_resume_was_asked_for
 rust orchestrate::persist::tests::the_current_name_wins_over_a_legacy_file_for_the_same_unit
