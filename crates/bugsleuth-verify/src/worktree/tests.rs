@@ -40,6 +40,34 @@ fn a_path_that_already_has_the_prefix_is_not_given_a_second_one() {
     assert_eq!(long_path(path), path);
 }
 
+/// A path containing a newline survives the listing intact.
+///
+/// `.lines()` cut this registered worktree into two fragments, neither of which
+/// matched the live checkout. Cleanup concluded the worktree was wreckage and
+/// recursively deleted a tree another sweep was still reading.
+#[test]
+fn a_newline_in_a_registered_path_does_not_split_it_in_two() {
+    let listing = "worktree /repos/od\nd name/wt\0HEAD abc123\0branch refs/heads/x\0\0\
+                   worktree /repos/plain\0HEAD def456\0detached\0\0";
+    let roots = super::paths::worktree_roots(listing);
+    assert_eq!(
+        roots,
+        vec!["/repos/od\nd name/wt", "/repos/plain"],
+        "a newline in a repository path broke the listing apart"
+    );
+}
+
+/// Whitespace is legal in a path, so trimming loses the path.
+#[test]
+fn a_registered_path_is_never_trimmed() {
+    let listing = "worktree /repos/ trailing \0HEAD abc123\0\0";
+    assert_eq!(
+        super::paths::worktree_roots(listing),
+        vec!["/repos/ trailing "],
+        "trimming made a path git reported exactly stop matching itself"
+    );
+}
+
 /// A throwaway git repository with one commit.
 fn temp_repo(name: &str) -> Option<PathBuf> {
     let dir = std::env::temp_dir()

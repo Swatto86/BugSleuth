@@ -292,17 +292,14 @@ fn remove_orphans(repo: &Path) {
         // another process registered after the snapshot as wreckage. A listing
         // that cannot be obtained means "do not delete", not "delete
         // everything".
-        let still_live = git(repo, &["worktree", "list", "--porcelain"])
+        let still_live = git(repo, &["worktree", "list", "--porcelain", "-z"])
             .map(|listing| {
-                listing
-                    .lines()
-                    .filter_map(|line| line.strip_prefix("worktree "))
-                    .any(|known| {
-                        PathBuf::from(known.trim())
-                            .canonicalize()
-                            .ok()
-                            .is_some_and(|k| k == canonical)
-                    })
+                paths::worktree_roots(&listing).into_iter().any(|known| {
+                    Path::new(known)
+                        .canonicalize()
+                        .ok()
+                        .is_some_and(|k| k == canonical)
+                })
             })
             .unwrap_or(true);
         if !still_live {

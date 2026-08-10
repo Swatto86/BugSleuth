@@ -58,6 +58,24 @@ pub fn git_path(path: &Path) -> PathBuf {
     PathBuf::from(strip_verbatim(&path.to_string_lossy()))
 }
 
+/// The worktree roots in `git worktree list --porcelain -z` output.
+///
+/// NUL-delimited, and split on NUL rather than on lines: a repository path may
+/// contain a newline, and `.lines()` then cut one registered worktree into two
+/// unrecognisable fragments. The live worktree stopped matching, cleanup decided
+/// it was wreckage, and it deleted a checkout another sweep was using.
+///
+/// Never trimmed either. Leading and trailing whitespace are legal in a path,
+/// and trimming is how a path that git reported exactly stops comparing equal to
+/// itself. `-z` exists precisely so neither of these needs guessing at.
+pub(super) fn worktree_roots(listing: &str) -> Vec<&str> {
+    listing
+        .split('\0')
+        .filter_map(|record| record.strip_prefix("worktree "))
+        .filter(|path| !path.is_empty())
+        .collect()
+}
+
 /// The paths in `git status --porcelain -z` output.
 ///
 /// NUL-delimited machine format — no C-quoting of unusual names, no backslash
