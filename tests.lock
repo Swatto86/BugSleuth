@@ -158,6 +158,7 @@ node tauri-driver is installed at one reviewed version
 node the Agents header exposes its token-cost explanation to screen readers
 node the E2E build uses the locked local Tauri CLI
 node the E2E harness waits for its driver cleanup and rejects a stale port
+node the E2E run verifies the native driver before spawning it
 node the E2E stop check observes a real provider before and after cancellation
 node the README still promises a single file that runs with nothing installed
 node the README's download table names assets the workflow builds

@@ -72,6 +72,32 @@ test("the signature verifier refuses an executable Microsoft did not sign", (t) 
   );
 });
 
+test("the E2E run verifies the native driver before spawning it", () => {
+  const conf = read("e2e", "wdio.conf.ts");
+  // At the execution boundary, not only in the installer. Setup can be skipped
+  // and the file can change afterwards, so the check that matters is the one
+  // immediately ahead of the spawn that hands the path to tauri-driver.
+  const spawnAt = conf.indexOf("tauriDriver = spawn(");
+  assert.ok(spawnAt >= 0, "wdio.conf.ts no longer spawns tauri-driver");
+  const assertAt = conf.lastIndexOf(
+    "assertMicrosoftDriver(nativeDriver)",
+    spawnAt,
+  );
+  assert.ok(
+    assertAt >= 0 && assertAt < spawnAt,
+    "tauri-driver is handed an unverified native driver",
+  );
+  assert.ok(
+    conf.includes(VERIFIER),
+    "the E2E runner does not use the shared signature verifier",
+  );
+  // A path with a space is one argv entry, not a command line to re-parse.
+  assert.ok(
+    /shell: false/.test(conf.slice(assertAt, spawnAt + 400)),
+    "the driver path is passed through a shell",
+  );
+});
+
 test("tauri-driver is installed at one reviewed version", () => {
   const setup = read("scripts", "setup-e2e.ps1");
   // `--locked` pins the crate's own dependencies, not the crate. Without a

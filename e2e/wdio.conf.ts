@@ -124,6 +124,26 @@ async function waitForDriver(): Promise<void> {
   );
 }
 
+/**
+ * Refuse to run a native driver Windows cannot prove Microsoft signed.
+ *
+ * Shares the setup script's verifier rather than reimplementing the check, so
+ * the two sinks cannot come to disagree about what "verified" means.
+ */
+function assertMicrosoftDriver(driver: string): void {
+  const verifier = path.resolve(root, "scripts/assert-microsoft-signature.ps1");
+  const checked = spawnSync(
+    "pwsh",
+    ["-NoProfile", "-NonInteractive", "-File", verifier, "-Path", driver],
+    { stdio: "pipe", windowsHide: true, shell: false },
+  );
+  if (checked.status !== 0) {
+    throw new Error(
+      `EdgeDriver signature validation failed: ${checked.stderr?.toString().trim() ?? checked.error?.message ?? "the verifier did not run"}`,
+    );
+  }
+}
+
 export const config: WebdriverIO.Config = {
   runner: "local",
   framework: "mocha",
@@ -186,11 +206,15 @@ ${String(error instanceof Error ? error.message : error)}
     });
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
-    tauriDriver = spawn(
-      "tauri-driver",
-      ["--native-driver", path.resolve(root, ".webdriver/msedgedriver.exe")],
-      { stdio: [null, process.stdout, process.stderr] },
-    );
+    // Verified here, not only where setup downloaded it. Setup can be skipped
+    // entirely, and the file can be replaced afterwards, so the only check that
+    // protects this execution is the one immediately before it.
+    const nativeDriver = path.resolve(root, ".webdriver/msedgedriver.exe");
+    assertMicrosoftDriver(nativeDriver);
+    tauriDriver = spawn("tauri-driver", ["--native-driver", nativeDriver], {
+      stdio: [null, process.stdout, process.stderr],
+      shell: false,
+    });
     await waitForDriver();
   },
 
