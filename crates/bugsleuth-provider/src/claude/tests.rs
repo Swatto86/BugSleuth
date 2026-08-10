@@ -137,6 +137,7 @@ async fn a_timed_out_run_resumes_the_same_session_once() {
     std::fs::write(
         &stub,
         "@echo off\r\n\
+         findstr /R \".*\" > nul\r\n\
          echo %* | findstr /c:\"--resume\" > nul && goto resumed\r\n\
          echo %* > initial.txt\r\n\
          ping -n 10 127.0.0.1 > nul\r\n\
@@ -191,6 +192,7 @@ async fn an_empty_successful_reply_resumes_the_same_session_once() {
     std::fs::write(
         &stub,
         "@echo off\r\n\
+         findstr /R \".*\" > nul\r\n\
          echo %* >> calls.txt\r\n\
          echo %* | findstr /c:\"--resume\" > nul && goto resumed\r\n\
          echo {\"result\":\"\",\"is_error\":false,\"session_id\":\"same-session\"}\r\n\
@@ -230,6 +232,7 @@ async fn a_wrong_shaped_successful_reply_resumes_the_same_session_once() {
     let (stub, script) = (
         dir.join("claude.cmd"),
         "@echo off\r\n\
+         findstr /R \".*\" > nul\r\n\
          echo %* >> calls.txt\r\n\
          echo %* | findstr /c:\"--resume\" > nul && goto resumed\r\n\
          echo {\"result\":\"\",\"structured_output\":{},\"is_error\":false,\"session_id\":\"same-session\"}\r\n\
@@ -241,6 +244,7 @@ async fn a_wrong_shaped_successful_reply_resumes_the_same_session_once() {
     let (stub, script) = (
         dir.join("claude"),
         "#!/bin/sh\n\
+         cat >/dev/null\n\
          printf '%s\\n' \"$*\" >> calls.txt\n\
          case \"$*\" in\n\
            *--resume*) printf '%s\\n' '{\"result\":\"\",\"structured_output\":{\"findings\":[{\"title\":\"known-finding\",\"severity\":\"medium\",\"file\":\"src/lib.rs\",\"line\":1,\"snippet\":\"known\",\"explanation\":\"known\",\"failure_scenario\":\"known\"}]},\"is_error\":false,\"session_id\":\"same-session\"}' ;;\n\
@@ -318,6 +322,7 @@ async fn a_salvage_is_never_itself_salvaged() {
     std::fs::write(
         &stub,
         "@echo off\r\n\
+         findstr /R \".*\" > nul\r\n\
          echo call >> calls.txt\r\n\
          echo {\"is_error\":true,\"subtype\":\"error_max_turns\",\"session_id\":\"same-session\"}\r\n\
          exit /b 1\r\n",

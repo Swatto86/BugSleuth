@@ -22,6 +22,7 @@ async fn read_only_tools_are_repo_scoped() {
     let (stub, script) = (
         dir.join("claude.cmd"),
         "@echo off\r\n\
+         findstr /R \".*\" > nul\r\n\
          echo %* > argv.txt\r\n\
          echo {\"result\":\"\",\"structured_output\":{\"findings\":[]},\"is_error\":false,\"session_id\":\"known-session\"}\r\n",
     );
@@ -29,6 +30,7 @@ async fn read_only_tools_are_repo_scoped() {
     let (stub, script) = (
         dir.join("claude"),
         "#!/bin/sh\n\
+         cat >/dev/null\n\
          printf '%s\\n' \"$*\" > argv.txt\n\
          printf '%s\\n' '{\"result\":\"\",\"structured_output\":{\"findings\":[]},\"is_error\":false,\"session_id\":\"known-session\"}'\n",
     );
@@ -84,6 +86,7 @@ async fn apply_may_write_but_only_inside_the_repository() {
     let (stub, script) = (
         dir.join("claude.cmd"),
         "@echo off\r\n\
+         findstr /R \".*\" > nul\r\n\
          echo %* > argv.txt\r\n\
          echo {\"result\":\"fixed it\",\"is_error\":false,\"session_id\":\"known-session\"}\r\n",
     );
@@ -91,6 +94,7 @@ async fn apply_may_write_but_only_inside_the_repository() {
     let (stub, script) = (
         dir.join("claude"),
         "#!/bin/sh\n\
+         cat >/dev/null\n\
          printf '%s\\n' \"$*\" > argv.txt\n\
          printf '%s\\n' '{\"result\":\"fixed it\",\"is_error\":false,\"session_id\":\"known-session\"}'\n",
     );

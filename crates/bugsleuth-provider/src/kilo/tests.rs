@@ -253,6 +253,7 @@ async fn a_timed_out_sweep_resumes_the_session_reported_by_kilo() {
     std::fs::write(
         &stub,
         "@echo off\r\n\
+         findstr /R \".*\" > nul\r\n\
          echo %* | findstr /c:\"--session kilo-session-123\" > nul && goto resumed\r\n\
          echo {\"type\":\"step_start\",\"sessionID\":\"kilo-session-123\"}\r\n\
          ping -n 10 127.0.0.1 > nul\r\n\
@@ -287,6 +288,7 @@ async fn kilos_native_timeout_exit_resumes_the_session_it_reported() {
     std::fs::write(
         &stub,
         "@echo off\r\n\
+         findstr /R \".*\" > nul\r\n\
          echo %* | findstr /c:\"--session kilo-session-native\" > nul && goto resumed\r\n\
          echo {\"type\":\"step_start\",\"sessionID\":\"kilo-session-native\"}\r\n\
          exit /b 124\r\n\
