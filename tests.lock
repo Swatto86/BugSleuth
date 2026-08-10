@@ -43,7 +43,6 @@ node a name that does not exist is undefined rather than empty
 node a new run withdraws the previous run's prompt controls
 node a new run withdraws the previous run's report action
 node a partly-failed handoff save is surfaced, not swallowed
-node a partly-failed handoff save is surfaced, not swallowed
 node a passes count above the backend cap is not runnable and is clamped in the picker
 node a progress event carries the fields the window renders from
 node a refused start restores the findings it cleared

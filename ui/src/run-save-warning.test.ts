@@ -24,7 +24,10 @@ const read = (...parts: string[]) =>
   fs.readFileSync(path.join(root, ...parts), "utf8").replace(/\r\n?/g, "\n");
 
 test("a partly-failed handoff save is surfaced, not swallowed", () => {
-  const runRs = read("src-tauri", "src", "commands", "run.rs");
+  // The payload moved to outcome.rs when start_run hit the function-length
+  // limit; the check follows the code rather than staying pointed at the file
+  // that used to hold it, where it would pass on an absence.
+  const runRs = read("src-tauri", "src", "outcome.rs");
   assert.ok(
     !/write_all\([\s\S]*?\)\s*\.ok\(\)/.test(runRs),
     "the run command still drops write_all's result with .ok()",
