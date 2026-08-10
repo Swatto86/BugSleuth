@@ -14,7 +14,7 @@ use bugsleuth_provider::claude::{self, ClaudeSweep};
 use bugsleuth_provider::codex::{self, CodexSweep};
 use bugsleuth_provider::kilo::{self, KiloSweep};
 use bugsleuth_provider::process::redact_secrets;
-use bugsleuth_verify::{Worktree, verify_anchor};
+use bugsleuth_verify::verify_anchor;
 
 use crate::brief;
 use crate::report::{LaneReport, Rejected, Status, rank};
@@ -234,31 +234,9 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
 
     // A vendor that cannot be run read-only gets a throwaway checkout instead.
     // The worktree is held for the whole sweep and deletes itself on drop.
-    let isolation = if vendor.needs_isolation() {
-        match Worktree::create(request.repo, "HEAD", &format!("sweep-{}", vendor.label())) {
-            Ok(worktree) => {
-                // The worktree is ours and about to be deleted, so the reviewed
-                // repository's standing orders can simply be taken out of it.
-                // Claude and Codex get the same isolation from a flag; Kilo has
-                // none, and inheriting a large instructions file was enough to
-                // end its sweeps before they read any code.
-                if let Err(error) = isolate::strip_agent_instructions(worktree.path()) {
-                    return not_swept(format!(
-                        "Kilo's throwaway worktree could not be isolated from project instructions: {error}"
-                    ));
-                }
-                Some(worktree)
-            }
-            Err(error) => {
-                return not_swept(format!(
-                    "{} cannot be run read-only, so its sweep needs a throwaway git worktree, \
-                     which could not be created: {error}",
-                    vendor.label()
-                ));
-            }
-        }
-    } else {
-        None
+    let isolation = match isolate::checkout_for(vendor, request.repo) {
+        Ok(isolation) => isolation,
+        Err(reason) => return not_swept(reason),
     };
 
     // Anchors are verified against whatever the model actually read.
@@ -387,3 +365,6 @@ pub async fn preflight() -> Result<()> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod isolation_tests;

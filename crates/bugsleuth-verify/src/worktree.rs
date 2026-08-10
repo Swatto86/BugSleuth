@@ -127,6 +127,23 @@ impl Worktree {
         &self.path
     }
 
+    /// Whether this checkout contains submodule entries.
+    ///
+    /// `git worktree add` checks out gitlinks but does not initialize their
+    /// contents, so a worktree of a repository with an initialized submodule
+    /// holds an empty directory where the source is. A vendor pointed at it
+    /// reviews less code than the others and returns an ordinary result saying
+    /// nothing about the gap.
+    ///
+    /// Index mode `160000` is the gitlink marker. `-z` because a submodule path
+    /// is as free to contain a newline as any other.
+    pub fn has_gitlinks(&self) -> Result<bool, WorktreeError> {
+        let listing = git(&self.path, &["ls-files", "--stage", "-z"])?;
+        Ok(listing
+            .split('\0')
+            .any(|record| record.starts_with("160000 ")))
+    }
+
     /// Repo-relative paths the model changed, staged or not.
     pub fn changed_files(&self) -> Result<Vec<String>, WorktreeError> {
         let out = git(&self.path, &["status", "--porcelain", "-z"])?;

@@ -102,42 +102,6 @@ fn supported_vendors_get_their_own_agent_wording_and_kilo_gets_none() {
     assert_eq!(super::agents::instruction(Vendor::Kilo, ""), None);
 }
 
-#[tokio::test]
-async fn a_kilo_sweep_stops_at_the_preflight_before_doing_any_work() {
-    // Whichever way this machine is configured, a Kilo sweep must consult
-    // the preflight before discovering a provider or building a worktree.
-    // The two outcomes are asserted against each other rather than against
-    // a fixed expectation, because the honest answer depends on the config:
-    // a refusal must name the open tool, and a pass must mean the config
-    // really denies all host capabilities. Both halves of `permission_gap`
-    // are tested directly, against written configs, in the provider crate.
-    let report = run(Request {
-        repo: Path::new("."),
-        lane: Lane::Security,
-        model: "kilo:some/model",
-        scope: None,
-        effort: "",
-        max_turns: 1,
-        timeout: Duration::from_secs(1),
-        api_key: None,
-        binary: None,
-    })
-    .await;
-
-    match (kilo::preflight::permission_gap(), report.status) {
-        (Some(gap), Status::NotSwept { reason }) => assert!(
-            reason.contains(&gap),
-            "the refusal did not carry the permission gap: {reason}"
-        ),
-        (Some(gap), other) => {
-            panic!("permissions are open ({gap}) but the sweep was not refused: {other:?}")
-        }
-        // Permissions safe: the preflight is satisfied and the sweep proceeds
-        // to the next failure, which without a Kilo binary is a real one.
-        (None, _) => {}
-    }
-}
-
 /// A stand-in CLI that fails, printing its agent instruction and argv.
 ///
 /// Both are read from the real child process boundary rather than rebuilt in a

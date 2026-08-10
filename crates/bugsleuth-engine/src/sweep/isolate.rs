@@ -23,6 +23,8 @@
 
 use std::path::Path;
 
+use bugsleuth_verify::Worktree;
+
 /// Files a CLI would read as instructions rather than as code.
 ///
 /// Matched by exact name, case-insensitively, anywhere in the tree — nested
@@ -113,6 +115,60 @@ fn relative(path: &Path, root: &Path) -> String {
         .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
+}
+
+/// The checkout an isolated vendor may review, or the reason it may not.
+///
+/// `None` for a vendor that reads the working tree directly. For one that must
+/// be isolated, a throwaway worktree that has been shown to be a *complete*
+/// checkout and had the reviewed repository's standing orders taken out of it.
+///
+/// Both refusals here are gaps the reader would otherwise never hear about: a
+/// worktree that could not be created, and one whose submodules `git worktree
+/// add` checked out as empty directories. The second returned an ordinary swept
+/// result that had reviewed less code than every other lane in the run.
+pub(super) fn checkout_for(
+    vendor: super::Vendor,
+    repo: &std::path::Path,
+) -> Result<Option<Worktree>, String> {
+    if !vendor.needs_isolation() {
+        return Ok(None);
+    }
+    let worktree = Worktree::create(repo, "HEAD", &format!("sweep-{}", vendor.label())).map_err(
+        |error| {
+            format!(
+                "{} cannot be run read-only, so its sweep needs a throwaway git worktree,                  which could not be created: {error}",
+                vendor.label()
+            )
+        },
+    )?;
+    // `git worktree add` checks out gitlinks but does not initialize their
+    // contents, so an initialized submodule's source is simply absent here while
+    // Claude and Codex read it from the main checkout. Recursive initialization
+    // would fetch over the network on the user's behalf, which is a separate
+    // decision to take deliberately; until then the lane is not run.
+    match worktree.has_gitlinks() {
+        Ok(true) => {
+            return Err(format!(
+                "{}'s isolated worktree does not initialize submodules; this lane was not run                  rather than review a partial tree",
+                vendor.label()
+            ));
+        }
+        Err(error) => {
+            return Err(format!(
+                "{}'s isolated worktree could not be checked for submodules, so it might be a                  partial tree: {error}",
+                vendor.label()
+            ));
+        }
+        Ok(false) => {}
+    }
+    strip_agent_instructions(worktree.path()).map_err(|error| {
+        format!(
+            "{}'s throwaway worktree could not be isolated from project instructions: {error}",
+            vendor.label()
+        )
+    })?;
+    Ok(Some(worktree))
 }
 
 #[cfg(test)]

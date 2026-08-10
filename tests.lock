@@ -648,10 +648,11 @@ rust sweep::isolate::tests::instruction_files_go_and_code_stays
 rust sweep::isolate::tests::kilo_project_control_files_are_removed
 rust sweep::isolate::tests::matching_ignores_case_because_windows_does
 rust sweep::isolate::tests::the_git_directory_is_never_touched
+rust sweep::isolation_tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
+rust sweep::isolation_tests::kilo_does_not_silently_omit_submodule_contents
 rust sweep::revision::tests::git_is_never_spawned_with_a_visible_console_window
 rust sweep::tests::a_bare_model_name_means_claude_so_the_common_case_stays_short
 rust sweep::tests::a_failed_sweeps_reason_is_scrubbed_of_credentials_before_it_is_stored
-rust sweep::tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
 rust sweep::tests::a_vendor_prefix_selects_that_vendor
 rust sweep::tests::agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_policy
 rust sweep::tests::an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped
