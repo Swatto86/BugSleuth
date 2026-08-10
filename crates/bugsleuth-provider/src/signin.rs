@@ -85,9 +85,9 @@ fn answer_from(
     if !out.succeeded() {
         let said = out.stderr.trim();
         let message = if said.is_empty() {
-            out.stdout.trim().to_string()
+            crate::process::preview(out.stdout.trim(), 2_000)
         } else {
-            said.to_string()
+            crate::process::preview(said, 2_000)
         };
         return Err(ProviderError::Failed {
             vendor,
@@ -230,6 +230,51 @@ mod tests {
             "the one part that says what to do was dropped: {}",
             failed.describe("claude")
         );
+    }
+
+    #[test]
+    fn sign_in_failures_redact_credentials() {
+        const TOKENS: &str = "\"refresh\":\"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.s3cr3t_sig-Value\",\
+            \"access\":\"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6NDJ9.another-Sig_here\"";
+        const REMEDIATION: &str = "please run `kilo auth login`";
+
+        for (stream, stdout, stderr) in [
+            ("stderr", String::new(), format!("{REMEDIATION}: {TOKENS}")),
+            ("stdout", format!("{REMEDIATION}: {TOKENS}"), String::new()),
+        ] {
+            let result = answer_from(
+                CliOutput {
+                    code: Some(1),
+                    stdout,
+                    stderr,
+                },
+                "kilo",
+                str::to_string,
+            );
+            let description = classify(result, 60).describe("kilo");
+
+            for secret_segment in [
+                "eyJhbGciOiJIUzI1NiJ9",
+                "eyJzdWIiOiJ1c2VyIn0",
+                "s3cr3t_sig-Value",
+                "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9",
+                "eyJpZCI6NDJ9",
+                "another-Sig_here",
+            ] {
+                assert!(
+                    !description.contains(secret_segment),
+                    "{stream} leaked `{secret_segment}`: {description}"
+                );
+            }
+            assert!(
+                description.contains("<redacted-credential>"),
+                "{stream} hid the redaction marker: {description}"
+            );
+            assert!(
+                description.contains(REMEDIATION),
+                "{stream} lost the remediation: {description}"
+            );
+        }
     }
 
     #[test]

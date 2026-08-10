@@ -636,6 +636,7 @@ rust signin::tests::a_signal_exit_code_is_a_failed_probe
 rust signin::tests::a_timeout_says_what_it_means_for_a_real_run
 rust signin::tests::an_empty_answer_is_neither_a_pass_nor_a_failure
 rust signin::tests::only_a_real_answer_counts_as_signed_in
+rust signin::tests::sign_in_failures_redact_credentials
 rust similarity::tests::a_longer_description_never_scores_worse_for_saying_more
 rust similarity::tests::a_repeated_word_does_not_dominate_the_score
 rust similarity::tests::an_identifier_matches_the_same_name_written_as_words
