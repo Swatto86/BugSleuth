@@ -96,19 +96,16 @@ mod tests {
         let updater = &config["plugins"]["updater"];
 
         let pubkey = updater["pubkey"].as_str().unwrap_or_default();
-        assert!(
-            pubkey.starts_with("dW50cnVzdGVk"),
-            "no minisign public key is configured, so every update would be refused"
+        assert_eq!(
+            pubkey,
+            include_str!("../../bugsleuth-updater.key.pub").trim(),
+            "the updater public key differs from BugSleuth's release-signing key"
         );
 
         let endpoint = updater["endpoints"][0].as_str().unwrap_or_default();
-        assert!(
-            endpoint.contains("Swatto86/BugSleuth") && endpoint.ends_with("latest.json"),
-            "the updater points at {endpoint}, which is not this repository's latest.json"
-        );
-        assert!(
-            endpoint.starts_with("https://"),
-            "the update manifest must not be fetched over plain HTTP"
+        assert_eq!(
+            endpoint, "https://github.com/Swatto86/BugSleuth/releases/latest/download/latest.json",
+            "the updater endpoint is not BugSleuth's GitHub release manifest"
         );
 
         // Tauri v2 produces no signature at all without this, whatever signing
