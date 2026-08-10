@@ -198,8 +198,9 @@ a shell, so none of it is a sandbox in the sense that word usually carries:
 
 - **Claude** grants `Edit` and `Write` as `./**` rules, so the repository is the
   only tree it writes to without asking — and it has no way to ask.
-- **Codex** runs under `--sandbox workspace-write`, which the kernel enforces on
-  macOS and Linux. Windows has no such enforcement in the CLI.
+- **Codex** runs under `--sandbox workspace-write` — its own sandbox rather than
+  a list this tool passes, which is stronger where the platform implements it
+  and is not something BugSleuth can observe from outside.
 - **Kimi** is confined by its agent file, whose `tools` list is an allowlist;
   omitting it would allow every tool, including the ones that spawn subagents.
 - **Kilo** has no per-invocation limit at all — its permissions come from the

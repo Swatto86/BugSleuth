@@ -2,11 +2,12 @@
 //!
 //! `--sandbox workspace-write` rather than `read-only`, pointed at the user's
 //! own checkout rather than a throwaway worktree. Where the other vendors
-//! confine writes with a tool allowlist, Codex confines them in the operating
-//! system: on macOS and Linux the kernel refuses a write outside the workspace,
-//! not the agent. On Windows the CLI has no such enforcement, and this does not
-//! pretend otherwise — there, git is the whole of the safety story, exactly as
-//! it is for the vendors with no sandbox at all.
+//! confine writes with a tool allowlist this tool sets, Codex's confinement is
+//! the CLI's own sandbox — which is a stronger mechanism where the platform
+//! supports it and a weaker claim to make from here, because BugSleuth cannot
+//! observe it. What *was* observed on Windows: the CLI accepts the flag without
+//! complaint. So this file claims only what it sets, and the safety story it
+//! relies on is the same one every vendor's apply relies on — git, below.
 //!
 //! What makes an apply recoverable either way is git: the engine refuses to
 //! start unless the working tree is clean, so everything this does shows up in
