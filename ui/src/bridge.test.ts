@@ -180,10 +180,24 @@ test("the settings the window writes are the settings Rust reads", () => {
 test("a lane is spelled the same way in the window as in the engine", () => {
   // model.test.ts asserts the titles against a copy written out by hand, which
   // is the same two-places problem one level up. This reads the engine.
-  const lane = fs.readFileSync(
-    path.join(here, "..", "..", "crates", "bugsleuth-domain", "src", "lane.rs"),
-    "utf8",
-  );
+  // Newlines normalized before matching: the method-scoped pattern below is
+  // anchored on exact indentation and line breaks, and a checkout with
+  // autocrlf on gives every line a trailing carriage return — which matched
+  // nothing, and failed this on Windows CI while passing everywhere else.
+  const lane = fs
+    .readFileSync(
+      path.join(
+        here,
+        "..",
+        "..",
+        "crates",
+        "bugsleuth-domain",
+        "src",
+        "lane.rs",
+      ),
+      "utf8",
+    )
+    .replace(/\r\n?/g, "\n");
   // Scoped to `title()`. Scanning all of lane.rs also picked up the lowercase
   // `slug()` arms, so a frontend title lowercased to "security" matched the
   // wrong method's arm and this test stayed green while the two disagreed.
