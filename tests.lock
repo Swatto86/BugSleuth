@@ -565,12 +565,16 @@ rust orchestrate::render::tests::annotations::a_salvaged_sweep_does_not_read_lik
 rust orchestrate::render::tests::annotations::agreement_is_counted_against_models_not_sweeps
 rust orchestrate::render::tests::annotations::rejected_findings_are_counted_in_the_sweep_line
 rust orchestrate::render::tests::annotations::repeating_a_model_does_not_inflate_the_model_count
+rust orchestrate::render::tests::metadata_tests::mixed_scopes_are_not_rendered_as_one_ordinary_run
+rust orchestrate::render::tests::metadata_tests::run_report_calls_out_mixed_revisions
+rust orchestrate::render::tests::metadata_tests::run_report_preserves_usage
 rust orchestrate::render::tests::two_models_on_one_lane_is_still_one_lane
 rust orchestrate::tests::a_bare_alias_resolves_to_the_label_a_report_records
 rust orchestrate::tests::a_cancelled_run_names_every_sweep_it_never_reached
 rust orchestrate::tests::a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model
 rust orchestrate::tests::a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted
 rust orchestrate::tests::finishing_one_pass_leaves_the_other_passes_outstanding
+rust orchestrate::tests::live_sweep_metadata_reaches_the_aggregate_report
 rust orchestrate::tests::the_report_label_and_the_comparison_come_from_one_function
 rust payload::tests::a_regrade_reaches_the_window_as_data_with_both_grades_and_the_reason
 rust payload::tests::acknowledged_findings_are_not_cards

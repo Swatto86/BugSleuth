@@ -65,10 +65,52 @@ impl RunReport {
         String::new()
     }
 
+    fn scope_text(&self) -> String {
+        match super::common_scope(&self.swept) {
+            Ok(scope) => format!("  scope: {}\n", scope.unwrap_or("whole repository")),
+            Err(()) => "  WARNING: completed sweeps report different review scopes, so their coverage cannot be interpreted as one run.\n".to_string(),
+        }
+    }
+
+    fn revision_warnings(&self) -> String {
+        let mut commits: Vec<&str> = self
+            .swept
+            .iter()
+            .filter_map(|sweep| sweep.commit.as_deref())
+            .filter(|commit| !commit.trim().is_empty())
+            .collect();
+        commits.sort_unstable();
+        commits.dedup();
+
+        let mut out = String::new();
+        if commits.len() > 1 {
+            let short: Vec<String> = commits
+                .iter()
+                .map(|commit| commit.chars().take(7).collect())
+                .collect();
+            out.push_str(&format!(
+                "\n  WARNING: these sweeps reviewed {} different revisions ({}), so a finding may cite code that exists only in its own sweep's tree.\n",
+                commits.len(),
+                short.join(", ")
+            ));
+        }
+        if self
+            .swept
+            .iter()
+            .any(|sweep| sweep.cache_revision.is_none())
+        {
+            out.push_str(
+                "\n  WARNING: at least one completed sweep was unpinned, so revision consistency across this run is unconfirmed.\n",
+            );
+        }
+        out
+    }
+
     pub fn to_text(&self) -> String {
         let mut out = String::from(
             "BUGSLEUTH RUN REPORT\n====================\n\nREVIEW COVERAGE\n---------------\n",
         );
+        out.push_str(&self.scope_text());
         for sweep in &self.swept {
             // The rejection count is trust information, not noise: it says how
             // often this model's claims about this repository failed the only
@@ -82,13 +124,22 @@ impl RunReport {
             // the two identically would let a review that was cut off partway
             // read as a thorough one that simply found little.
             let salvaged = crate::caveats::salvaged(sweep.salvaged);
+            let revision =
+                crate::caveats::revision(sweep.commit.as_deref(), sweep.cache_revision.as_deref());
+            let usage = sweep
+                .usage
+                .as_deref()
+                .filter(|usage| !usage.trim().is_empty())
+                .map(|usage| format!(", usage: {usage}"))
+                .unwrap_or_default();
             out.push_str(&format!(
-                "  swept: {} lane by {} ({} findings{rejected}){salvaged}\n",
+                "  swept: {} lane by {} ({} findings{rejected}; {revision}{usage}){salvaged}\n",
                 sweep.lane.title(),
                 sweep.model,
                 sweep.findings,
             ));
         }
+        out.push_str(&self.revision_warnings());
         for gap in &self.gaps {
             let who = gap.model.as_deref().unwrap_or("(nobody)");
             out.push_str(&format!(

@@ -121,6 +121,11 @@ pub struct RunReport {
 pub struct Swept {
     pub model: String,
     pub lane: Lane,
+    pub commit: Option<String>,
+    /// The clean revision this result was pinned to. `None` means unpinned.
+    pub cache_revision: Option<String>,
+    pub scope: Option<String>,
+    pub usage: Option<String>,
     pub findings: usize,
     /// True when this sweep's answer was recovered and may be partial.
     /// Recovered work beats a lost lane, but a short list means "as far as it
@@ -130,6 +135,22 @@ pub struct Swept {
     /// Surfaced because the rate is the headline measure of whether a model's
     /// claims about this repository can be trusted at all.
     pub rejected: usize,
+}
+
+impl Swept {
+    fn from_report(lane: Lane, report: &crate::report::LaneReport) -> Self {
+        Self {
+            model: report.model.clone(),
+            lane,
+            commit: report.commit.clone(),
+            cache_revision: report.cache_revision.clone(),
+            scope: report.scope.clone(),
+            usage: report.usage.clone(),
+            findings: report.findings.len(),
+            rejected: report.rejected.len(),
+            salvaged: matches!(&report.status, Status::Swept { salvaged: true, .. }),
+        }
+    }
 }
 
 pub struct Gap {
@@ -222,16 +243,7 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
 
             match &report.lane_report.status {
                 Status::Swept { .. } => {
-                    swept.push(Swept {
-                        model: report.lane_report.model.clone(),
-                        lane: report.lane,
-                        findings: report.lane_report.findings.len(),
-                        rejected: report.lane_report.rejected.len(),
-                        salvaged: matches!(
-                            report.lane_report.status,
-                            Status::Swept { salvaged: true, .. }
-                        ),
-                    });
+                    swept.push(Swept::from_report(report.lane, &report.lane_report));
                     findings.extend(report.lane_report.findings);
                 }
                 Status::NotSwept { reason } => gaps.push(Gap {
@@ -241,6 +253,12 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
                 }),
             }
         }
+    }
+
+    if common_scope(&swept).is_err() {
+        anyhow::bail!(
+            "completed sweeps reported different review scopes, so they cannot be presented as one run"
+        );
     }
 
     // Severity is the only thing that orders the report, so it is graded once
@@ -280,19 +298,23 @@ fn take_reusable(
                         lane: unit.lane.title().to_string(),
                     },
                 );
-                swept.push(Swept {
-                    model: previous.model.clone(),
-                    lane: unit.lane,
-                    findings: previous.findings.len(),
-                    rejected: previous.rejected.len(),
-                    salvaged: matches!(previous.status, Status::Swept { salvaged: true, .. }),
-                });
+                swept.push(Swept::from_report(unit.lane, &previous));
                 findings.extend(previous.findings);
             }
             None => outstanding.push(unit.clone()),
         }
     }
     outstanding
+}
+
+fn common_scope(swept: &[Swept]) -> Result<Option<&str>, ()> {
+    let Some(first) = swept.first() else {
+        return Ok(None);
+    };
+    if swept.iter().any(|sweep| sweep.scope != first.scope) {
+        return Err(());
+    }
+    Ok(first.scope.as_deref())
 }
 
 /// Best-effort send. A closed channel means the front end went away, which is

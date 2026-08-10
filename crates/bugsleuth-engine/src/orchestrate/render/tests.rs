@@ -11,6 +11,10 @@ fn report(gaps: Vec<Gap>) -> RunReport {
         swept: vec![Swept {
             model: "claude:sonnet".into(),
             lane: Lane::Correctness,
+            commit: Some("aaaaaaaa".into()),
+            cache_revision: Some("aaaaaaaa".into()),
+            scope: None,
+            usage: None,
             findings: 0,
             rejected: 0,
             salvaged: false,
@@ -60,6 +64,10 @@ fn a_multi_lane_report_warns_that_severities_are_not_comparable() {
             Swept {
                 model: "claude:sonnet".into(),
                 lane: Lane::Correctness,
+                commit: Some("aaaaaaaa".into()),
+                cache_revision: Some("aaaaaaaa".into()),
+                scope: None,
+                usage: None,
                 findings: 1,
                 rejected: 0,
                 salvaged: false,
@@ -67,6 +75,10 @@ fn a_multi_lane_report_warns_that_severities_are_not_comparable() {
             Swept {
                 model: "claude:sonnet".into(),
                 lane: Lane::Security,
+                commit: Some("aaaaaaaa".into()),
+                cache_revision: Some("aaaaaaaa".into()),
+                scope: None,
+                usage: None,
                 findings: 1,
                 rejected: 0,
                 salvaged: false,
@@ -87,6 +99,10 @@ fn two_models_on_one_lane_is_still_one_lane() {
             Swept {
                 model: "claude:sonnet".into(),
                 lane: Lane::Correctness,
+                commit: Some("aaaaaaaa".into()),
+                cache_revision: Some("aaaaaaaa".into()),
+                scope: None,
+                usage: None,
                 findings: 1,
                 rejected: 0,
                 salvaged: false,
@@ -94,6 +110,10 @@ fn two_models_on_one_lane_is_still_one_lane() {
             Swept {
                 model: "codex:".into(),
                 lane: Lane::Correctness,
+                commit: Some("aaaaaaaa".into()),
+                cache_revision: Some("aaaaaaaa".into()),
+                scope: None,
+                usage: None,
                 findings: 1,
                 rejected: 0,
                 salvaged: false,
@@ -153,6 +173,10 @@ fn graded_report(triage: Outcome) -> RunReport {
         swept: vec![Swept {
             model: "claude:sonnet".into(),
             lane: Lane::Correctness,
+            commit: Some("aaaaaaaa".into()),
+            cache_revision: Some("aaaaaaaa".into()),
+            scope: None,
+            usage: None,
             findings: 0,
             rejected: 0,
             salvaged: false,
@@ -176,3 +200,6 @@ fn a_report_says_when_its_severities_were_never_graded_together() {
 
 #[path = "annotations.rs"]
 mod annotations;
+
+#[path = "metadata_tests.rs"]
+mod metadata_tests;

@@ -102,6 +102,10 @@ mod tests {
             swept: vec![Swept {
                 model: "claude:sonnet".into(),
                 lane: Lane::Ux,
+                commit: Some("aaaaaaaa".into()),
+                cache_revision: Some("aaaaaaaa".into()),
+                scope: None,
+                usage: None,
                 findings: 1,
                 rejected: 0,
                 salvaged: false,

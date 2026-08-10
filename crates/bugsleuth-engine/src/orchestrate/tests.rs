@@ -30,9 +30,9 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
     let (repo, rev) = clean_checkout(&dir);
 
     // Two vendors reporting the same defect in different words.
-    let seed = |model: &str, title: &str, explanation: &str| {
+    let seed = |model: &str, title: &str, explanation: &str, usage: &str| {
         let report = format!(
-            r#"{{"lane":"Correctness","model":"{model}","cache_revision":"{rev}","status":{{"state":"swept"}},
+            r#"{{"lane":"Correctness","model":"{model}","commit":"{rev}","cache_revision":"{rev}","usage":"{usage}","status":{{"state":"swept"}},
                     "findings":[{{"id":"x","lane":"correctness","model":"{model}",
                       "title":"{title}","severity":"high",
                       "anchor":{{"file":"src/a.rs","line":10,"claimed_line":10,"snippet":"code"}},
@@ -55,11 +55,13 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
         "claude:sonnet",
         "average_price divides by zero on an empty inventory",
         "No check for an empty inventory before dividing by the item count.",
+        "input_tokens=120 output_tokens=12",
     );
     seed(
         "codex:",
         "Calculating the average price of an empty inventory panics",
         "An empty inventory has length zero so this integer division panics.",
+        "input_tokens=80 output_tokens=8",
     );
 
     let plan = crate::plan::plan(&Config {
@@ -107,6 +109,15 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
         "the same defect from two vendors should merge into one"
     );
     assert_eq!(report.ranked[0].cluster.agreement, 2);
+    assert!(report.swept.iter().all(|sweep| {
+        sweep.commit.as_deref() == Some(&rev)
+            && sweep.cache_revision.as_deref() == Some(&rev)
+            && sweep.scope.is_none()
+            && sweep
+                .usage
+                .as_deref()
+                .is_some_and(|usage| usage.contains("input_tokens="))
+    }));
 
     // Only Correctness had a model. Every other lane must be visible as a
     // hole — counted from `Lane::ALL` rather than written out, so a lane added
@@ -115,8 +126,52 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
     let text = report.to_text();
     assert!(text.contains("NOT SWEPT"));
     assert!(text.contains("found by 2 of 2 models"));
+    assert!(text.contains("input_tokens=120"), "{text}");
+    assert!(text.contains("input_tokens=80"), "{text}");
+    assert!(text.contains(&rev[..7]), "{text}");
+    assert!(text.contains("pinned"), "{text}");
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn live_sweep_metadata_reaches_the_aggregate_report() {
+    use crate::report::{LaneReport, Status};
+
+    let lane_report = LaneReport {
+        lane: "Security".into(),
+        model: "claude:sonnet".into(),
+        commit: Some("1234567890abcdef".into()),
+        cache_revision: None,
+        scope: Some("src/security".into()),
+        status: Status::Swept {
+            turns: Some(4),
+            salvaged: false,
+        },
+        findings: vec![],
+        rejected: vec![],
+        usage: Some("input_tokens=42 output_tokens=7".into()),
+    };
+    let swept = Swept::from_report(Lane::Security, &lane_report);
+    assert_eq!(swept.commit, lane_report.commit);
+    assert_eq!(swept.cache_revision, lane_report.cache_revision);
+    assert_eq!(swept.scope, lane_report.scope);
+    assert_eq!(swept.usage, lane_report.usage);
+
+    let text = RunReport {
+        ranked: vec![],
+        triage: Default::default(),
+        swept: vec![swept],
+        gaps: vec![],
+    }
+    .to_text();
+    assert!(text.contains("scope: src/security"), "{text}");
+    assert!(text.contains("revision 1234567, unpinned"), "{text}");
+    assert!(text.contains("input_tokens=42"), "{text}");
+    assert!(
+        text.contains("consistency across this run is unconfirmed"),
+        "{text}"
+    );
 }
 
 #[tokio::test]
