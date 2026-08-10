@@ -1,92 +1,117 @@
-//! Handing the fix prompt to Kilo, in the real repository.
+//! Refusing to hand a fix prompt to Kilo in the real repository.
 //!
-//! The one job where Kilo's awkwardness stops mattering. A sweep needs a schema
-//! it cannot be given and a read-only mode it does not have, which is why sweeps
-//! are confined to a throwaway worktree. Applying fixes needs neither: the task
-//! *is* to write, and the answer is prose rather than a structure. So this is the
-//! one invocation where Kilo is used exactly as its own users use it.
-//!
-//! What keeps it recoverable is the same thing as for the other two vendors —
-//! the engine refuses to start unless the working tree is clean, so everything
-//! done here shows up in `git status`.
+//! Kilo has no per-invocation write confinement. Its default agent can be
+//! replaced by repository configuration, so automatically approving that agent
+//! would let the repository choose which host capabilities receive write-task
+//! authority. Sweeps can use a disposable worktree; an apply cannot.
 
 use std::path::Path;
 use std::time::Duration;
 
 use crate::error::ProviderError;
-use crate::process::{self, Invocation};
 
-use super::{BASE_FLAGS, assistant_text_or_error, discover, not_found};
+use super::VENDOR;
 
 /// Apply the fixes described in `prompt`, returning the model's own account.
 pub async fn apply(
-    repo: &Path,
-    model: &str,
-    effort: &str,
-    prompt: &str,
-    timeout: Duration,
+    _repo: &Path,
+    _model: &str,
+    _effort: &str,
+    _prompt: &str,
+    _timeout: Duration,
 ) -> Result<String, ProviderError> {
-    let binary = discover::resolve_binary().ok_or_else(not_found)?;
-
-    let output = process::run(Invocation {
-        binary: &binary.to_string_lossy(),
-        args: &build_args(repo, model, effort),
-        cwd: repo,
-        stdin: Some(prompt.as_bytes()),
-        env: &[],
-        timeout,
-        what: "kilo CLI",
+    Err(ProviderError::CapabilityUnavailable {
+        vendor: VENDOR,
+        capability: "apply",
+        reason: "its default agent can be replaced by repository configuration, so BugSleuth cannot safely grant it write access. Apply the generated handoff manually in an isolated environment."
+            .to_string(),
     })
-    .await?;
-
-    assistant_text_or_error(&output)
-}
-
-/// The sweep's flags without `--agent ask`.
-///
-/// Deliberate: `ask` is the read-oriented agent, and this invocation has to
-/// edit files. Leaving the agent unset uses whichever one Kilo is configured
-/// with, which is how its own users run it.
-fn build_args(repo: &Path, model: &str, effort: &str) -> Vec<String> {
-    let mut args: Vec<String> = BASE_FLAGS.iter().map(|s| (*s).to_string()).collect();
-
-    // Pinned explicitly as well as via the process's cwd: Kilo resolves some
-    // paths from `--dir` rather than the process cwd, and a mismatch would have
-    // it edit a different tree than the one the report is about.
-    args.push("--dir".into());
-    args.push(repo.to_string_lossy().into_owned());
-
-    let model = model.trim();
-    if !model.is_empty() {
-        args.push("-m".into());
-        args.push(model.to_string());
-    }
-    let effort = effort.trim();
-    if !effort.is_empty() {
-        args.push("--variant".into());
-        args.push(effort.to_string());
-    }
-    args
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn applying_does_not_use_the_read_oriented_agent() {
-        // `--agent ask` is the sweep's, and it cannot edit files. Passing it
-        // here would leave the button apparently working and nothing changed.
-        let args = build_args(Path::new("/tmp/repo"), "", "");
-        assert!(!args.iter().any(|a| a == "ask"));
-        // The safety flags a sweep carries are still here.
-        assert!(args.iter().any(|a| a == "--pure"));
-        assert!(args.iter().any(|a| a == "--auto"));
-        let dir = args
-            .iter()
-            .position(|a| a == "--dir")
-            .and_then(|i| args.get(i + 1))
-            .map(String::as_str);
-        assert_eq!(dir, Some("/tmp/repo"));
+    fn scratch() -> std::path::PathBuf {
+        let dir = std::env::temp_dir()
+            .join("bugsleuth-kilo-apply-tests")
+            .join(std::process::id().to_string());
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create scratch directory");
+        dir
+    }
+
+    fn install_fake_cli(home: &Path) {
+        let binary = if cfg!(windows) {
+            home.join("AppData/Roaming/npm/kilo.cmd")
+        } else {
+            home.join(".local/bin/kilo")
+        };
+        std::fs::create_dir_all(binary.parent().expect("fake CLI has a parent"))
+            .expect("create fake CLI directory");
+        let script = if cfg!(windows) {
+            "@echo off\r\necho invoked>invoked.txt\r\nexit /b 9\r\n"
+        } else {
+            "#!/bin/sh\nprintf invoked > invoked.txt\nexit 9\n"
+        };
+        std::fs::write(&binary, script).expect("write fake CLI");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mut permissions = std::fs::metadata(&binary)
+                .expect("read fake CLI permissions")
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&binary, permissions).expect("make fake CLI executable");
+        }
+    }
+
+    #[tokio::test]
+    async fn apply_is_disabled_before_the_kilo_cli_can_launch() {
+        const ROLE: &str = "BUGSLEUTH_KILO_APPLY_TEST_ROLE";
+        const REPO: &str = "BUGSLEUTH_KILO_APPLY_TEST_REPO";
+        const TEST: &str = "kilo::apply::tests::apply_is_disabled_before_the_kilo_cli_can_launch";
+
+        if std::env::var(ROLE).as_deref() != Ok("child") {
+            let repo = scratch();
+            install_fake_cli(&repo);
+            let status = tokio::process::Command::new(
+                std::env::current_exe().expect("find provider test executable"),
+            )
+            .args(["--exact", TEST, "--nocapture"])
+            .env(ROLE, "child")
+            .env(REPO, &repo)
+            .env("HOME", &repo)
+            .env("USERPROFILE", &repo)
+            .status()
+            .await
+            .expect("run isolated apply test");
+            assert!(status.success(), "isolated apply test failed");
+            let _ = std::fs::remove_dir_all(repo);
+            return;
+        }
+
+        let repo = std::path::PathBuf::from(std::env::var_os(REPO).expect("test repo is set"));
+        let outcome = apply(
+            &repo,
+            "kilo/openai/gpt-5.6-sol",
+            "high",
+            "apply fixes",
+            Duration::from_secs(10),
+        )
+        .await;
+        assert!(
+            !repo.join("invoked.txt").exists(),
+            "the untrusted Kilo apply CLI was launched: {outcome:?}"
+        );
+        let message = outcome
+            .expect_err("Kilo apply must fail closed")
+            .to_string();
+        assert!(
+            message.contains("kilo apply is unavailable")
+                && message
+                    .contains("Apply the generated handoff manually in an isolated environment"),
+            "the refusal was not actionable: {message}"
+        );
     }
 }
