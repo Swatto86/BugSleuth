@@ -1,115 +1,211 @@
-//! Codex apply is disabled until it can be contained on every supported host.
+//! Handing the fix prompt to Codex, with write access to the real repository.
+//!
+//! `--sandbox workspace-write` rather than `read-only`, pointed at the user's
+//! own checkout rather than a throwaway worktree. Where the other vendors
+//! confine writes with a tool allowlist, Codex confines them in the operating
+//! system: on macOS and Linux the kernel refuses a write outside the workspace,
+//! not the agent. On Windows the CLI has no such enforcement, and this does not
+//! pretend otherwise — there, git is the whole of the safety story, exactly as
+//! it is for the vendors with no sandbox at all.
+//!
+//! What makes an apply recoverable either way is git: the engine refuses to
+//! start unless the working tree is clean, so everything this does shows up in
+//! `git status` afterwards and can be thrown away with one command.
 
 use std::path::Path;
 use std::time::Duration;
 
 use crate::error::ProviderError;
+use crate::process::{self, Invocation, preview};
 
-const DISABLED_REASON: &str = "BugSleuth cannot prove that Codex's write-capable sandbox confines host reads and side effects to this repository; apply the generated handoff manually in an isolated environment";
+use super::scratch::{Cleanup, event_error, scratch_dir};
+use super::{SHARED_FLAGS, VENDOR, not_found};
 
-/// Refuse write-capable Codex work before discovering or starting the CLI.
+/// Apply the fixes described in `prompt`, returning the model's own account.
+///
+/// No output schema: the answer is prose for a person, and constraining it would
+/// spend a turn to say less. Codex writes its final message to a file, so
+/// nothing has to be scraped out of the event stream.
 pub async fn apply(
-    _repo: &Path,
-    _model: &str,
-    _effort: &str,
-    _prompt: &str,
-    _timeout: Duration,
+    repo: &Path,
+    model: &str,
+    effort: &str,
+    prompt: &str,
+    timeout: Duration,
 ) -> Result<String, ProviderError> {
-    Err(ProviderError::CapabilityUnavailable {
-        vendor: super::VENDOR,
-        capability: "apply",
-        reason: DISABLED_REASON.to_string(),
+    // The accepted reasoning efforts belong to the model, not the CLI, so an
+    // effort forwarded to `model_reasoning_effort` is validated against the
+    // model's catalogue before anything is spent.
+    crate::models::validate_effort(VENDOR, model, effort).await?;
+
+    let binary = super::binary_path().ok_or_else(not_found)?;
+    let scratch = scratch_dir()?;
+    // Removed on every exit — normal return, early `?`, and a cancelled future
+    // dropped at its await point.
+    let _scratch = Cleanup(scratch.clone());
+    let answer_path = scratch.join("answer.md");
+
+    let args = build_args(model, effort, &answer_path);
+    let output = process::run(Invocation {
+        binary: &binary.to_string_lossy(),
+        args: &args,
+        cwd: repo,
+        stdin: Some(prompt.as_bytes()),
+        env: &[],
+        timeout,
+        what: "codex CLI",
     })
+    .await;
+
+    finish(output, &answer_path)
+}
+
+/// The argv for one write-capable invocation.
+///
+/// Built from the same [`SHARED_FLAGS`] the sign-in check uses, so a probe that
+/// passes is evidence about the invocation that does the work.
+fn build_args(model: &str, effort: &str, answer: &Path) -> Vec<String> {
+    let mut args: Vec<String> = SHARED_FLAGS.iter().map(|s| (*s).to_string()).collect();
+    // Measured against the real CLI, not assumed: with `--ignore-user-config`
+    // this CLI refuses every patch as "writing is blocked by read-only
+    // sandbox", whatever `--sandbox` says — and `-c sandbox_mode=…` and
+    // `-c approval_policy=…` do not restore it either. So an invocation that
+    // has to write cannot also ignore the machine's configuration, and the
+    // honest choice is to keep the writing.
+    //
+    // `--ignore-rules` stays. That is the flag which keeps the repository —
+    // whose findings prompted this, and whose contents are untrusted — from
+    // supplying its own execution policy, and it does not interfere.
+    args.retain(|flag| *flag != "--ignore-user-config");
+    // No session file for a run that edits someone's repository: there is
+    // nothing here worth resuming, and a persisted transcript of the fix is one
+    // more copy of the code lying around.
+    args.push("--ephemeral".into());
+    args.push("--json".into());
+    args.push("--sandbox".into());
+    args.push("workspace-write".into());
+    args.push("--output-last-message".into());
+    args.push(answer.to_string_lossy().into_owned());
+
+    let model = model.trim();
+    if !model.is_empty() {
+        args.push("-m".into());
+        args.push(model.to_string());
+    }
+    // Codex has no effort flag; it is a config key set for this invocation only.
+    let effort = effort.trim();
+    if !effort.is_empty() {
+        args.push("-c".into());
+        args.push(format!("model_reasoning_effort=\"{effort}\""));
+    }
+    // A bare `-` tells Codex to read the prompt from stdin, so a long handoff
+    // cannot hit the command-line length limit.
+    args.push("-".into());
+    args
+}
+
+/// The model's own account, or the CLI's own account of why there isn't one.
+fn finish(
+    output: Result<crate::process::CliOutput, crate::process::ProcessError>,
+    answer_path: &Path,
+) -> Result<String, ProviderError> {
+    let output = match output {
+        Ok(output) => output,
+        Err(process::ProcessError::OutputTruncated { output, .. }) if output.succeeded() => *output,
+        Err(error) => return Err(error.into()),
+    };
+
+    if !output.succeeded() {
+        let code = output.code.unwrap_or(-1);
+        // Codex reports failures as events on stdout as well as on stderr, and
+        // the event usually carries the more useful message.
+        let message = event_error(&output.stdout)
+            .unwrap_or_else(|| preview(output.stderr.trim(), 2000))
+            .trim()
+            .to_string();
+        return Err(if message.is_empty() {
+            ProviderError::FailedSilently {
+                vendor: VENDOR,
+                code,
+            }
+        } else {
+            ProviderError::Failed {
+                vendor: VENDOR,
+                code,
+                message,
+            }
+        });
+    }
+
+    let answer = std::fs::read_to_string(answer_path).map_err(|e| ProviderError::Envelope {
+        vendor: VENDOR,
+        detail: format!("the CLI wrote no final answer: {e}"),
+    })?;
+    if answer.trim().is_empty() {
+        return Err(ProviderError::Empty(VENDOR));
+    }
+    Ok(answer)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const CHILD_RESULT: &str = "BUGSLEUTH_CODEX_APPLY_CHILD_RESULT";
+    fn argv(model: &str, effort: &str) -> Vec<String> {
+        build_args(model, effort, Path::new("answer.md"))
+    }
 
-    #[tokio::test]
-    async fn apply_fails_closed_before_launching_codex() {
-        if let Some(result_path) = std::env::var_os(CHILD_RESULT) {
-            let repo = std::env::current_dir().expect("child repository");
-            let outcome = apply(
-                &repo,
-                "",
-                "",
-                "untrusted model-produced fix",
-                Duration::from_secs(10),
-            )
-            .await;
-            let result = match outcome {
-                Ok(text) => format!("ok:{text}"),
-                Err(error) => format!("error:{error}"),
-            };
-            std::fs::write(result_path, result).expect("record child result");
-            return;
-        }
+    #[test]
+    fn applying_is_granted_workspace_write_and_never_asks() {
+        let args = argv("", "");
+        let sandbox = args
+            .iter()
+            .position(|a| a == "--sandbox")
+            .and_then(|i| args.get(i + 1))
+            .map(String::as_str);
+        assert_eq!(sandbox, Some("workspace-write"), "{args:?}");
+        // Non-interactive: an apply that stopped to ask would hang until it
+        // timed out, with the repository half-changed.
+        let approval = args
+            .iter()
+            .position(|a| a == "--ask-for-approval")
+            .and_then(|i| args.get(i + 1))
+            .map(String::as_str);
+        assert_eq!(approval, Some("never"), "{args:?}");
+    }
 
-        let dir = std::env::temp_dir().join(format!(
-            "bugsleuth-disabled-codex-apply-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        let repo = dir.join("repo");
-        let home = dir.join("home");
-        let bin = dir.join("bin");
-        std::fs::create_dir_all(&repo).expect("create fixture repository");
-        std::fs::create_dir_all(&home).expect("create fixture home");
-        std::fs::create_dir_all(&bin).expect("create fixture binary directory");
-
-        #[cfg(windows)]
-        let (stub, script) = (
-            bin.join("codex.cmd"),
-            "@echo off\r\n>launched.txt echo launched\r\nexit /b 9\r\n",
-        );
-        #[cfg(unix)]
-        let (stub, script) = {
-            let native_bin = home.join(".local/bin");
-            std::fs::create_dir_all(&native_bin).expect("create native CLI directory");
-            (
-                native_bin.join("codex"),
-                "#!/bin/sh\nprintf launched > launched.txt\nexit 9\n",
-            )
-        };
-        std::fs::write(&stub, script).expect("write fake Codex CLI");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755))
-                .expect("make fake CLI executable");
-        }
-        assert!(stub.is_file(), "fake Codex CLI was not created");
-
-        let result_path = dir.join("result.txt");
-        let child = std::process::Command::new(std::env::current_exe().expect("test executable"))
-            .args([
-                "--exact",
-                "codex::apply::tests::apply_fails_closed_before_launching_codex",
-                "--nocapture",
-            ])
-            .current_dir(&repo)
-            .env(CHILD_RESULT, &result_path)
-            .env("HOME", &home)
-            .env("USERPROFILE", &home)
-            .env("PATH", &bin)
-            .output()
-            .expect("run isolated apply attempt");
-        let launched = repo.join("launched.txt").exists();
-        let result = std::fs::read_to_string(&result_path).expect("child apply result");
-        let _ = std::fs::remove_dir_all(&dir);
-
-        assert!(child.status.success(), "child failed: {child:?}");
-        assert!(!launched, "the disabled provider still launched Codex");
+    #[test]
+    fn a_write_capable_run_keeps_the_machines_configuration_but_not_the_repositorys_rules() {
+        let args = argv("", "");
+        // Both are deliberate and were measured against the real CLI: dropping
+        // the first is what makes writing work at all, keeping the second is
+        // what stops the repository choosing its own execution policy.
         assert!(
-            result.contains("error:codex apply is unavailable"),
-            "{result}"
+            !args.iter().any(|a| a == "--ignore-user-config"),
+            "writing is refused when the machine's config is ignored: {args:?}"
         );
+        assert!(args.iter().any(|a| a == "--ignore-rules"), "{args:?}");
+    }
+
+    #[test]
+    fn the_prompt_is_read_from_stdin_rather_than_argv() {
+        assert_eq!(argv("", "").last().map(String::as_str), Some("-"));
+    }
+
+    #[test]
+    fn an_empty_model_or_effort_is_omitted_rather_than_passed_blank() {
+        let args = argv("  ", "  ");
+        assert!(!args.iter().any(|a| a == "-m"), "{args:?}");
+        assert!(!args.iter().any(|a| a == "-c"), "{args:?}");
+    }
+
+    #[test]
+    fn a_named_model_and_effort_reach_the_cli() {
+        let args = argv("gpt-5.6-codex", "high");
+        assert!(args.windows(2).any(|w| w == ["-m", "gpt-5.6-codex"]));
         assert!(
-            result.contains("confines host reads and side effects"),
-            "{result}"
+            args.windows(2)
+                .any(|w| w == ["-c", "model_reasoning_effort=\"high\""])
         );
     }
 }

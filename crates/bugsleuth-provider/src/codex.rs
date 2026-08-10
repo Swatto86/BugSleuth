@@ -10,6 +10,7 @@ use crate::process::{self, Invocation, preview};
 
 mod apply;
 mod discover;
+mod scratch;
 
 pub use apply::apply;
 
@@ -42,7 +43,18 @@ pub async fn sweep(_spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> 
     })
 }
 
-const SIGNIN_FLAGS: [&str; 8] = [
+/// The flags every Codex invocation carries, whatever it is for.
+///
+/// One list, because a sign-in check that invokes the CLI differently from the
+/// work is not checking the work — it can pass while every real run fails, or
+/// fail while runs are fine. The first sign-in probe dropped
+/// `--skip-git-repo-check` and reported a working Codex as unusable.
+///
+/// `--ignore-user-config` and `--ignore-rules` are the security-relevant pair:
+/// neither the machine's own configuration nor the repository's rules may
+/// change what the model is told to do. The write-capable path has to drop the
+/// first of those to write at all — see [`apply`].
+const SHARED_FLAGS: [&str; 8] = [
     "--ask-for-approval",
     "never",
     "exec",
@@ -54,7 +66,7 @@ const SIGNIN_FLAGS: [&str; 8] = [
 ];
 
 fn signin_args() -> Vec<String> {
-    SIGNIN_FLAGS
+    SHARED_FLAGS
         .iter()
         .chain(["--sandbox", "read-only", "-"].iter())
         .map(|arg| (*arg).to_string())
