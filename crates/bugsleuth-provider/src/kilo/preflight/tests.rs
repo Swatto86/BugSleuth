@@ -231,7 +231,7 @@ fn an_apply_is_not_refused_merely_because_the_machine_has_no_kilo_config() {
     // into a refusal the user cannot act on. The sweep, which does make such a
     // claim, fails closed on the same input.
     let missing = std::env::temp_dir().join("bugsleuth-preflight-absent/kilo.jsonc");
-    assert_eq!(apply_gap_in(&[missing.clone()]), None);
+    assert_eq!(apply_gap_in(std::slice::from_ref(&missing)), None);
     assert_eq!(apply_gap_in(&[]), None);
     assert!(
         gap_in(&[missing]).is_some(),
@@ -248,6 +248,6 @@ fn hardening_the_sweep_agent_does_not_block_the_apply_agent() {
         r#"{"agent":{"ask":{"permission":{"*":"deny","read":"allow"}},
              "code":{"permission":{"edit":{"*":"allow"}}}}}"#,
     );
-    assert_eq!(gap_in(&[path.clone()]), None);
+    assert_eq!(gap_in(std::slice::from_ref(&path)), None);
     assert_eq!(apply_gap_in(&[path]), None);
 }

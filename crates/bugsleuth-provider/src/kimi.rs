@@ -8,11 +8,16 @@
 //! It shares Kilo's shape rather than Claude's, for the same reason Kilo has
 //! that shape:
 //!
-//! **No per-invocation confinement.** `--yolo` and `--auto` only *loosen*
-//! approvals; there is no tool allowlist and no read-only sandbox flag. So a
-//! Kimi sweep is never pointed at the repository under review — it gets a
-//! throwaway git worktree, and that is enforced here rather than left to the
-//! caller: [`KimiSweep`] takes a `worktree`, not a `repo`.
+//! **No sandbox, and approvals that cannot be loosened.** There is no
+//! read-only flag, and `--yolo` and `--auto` are both *refused* alongside
+//! `--prompt`. What it does have is `--agent-file`, whose `tools` frontmatter
+//! is a per-invocation allowlist — that is the whole of the confinement, and
+//! omitting it allows every tool. A sweep's allowlist is read-only, so a sweep
+//! is additionally never pointed at the repository under review: it gets a
+//! throwaway git worktree, enforced here rather than left to the caller —
+//! [`KimiSweep`] takes a `worktree`, not a `repo`. An apply is granted the
+//! write tools by the same mechanism and does run in the real checkout, which
+//! is the one place that distinction is deliberate rather than accidental.
 //!
 //! **No output-schema flag.** The required JSON shape is described in the
 //! brief and validated afterwards, which is strictly weaker than a schema the
@@ -95,7 +100,7 @@ pub async fn sweep(spec: KimiSweep<'_>) -> Result<KimiResult, ProviderError> {
     };
     // Written before the argv is built, and held until the invocation returns:
     // the prompt is a pointer at this file, so it has to outlive the process.
-    let brief = brief_file::BriefFile::write(spec.brief)?;
+    let brief = brief_file::BriefFile::write(spec.brief, brief_file::REVIEW_AGENT)?;
     let args = build_args(&spec, &brief);
     let env = sweep_environment();
 

@@ -30,7 +30,8 @@ fn scratch(name: &str) -> PathBuf {
 #[test]
 fn the_selected_model_is_passed_and_an_empty_one_is_omitted() {
     let dir = scratch("model-arg");
-    let brief = brief_file::BriefFile::write("brief").expect("write brief");
+    let brief =
+        brief_file::BriefFile::write("brief", brief_file::REVIEW_AGENT).expect("write brief");
 
     let chosen = build_args(&spec("kimi-k3", &dir), &brief);
     let at = chosen
@@ -56,7 +57,7 @@ fn the_selected_model_is_passed_and_an_empty_one_is_omitted() {
 fn the_brief_never_reaches_the_command_line() {
     let dir = scratch("brief-size");
     let body = "GIGANTIC".repeat(2_000);
-    let brief = brief_file::BriefFile::write(&body).expect("write brief");
+    let brief = brief_file::BriefFile::write(&body, brief_file::REVIEW_AGENT).expect("write brief");
     let args = build_args(
         &KimiSweep {
             brief: &body,
@@ -88,7 +89,8 @@ fn the_brief_never_reaches_the_command_line() {
 #[test]
 fn the_brief_directory_is_granted_to_the_session() {
     let dir = scratch("add-dir");
-    let brief = brief_file::BriefFile::write("brief").expect("write brief");
+    let brief =
+        brief_file::BriefFile::write("brief", brief_file::REVIEW_AGENT).expect("write brief");
     let args = build_args(&spec("", &dir), &brief);
     let at = args
         .iter()
@@ -265,7 +267,8 @@ async fn the_findings_survive_the_cli_s_own_banner_and_resume_hint() {
 #[test]
 fn no_approval_flag_is_passed_because_prompt_mode_refuses_them() {
     let dir = scratch("no-approval-flag");
-    let brief = brief_file::BriefFile::write("brief").expect("write brief");
+    let brief =
+        brief_file::BriefFile::write("brief", brief_file::REVIEW_AGENT).expect("write brief");
     let args = build_args(&spec("kimi-code/k3", &dir), &brief);
     for refused in ["--yolo", "-y", "--auto"] {
         assert!(
@@ -288,7 +291,8 @@ fn no_approval_flag_is_passed_because_prompt_mode_refuses_them() {
 #[test]
 fn project_skill_discovery_is_disabled() {
     let dir = scratch("skills");
-    let brief = brief_file::BriefFile::write("brief").expect("write brief");
+    let brief =
+        brief_file::BriefFile::write("brief", brief_file::REVIEW_AGENT).expect("write brief");
     let args = build_args(&spec("", &dir), &brief);
     let at = args
         .iter()
@@ -320,7 +324,8 @@ fn project_skill_discovery_is_disabled() {
 #[test]
 fn every_sweep_runs_under_an_agent_that_cannot_delegate() {
     let dir = scratch("agent-confinement");
-    let brief = brief_file::BriefFile::write("brief").expect("write brief");
+    let brief =
+        brief_file::BriefFile::write("brief", brief_file::REVIEW_AGENT).expect("write brief");
     let args = build_args(&spec("kimi-code/k3", &dir), &brief);
 
     let at = args

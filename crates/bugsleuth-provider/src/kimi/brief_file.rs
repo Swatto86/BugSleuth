@@ -36,7 +36,12 @@ pub(super) struct BriefFile {
 }
 
 impl BriefFile {
-    pub(super) fn write(brief: &str) -> Result<Self, ProviderError> {
+    /// The brief and the agent definition it runs under, written together.
+    ///
+    /// The agent is a parameter rather than a constant here because it *is* the
+    /// tool boundary: a review gets [`REVIEW_AGENT`] and an apply gets
+    /// [`APPLY_AGENT`], and nothing else may reach this.
+    pub(super) fn write(brief: &str, agent: &str) -> Result<Self, ProviderError> {
         // Unique per process *and* per call: two lanes sweep concurrently, and
         // a shared name would have one overwrite the other's brief mid-run.
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -54,7 +59,7 @@ impl BriefFile {
         // brief's own: pointed there, Kimi listed the brief as a *skill*, which
         // is not what it is and not a classification worth depending on.
         std::fs::create_dir_all(dir.join("skills")).map_err(scratch)?;
-        std::fs::write(dir.join("agent.md"), REVIEW_AGENT).map_err(scratch)?;
+        std::fs::write(dir.join("agent.md"), agent).map_err(scratch)?;
         let path = dir.join("brief.md");
         std::fs::write(&path, brief).map_err(scratch)?;
         Ok(Self { dir, path })
@@ -101,7 +106,7 @@ impl BriefFile {
 /// them twice costs nothing.
 ///
 /// The body after the frontmatter is the agent's system prompt.
-const REVIEW_AGENT: &str = r#"---
+pub(super) const REVIEW_AGENT: &str = r#"---
 name: bugsleuth-review
 description: Read-only reviewer for a single BugSleuth lane.
 tools:
@@ -121,6 +126,39 @@ Do not run shell commands. Do not edit, create or delete any file.
 
 Read only what the brief's mandate needs, and answer with the single JSON object
 the brief specifies — nothing before it and nothing after it.
+"#;
+
+/// The agent definition an apply runs under.
+///
+/// The same boundary as [`REVIEW_AGENT`], moved: writing the change and running
+/// the test it leaves behind is the entire task, so `Edit`, `Write` and `Bash`
+/// are on the allowlist. What stays off it is what nothing in an apply needs and
+/// which cost a whole billing cycle once — `Agent` and `AgentSwarm` spawn
+/// subagents, and `Skill` runs code this tool did not choose.
+///
+/// The allowlist is the only per-invocation limit Kimi has: `--yolo` and
+/// `--auto` are both *refused* alongside `--prompt`, measured against the real
+/// CLI, so approvals cannot be loosened from the command line even deliberately.
+pub(super) const APPLY_AGENT: &str = r#"---
+name: bugsleuth-apply
+description: Applies a prepared set of fixes to the repository it is started in.
+tools:
+  - Read
+  - Grep
+  - Glob
+  - Edit
+  - Write
+  - Bash
+disallowedTools:
+  - Agent
+  - AgentSwarm
+  - Skill
+---
+You are applying a prepared set of fixes to the repository you are started in.
+
+Do not delegate. Do not spawn subagents. Do the work yourself, in this session.
+Change only what the instructions you are given describe, only inside this
+repository, and report what you actually did.
 "#;
 
 impl Drop for BriefFile {
@@ -154,7 +192,7 @@ mod tests {
     #[test]
     fn the_prompt_that_reaches_the_command_line_is_tiny() {
         let brief = "x".repeat(12_603);
-        let file = BriefFile::write(&brief).expect("write brief");
+        let file = BriefFile::write(&brief, REVIEW_AGENT).expect("write brief");
         let prompt = pointer(file.path());
         assert!(
             prompt.len() < 1_024,
@@ -172,8 +210,8 @@ mod tests {
     /// Two concurrent lanes must not share one brief path.
     #[test]
     fn each_brief_gets_its_own_file() {
-        let first = BriefFile::write("first").expect("write");
-        let second = BriefFile::write("second").expect("write");
+        let first = BriefFile::write("first", REVIEW_AGENT).expect("write");
+        let second = BriefFile::write("second", REVIEW_AGENT).expect("write");
         assert_ne!(first.path(), second.path());
         assert_eq!(
             std::fs::read_to_string(first.path()).expect("read"),
@@ -186,7 +224,7 @@ mod tests {
     #[test]
     fn the_brief_is_removed_when_the_sweep_ends() {
         let path = {
-            let file = BriefFile::write("temporary").expect("write");
+            let file = BriefFile::write("temporary", REVIEW_AGENT).expect("write");
             let path = file.path().to_path_buf();
             assert!(path.is_file(), "the brief was never written");
             path

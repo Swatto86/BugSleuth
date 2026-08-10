@@ -32,6 +32,7 @@ pub async fn signin_for(model: &str, binary: Option<&str>) -> crate::signin::Sig
     // the part most likely to break and the part a sweep depends on.
     let brief = match brief_file::BriefFile::write(
         "Reply with the single word OK. Do not read any files. Do not use any tools.",
+        brief_file::REVIEW_AGENT,
     ) {
         Ok(brief) => brief,
         Err(error) => return crate::signin::SignIn::Failed(error.to_string()),
