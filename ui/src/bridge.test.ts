@@ -184,8 +184,16 @@ test("a lane is spelled the same way in the window as in the engine", () => {
     path.join(here, "..", "..", "crates", "bugsleuth-domain", "src", "lane.rs"),
     "utf8",
   );
+  // Scoped to `title()`. Scanning all of lane.rs also picked up the lowercase
+  // `slug()` arms, so a frontend title lowercased to "security" matched the
+  // wrong method's arm and this test stayed green while the two disagreed.
+  const titleMethod =
+    /pub fn title\(self\) -> &'static str \{\s*match self \{([\s\S]*?)\n {8}\}\n {4}\}/.exec(
+      lane,
+    );
+  assert.ok(titleMethod, "could not read Lane::title; this scan needs updating");
   const titles = new Set(
-    [...lane.matchAll(/Lane::\w+ => "([^"]+)"/g)].map((m) => m[1]!),
+    [...titleMethod[1]!.matchAll(/Lane::\w+ => "([^"]+)"/g)].map((m) => m[1]!),
   );
   assert.ok(titles.size >= 4, "found almost no lane titles in the engine");
 
@@ -200,8 +208,8 @@ test("a lane is spelled the same way in the window as in the engine", () => {
   assert.ok(shown.size >= 4, `read no titles out of the table: ${table[1]!}`);
 
   assert.deepEqual(
-    [...shown].filter((t) => !titles.has(t)),
-    [],
+    [...shown].sort(),
+    [...titles].sort(),
     "the window shows these lane names and the engine writes something else, " +
       "so one lane is named two ways in one product",
   );
