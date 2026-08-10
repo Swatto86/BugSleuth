@@ -48,6 +48,7 @@ const ui = {
   copyPrompt: el<HTMLButtonElement>("copy-prompt"),
   promptPath: el<HTMLParagraphElement>("prompt-path"),
   applyPanel: el<HTMLDivElement>("apply-panel"),
+  applyListenerError: el<HTMLParagraphElement>("apply-listener-error"),
   applyVendor: el<HTMLSelectElement>("apply-vendor"),
   applyModel: el<HTMLDivElement>("apply-model"),
   applyEffort: el<HTMLDivElement>("apply-effort"),

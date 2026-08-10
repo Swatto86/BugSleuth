@@ -24,6 +24,7 @@ import {
   currentRunReport,
   isRunning,
   listenForRunEvents,
+  runEventsReady,
 } from "./run";
 import { type ApplyBinding, bindApply, isApplying } from "./apply";
 import { ui } from "./elements";
@@ -88,7 +89,9 @@ function renderPlanSummary(): void {
   if (ui.planSummary.textContent !== summary)
     ui.planSummary.textContent = summary;
   const busy = isRunning() || isApplying() || isClearing() || isUpdating();
-  ui.run.disabled = busy || !canRun(settings, catalogue);
+  // The completion listener too: without it a started run never finishes as
+  // far as this window is concerned, and every action stays blocked.
+  ui.run.disabled = !runEventsReady() || busy || !canRun(settings, catalogue);
   ui.clearSaved.disabled = busy;
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
 }
@@ -191,6 +194,7 @@ function bind(): void {
       push: ui.pushAfterApply,
       tag: ui.tagReleaseAfterPush,
       output: ui.output,
+      listenerError: ui.applyListenerError,
     },
     settings: () => settings,
     promptRepo: currentFixPromptRepo,

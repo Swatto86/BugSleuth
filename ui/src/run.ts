@@ -93,6 +93,18 @@ export async function startRun(deps: RunDeps): Promise<void> {
   }
 }
 
+/**
+ * Whether the events that end a run are being listened for.
+ *
+ * `run-finished` is the only thing that clears `running`. If its subscription
+ * rejects — Tauri event registration failing while command IPC still works —
+ * a started run never completes as far as the window is concerned, and Run,
+ * Apply, Clear and Update stay blocked until the app is restarted. So the
+ * button is not offered until this is true.
+ */
+let completionEventsReady = false;
+export const runEventsReady = (): boolean => completionEventsReady;
+
 export async function listenForRunEvents(deps: RunDeps): Promise<void> {
   await listen<RunEvent>("run-progress", (event) => {
     progressLog.push(describe(event.payload));
@@ -169,4 +181,8 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     if (document.activeElement === deps.stop) deps.focusStatus();
     deps.renderPlanSummary();
   });
+
+  // Both subscriptions have registered, so a started run can be heard to
+  // finish. Set last, and only on the success path of both awaits.
+  completionEventsReady = true;
 }

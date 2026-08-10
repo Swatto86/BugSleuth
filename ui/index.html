@@ -224,6 +224,12 @@
           <p class="hint hidden" id="prompt-path" style="margin: 0 0 10px"></p>
 
           <div class="hidden" id="apply-panel">
+            <!--
+              Its own alert rather than the shared status bar: boot overwrites
+              that with "Ready" moments after any listener failure, and this is
+              the only explanation of why Apply is permanently unavailable.
+            -->
+            <p id="apply-listener-error" class="status error hidden" role="alert"></p>
             <p class="hint" style="margin: 0 0 8px">
               Or have a model apply them here. It is given the same prompt the
               Copy button hands you, with write access to this repository: it
@@ -301,7 +307,9 @@
         >
           Stop
         </button>
-        <button class="primary" id="run" type="button">Run review</button>
+        <button class="primary" id="run" type="button" disabled>
+              Run review
+            </button>
       </footer>
     </div>
 

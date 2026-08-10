@@ -45,6 +45,8 @@ export interface ApplyDeps {
     /** Opt-in to tagging what the push published, so CI releases it. */
     tag: HTMLInputElement;
     output: HTMLPreElement;
+    /** Persistent alert for a completion listener that failed to register. */
+    listenerError: HTMLParagraphElement;
   };
   settings: () => Settings;
   promptRepo: () => string;
@@ -69,6 +71,12 @@ export interface ApplyBinding {
 /** Wire the panel up and expose its two focused redraw operations. */
 export function bindApply(deps: ApplyDeps): ApplyBinding {
   const { ui } = deps;
+
+  // `apply-finished` is the only thing that clears `applying`. Until its
+  // subscription has registered, starting an apply would leave the window
+  // unable to hear it end — and Stop relies on the same event, so restarting
+  // the app would be the only recovery.
+  let completionEventsReady = false;
 
   for (const name of VENDORS) {
     ui.vendor.append(option(name, name, false));
@@ -203,12 +211,19 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
       live.apply_effort,
       deps.catalogue(),
     );
-    ui.button.disabled = applying || deps.busy() || !chosen || !validEffort;
-    ui.button.title = !chosen
-      ? "Choose a provider and model first."
-      : validEffort
-        ? "Run the fix prompt against this repository, editing files in place."
-        : "This model does not accept the stored effort; choose Default first.";
+    ui.button.disabled =
+      !completionEventsReady ||
+      applying ||
+      deps.busy() ||
+      !chosen ||
+      !validEffort;
+    ui.button.title = !completionEventsReady
+      ? "Applying is unavailable until its result listener is ready."
+      : !chosen
+        ? "Choose a provider and model first."
+        : validEffort
+          ? "Run the fix prompt against this repository, editing files in place."
+          : "This model does not accept the stored effort; choose Default first.";
   };
 
   ui.vendor.addEventListener("change", () => {
@@ -309,12 +324,24 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
       deps.refresh();
       draw();
     },
-  ).catch((error: unknown) => {
-    deps.setStatus(
-      `Cannot hear the result of applying: ${String(error)}`,
-      "error",
-    );
-  });
+  ).then(
+    () => {
+      completionEventsReady = true;
+      ui.listenerError.textContent = "";
+      ui.listenerError.classList.add("hidden");
+      setButtonState();
+    },
+    (error: unknown) => {
+      // Its own persistent alert as well as the status: boot overwrites the
+      // shared status with "Ready" moments later, and this is the message that
+      // explains why Apply is permanently unavailable.
+      const message = `Cannot hear the result of applying: ${String(error)}`;
+      ui.listenerError.textContent = message;
+      ui.listenerError.classList.remove("hidden");
+      deps.setStatus(message, "error");
+      setButtonState();
+    },
+  );
 
   draw();
   return { redraw: draw, refreshButton: setButtonState };
