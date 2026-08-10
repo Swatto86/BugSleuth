@@ -83,6 +83,41 @@ impl ProcessError {
     }
 }
 
+/// Non-secret host state required to locate and run provider executables.
+/// Proxy variables are intentionally absent: they commonly contain credentials
+/// and must be supplied explicitly through [`Invocation::env`] when required.
+#[cfg(windows)]
+const CHILD_ENV_ALLOWLIST: &[&str] = &[
+    "PATH",
+    "PATHEXT",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "PROGRAMDATA",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+];
+
+#[cfg(not(windows))]
+const CHILD_ENV_ALLOWLIST: &[&str] = &[
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "XDG_CONFIG_HOME",
+    "XDG_CACHE_HOME",
+    "LANG",
+    "LC_ALL",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+];
+
 /// Everything needed to run one CLI invocation.
 pub struct Invocation<'a> {
     /// Absolute path to the executable. Adapters resolve a real `.exe` where one
@@ -95,8 +130,9 @@ pub struct Invocation<'a> {
     pub cwd: &'a Path,
     /// Written to the child's stdin, which is then closed to signal EOF.
     pub stdin: Option<&'a [u8]>,
-    /// Extra environment variables. Used for the API-key path, where setting
-    /// `ANTHROPIC_API_KEY` switches the CLI off subscription auth entirely.
+    /// Extra environment variables. These are the only values admitted beyond
+    /// the non-secret runtime allowlist above. Used for the API-key path, where
+    /// setting `ANTHROPIC_API_KEY` switches the CLI off subscription auth.
     pub env: &'a [(String, String)],
     pub timeout: Duration,
     /// Label used in error messages, e.g. "claude CLI".
@@ -123,6 +159,12 @@ async fn run_inner(
     output_cap: usize,
 ) -> Result<CliOutput, ProcessError> {
     let mut command = Command::new(invocation.binary);
+    command.env_clear();
+    for key in CHILD_ENV_ALLOWLIST {
+        if let Some(value) = std::env::var_os(key) {
+            command.env(key, value);
+        }
+    }
     command
         .args(invocation.args)
         .current_dir(invocation.cwd)
@@ -318,6 +360,10 @@ fn jwt_len(bytes: &[u8], is_b64url: &impl Fn(u8) -> bool) -> Option<usize> {
     }
     Some(third)
 }
+
+#[cfg(test)]
+#[path = "process/environment_tests.rs"]
+mod environment_tests;
 
 #[cfg(test)]
 mod tests;
