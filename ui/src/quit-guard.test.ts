@@ -105,10 +105,67 @@ test("the clearing flag is set before the clear and released on both outcomes", 
   );
   // One set, and a release on both the .then and the .catch: a flag cleared on
   // only one path would warn about a clear that had already finished, forever.
-  const releases = text.match(/clearing = false/g) ?? [];
-  assert.ok(
-    releases.length >= 2,
-    `clearing is released on ${releases.length} path(s); it must be released ` +
-      "on both the success and the failure of clear_saved",
-  );
+  //
+  // Scoped to each callback. Counting `clearing = false` across the whole file
+  // also counted the `let clearing = false` initializer, so deleting either
+  // outcome's release still left two matches and this passing.
+  const source = actionsSource().source;
+  const walk = (node: ts.Node, visit: (candidate: ts.Node) => void): void => {
+    visit(node);
+    node.forEachChild((child) => walk(child, visit));
+  };
+  const mentionsClearSaved = (node: ts.Node): boolean => {
+    let found = false;
+    walk(node, (candidate) => {
+      if (
+        ts.isCallExpression(candidate) &&
+        ts.isIdentifier(candidate.expression) &&
+        candidate.expression.text === "invoke" &&
+        candidate.arguments[0] !== undefined &&
+        ts.isStringLiteral(candidate.arguments[0]) &&
+        candidate.arguments[0].text === "clear_saved"
+      ) {
+        found = true;
+      }
+    });
+    return found;
+  };
+  const releasesClearing = (node: ts.Node): boolean => {
+    let found = false;
+    walk(node, (candidate) => {
+      if (
+        ts.isBinaryExpression(candidate) &&
+        candidate.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isIdentifier(candidate.left) &&
+        candidate.left.text === "clearing" &&
+        candidate.right.kind === ts.SyntaxKind.FalseKeyword
+      ) {
+        found = true;
+      }
+    });
+    return found;
+  };
+  const callbacks = new Map<string, ts.Node>();
+  walk(source, (node) => {
+    if (
+      !ts.isCallExpression(node) ||
+      !ts.isPropertyAccessExpression(node.expression)
+    ) {
+      return;
+    }
+    const name = node.expression.name.text;
+    if (name !== "then" && name !== "catch") return;
+    if (!mentionsClearSaved(node.expression.expression)) return;
+    const callback = node.arguments[0];
+    if (callback) callbacks.set(name, callback);
+  });
+  for (const name of ["then", "catch"]) {
+    const callback = callbacks.get(name);
+    assert.ok(callback, `the clear_saved .${name} callback is gone`);
+    assert.ok(
+      releasesClearing(callback),
+      `clear_saved ${name} does not release clearing, so the app would warn ` +
+        "about a delete that had already finished, forever",
+    );
+  }
 });
