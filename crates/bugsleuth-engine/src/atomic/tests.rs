@@ -223,11 +223,21 @@ fn concurrent_writes_leave_one_whole_file_and_no_debris() {
     let path = dir.join("report.json");
     let bodies = ["a".repeat(20_000), "b".repeat(20_000)];
 
+    // Both results are consumed. Discarding them let one writer fail outright
+    // while the other's complete file and clean staging satisfied every
+    // assertion below, so this reported two successful concurrent writes when
+    // only one had happened.
     std::thread::scope(|scope| {
-        for body in &bodies {
-            scope.spawn(|| {
-                let _ = write(&path, body.as_bytes());
-            });
+        let target = &path;
+        let writers: Vec<_> = bodies
+            .iter()
+            .map(|body| scope.spawn(move || write(target, body.as_bytes())))
+            .collect();
+        for writer in writers {
+            writer
+                .join()
+                .expect("writer thread panicked")
+                .expect("concurrent atomic write failed");
         }
     });
 
