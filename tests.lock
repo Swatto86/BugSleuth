@@ -575,7 +575,6 @@ rust orchestrate::tests::a_fully_resumed_run_merges_previous_sweeps_without_call
 rust orchestrate::tests::a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted
 rust orchestrate::tests::finishing_one_pass_leaves_the_other_passes_outstanding
 rust orchestrate::tests::live_sweep_metadata_reaches_the_aggregate_report
-rust orchestrate::tests::the_report_label_and_the_comparison_come_from_one_function
 rust payload::tests::a_regrade_reaches_the_window_as_data_with_both_grades_and_the_reason
 rust payload::tests::acknowledged_findings_are_not_cards
 rust payload::tests::an_unmoved_grade_sends_no_regrade_fields_so_the_card_stays_quiet
@@ -656,6 +655,7 @@ rust sweep::tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
 rust sweep::tests::a_vendor_prefix_selects_that_vendor
 rust sweep::tests::agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_policy
 rust sweep::tests::an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped
+rust sweep::tests::bare_alias_reports_use_the_resolved_label_on_both_paths
 rust sweep::tests::kilo_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode
 rust sweep::tests::only_kilo_needs_the_schema_spelled_out_in_its_prompt
 rust sweep::tests::provider_precheck_failures_are_reported_together

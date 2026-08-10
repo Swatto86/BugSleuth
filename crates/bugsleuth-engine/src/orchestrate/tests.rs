@@ -257,22 +257,12 @@ fn a_bare_alias_resolves_to_the_label_a_report_records() {
     assert_eq!(resolved_label("kilo:kimi"), "kilo:kimi");
 }
 
-/// And the run report builds its label the same way, so the two cannot drift.
-#[test]
-fn the_report_label_and_the_comparison_come_from_one_function() {
-    let sweep = include_str!("../sweep.rs");
-    let code: String = sweep
-        .split_once("#[cfg(test)]")
-        .map_or(sweep, |(before, _)| before)
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(
-        code.contains("let model_label = resolved_label("),
-        "the sweep builds its label some other way, so the two can disagree again"
-    );
-}
+// The scan that used to live here looked for `let model_label = resolved_label(`
+// in sweep.rs. That assignment is still needed for anchor verification further
+// down the file, so its presence said nothing about either `LaneReport`
+// initializer: both could regress to the raw request model with the scan green.
+// Replaced by sweep::tests::bare_alias_reports_use_the_resolved_label_on_both_paths,
+// which drives the real sweep boundary with a bare alias on both paths.
 
 /// One finished sweep accounts for exactly one outstanding unit.
 ///

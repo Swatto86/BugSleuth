@@ -174,6 +174,78 @@ fn echoing_stub(name: &str) -> String {
     path.to_string_lossy().into_owned()
 }
 
+/// A stub that answers like a Claude sweep that found nothing.
+///
+/// The failure path alone cannot prove the successful `LaneReport` initializer
+/// uses the resolved label; there are two of them, and both had to be checked.
+fn successful_stub(name: &str) -> String {
+    let dir = std::env::temp_dir()
+        .join("bugsleuth-sweep-tests")
+        .join(format!("{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch directory");
+
+    #[cfg(windows)]
+    let path = {
+        let path = dir.join("stub.cmd");
+        std::fs::write(
+            &path,
+            "@echo off\r\nfindstr /R \".*\" > nul\r\necho {\"structured_output\":{\"findings\":[]},\"is_error\":false,\"num_turns\":1}\r\nexit /b 0\r\n",
+        )
+        .expect("write stub");
+        path
+    };
+    #[cfg(not(windows))]
+    let path = {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join("stub.sh");
+        std::fs::write(
+            &path,
+            "#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '{\"structured_output\":{\"findings\":[]},\"is_error\":false,\"num_turns\":1}'\n",
+        )
+        .expect("write stub");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        path
+    };
+    path.to_string_lossy().into_owned()
+}
+
+/// Both report paths record the resolved label, not the raw config string.
+///
+/// Replaces a source scan for `let model_label = resolved_label(` in sweep.rs.
+/// That assignment stays necessary for anchor verification further down the
+/// file, so its presence proved nothing about either `LaneReport` initializer:
+/// both could regress to `request.model.to_string()` with the scan still green.
+/// A bare `sonnet` would then be compared against a recorded `claude:sonnet`,
+/// and a cancelled run would report already-finished sweeps as never reached.
+#[tokio::test]
+async fn bare_alias_reports_use_the_resolved_label_on_both_paths() {
+    for (stub, swept) in [
+        (echoing_stub("bare-label-failure"), false),
+        (successful_stub("bare-label-success"), true),
+    ] {
+        let report = run(Request {
+            repo: Path::new("."),
+            lane: Lane::Correctness,
+            model: "sonnet",
+            scope: None,
+            effort: "",
+            max_turns: 1,
+            timeout: Duration::from_secs(60),
+            api_key: None,
+            binary: Some(&stub),
+        })
+        .await;
+        assert_eq!(report.model, "claude:sonnet");
+        assert_eq!(
+            matches!(&report.status, Status::Swept { .. }),
+            swept,
+            "the stub did not take the path this case is about: {:?}",
+            report.status
+        );
+    }
+}
+
 #[tokio::test]
 async fn the_vendor_prefix_never_reaches_the_cli() {
     // 0.2.19 passed the whole spec to `-m`, so every Kilo and Codex sweep in a
