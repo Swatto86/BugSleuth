@@ -87,6 +87,8 @@ pub async fn signin_for(model: &str, effort: &str, binary: Option<&str>) -> crat
     crate::signin::one_shot(
         &binary.to_string_lossy(),
         &args,
+        // Kilo pins its workspace with `--dir`, so its own cwd is irrelevant.
+        &sandbox,
         &sweep_environment(),
         "kilo",
         events::assistant_text,

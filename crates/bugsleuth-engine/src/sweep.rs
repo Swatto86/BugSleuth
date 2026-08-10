@@ -338,11 +338,17 @@ fn verify_all(
 /// that is installed but not signed in. The desktop's selected-provider check
 /// proves that.
 pub async fn probe_all() -> Vec<(&'static str, Result<String, String>)> {
-    let (claude, codex, kilo) = tokio::join!(claude::probe(), codex::probe(), kilo::probe());
+    let (claude, codex, kilo, kimi) = tokio::join!(
+        claude::probe(),
+        codex::probe(),
+        kilo::probe(),
+        kimi::probe()
+    );
     vec![
         ("claude", claude.map_err(|e| e.to_string())),
         ("codex", codex.map_err(|e| e.to_string())),
         ("kilo", kilo.map_err(|e| e.to_string())),
+        ("kimi", kimi.map_err(|e| e.to_string())),
     ]
 }
 
@@ -352,7 +358,7 @@ pub async fn probe_all() -> Vec<(&'static str, Result<String, String>)> {
 /// this CLI start", which every one of them can while signed out; this asks for
 /// one word back, which only a real session can produce. Costs a trivial model
 /// call per vendor. A desktop run performs it for its selected providers; the
-/// button performs it for all three.
+/// button performs it for every one.
 pub async fn check_signin() -> Vec<(&'static str, bugsleuth_provider::signin::SignIn)> {
     bugsleuth_provider::signin::check_all().await
 }

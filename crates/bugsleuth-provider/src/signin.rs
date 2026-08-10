@@ -126,6 +126,11 @@ pub async fn check_all() -> Vec<(&'static str, SignIn)> {
 pub(crate) async fn one_shot(
     binary: &str,
     args: &[String],
+    // Where to run it. `.` is BugSleuth's own working directory, which is fine
+    // for a CLI that is confined by a flag and wrong for one whose workspace
+    // *is* its working directory — Kimi reads files from here, so its probe
+    // gets a private empty directory instead of wherever the app was launched.
+    cwd: &Path,
     // The environment a real invocation gets. A check run under a different
     // environment from the work is not checking the work.
     env: &[(String, String)],
@@ -140,7 +145,7 @@ pub(crate) async fn one_shot(
     let outcome = crate::process::run(Invocation {
         binary,
         args,
-        cwd: Path::new("."),
+        cwd,
         stdin: Some(PROMPT.as_bytes()),
         env,
         timeout: TIMEOUT,
@@ -192,6 +197,7 @@ mod tests {
         let result = one_shot(
             "/bin/sh",
             &["-c".into(), "kill -9 $$".into()],
+            Path::new("."),
             &[],
             "test",
             str::to_string,

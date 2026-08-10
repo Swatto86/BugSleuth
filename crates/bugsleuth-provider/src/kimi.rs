@@ -33,9 +33,11 @@ use crate::process::{self, Invocation, preview};
 
 mod apply;
 mod brief_file;
+mod catalogue;
 mod discover;
 mod signin;
 pub use apply::apply;
+pub(crate) use catalogue::catalogue;
 pub use signin::{signin, signin_for};
 
 pub(crate) const VENDOR: &str = "kimi";
@@ -156,6 +158,40 @@ fn build_args(spec: &KimiSweep<'_>, brief: &brief_file::BriefFile) -> Vec<String
     args.push("-p".into());
     args.push(brief_file::pointer(brief.path()));
     args
+}
+
+/// Whether the CLI can be started at all, and which version answered.
+///
+/// The counterpart to [`signin`], and the weaker of the two: every one of these
+/// CLIs starts happily while signed out. This fills the Providers panel; the
+/// sign-in check is what proves a session exists.
+pub async fn probe() -> Result<String, ProviderError> {
+    let binary = discover::resolve_binary().ok_or_else(not_found)?;
+    let output = process::run(Invocation {
+        binary: &binary.to_string_lossy(),
+        args: &["--version".to_string()],
+        cwd: Path::new("."),
+        stdin: None,
+        env: &[],
+        timeout: Duration::from_secs(60),
+        what: "kimi CLI",
+    })
+    .await?;
+
+    if !output.succeeded() {
+        return Err(ProviderError::Failed {
+            vendor: VENDOR,
+            code: output.code.unwrap_or(-1),
+            message: preview(output.stderr.trim(), 500),
+        });
+    }
+    Ok(output
+        .stdout
+        .lines()
+        .rfind(|line| !line.trim().is_empty())
+        .unwrap_or("unknown")
+        .trim()
+        .to_string())
 }
 
 fn not_found() -> ProviderError {

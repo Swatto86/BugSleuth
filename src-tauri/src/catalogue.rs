@@ -70,10 +70,11 @@ pub async fn available_models() -> Vec<VendorModels> {
 /// Why a vendor offers nothing, in words that say what to do about it.
 fn empty_list_reason(vendor: &str) -> String {
     match vendor {
+        // Only shown when the list really is empty, which for Kimi means no
+        // readable ~/.kimi-code/config.toml — the menu is read from that file.
         "kimi" => concat!(
-            "Kimi has no model list command, and which aliases exist depends on your ",
-            "own sign-in. Type the alias from ~/.kimi-code/config.toml (kimi-code/k3 ",
-            "for K3), or leave this empty to use the default_model set there."
+            "No models found in ~/.kimi-code/config.toml. Install the Kimi Code CLI and ",
+            "run `kimi` then /login, or type an alias by hand — the box accepts one."
         )
         .to_string(),
         other => format!("{other} returned no models"),

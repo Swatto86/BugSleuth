@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::error::ProviderError;
-use crate::{codex, kilo, process};
+use crate::{codex, kilo, kimi, process};
 
 /// A named set of models shown together.
 ///
@@ -121,19 +121,14 @@ pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
     }
 }
 
-/// Kimi's menu, which is deliberately empty.
+/// Kimi's menu, read from the CLI's own configuration.
 ///
-/// The CLI has no `models` list command, and its aliases come from the user's
-/// own `default_model` config plus whatever their sign-in route reaches — a
-/// subscription and a bring-your-own-key setup do not see the same set. Naming
-/// a guessed alias here would offer models that may not exist for this account,
-/// which is worse than offering none: the model box accepts a typed id, and the
-/// reason below says what to type.
+/// There is no `models` list command, and which aliases exist depends on the
+/// account — a subscription and a bring-your-own-key setup reach different
+/// sets. So the menu comes from the same file the CLI reads rather than from a
+/// list written here, which would offer models this user may not have.
 fn kimi_models() -> VendorCatalogue {
-    VendorCatalogue {
-        groups: Vec::new(),
-        efforts_by_model: BTreeMap::new(),
-    }
+    kimi::catalogue()
 }
 
 fn fixed(label: &str, models: &[&str]) -> VendorCatalogue {

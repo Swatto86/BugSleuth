@@ -53,6 +53,10 @@ pub async fn signin_for(model: &str, binary: Option<&str>) -> crate::signin::Sig
     crate::signin::one_shot(
         &binary.to_string_lossy(),
         &args,
+        // Kimi's workspace *is* its working directory and it has no flag to pin
+        // one, so the probe runs in a private empty directory rather than
+        // wherever BugSleuth happened to be launched from.
+        brief.dir(),
         &[],
         "kimi",
         str::to_string,

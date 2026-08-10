@@ -327,6 +327,7 @@ pub async fn signin() -> crate::signin::SignIn {
     crate::signin::one_shot(
         &binary.to_string_lossy(),
         &args,
+        Path::new("."),
         &[],
         "claude",
         str::to_string,

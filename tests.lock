@@ -495,6 +495,11 @@ rust kimi::apply::tests::apply_is_refused_and_says_why
 rust kimi::brief_file::tests::each_brief_gets_its_own_file
 rust kimi::brief_file::tests::the_brief_is_removed_when_the_sweep_ends
 rust kimi::brief_file::tests::the_prompt_that_reaches_the_command_line_is_tiny
+rust kimi::catalogue::tests::a_model_without_a_display_name_is_still_offered
+rust kimi::catalogue::tests::an_unreadable_config_offers_nothing_rather_than_guessing
+rust kimi::catalogue::tests::every_configured_model_is_offered_with_its_display_name
+rust kimi::catalogue::tests::other_sections_contribute_nothing
+rust kimi::catalogue::tests::the_real_local_config_parses_if_present
 rust kimi::signin::tests::the_probe_invokes_the_cli_the_way_a_sweep_does
 rust kimi::tests::a_failing_cli_is_an_error_rather_than_no_findings
 rust kimi::tests::a_real_invocation_returns_the_findings_the_cli_printed
