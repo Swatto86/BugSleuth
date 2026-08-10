@@ -41,7 +41,7 @@ pub struct TriageResult {
 }
 
 pub async fn triage(spec: TriageRequest<'_>) -> Result<TriageResult, ProviderError> {
-    let outcome = invoke(Run {
+    let outcome = invoke::<SeverityVerdicts>(Run {
         repo: spec.repo,
         model: spec.model,
         effort: spec.effort,

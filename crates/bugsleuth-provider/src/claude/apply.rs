@@ -43,7 +43,7 @@ pub struct ApplyRequest<'a> {
 /// That account is not evidence and is never treated as such: the caller reports
 /// it beside the files git says actually changed.
 pub async fn apply(request: ApplyRequest<'_>) -> Result<String, ProviderError> {
-    let outcome = invoke(Run {
+    let outcome = invoke::<Value>(Run {
         repo: request.repo,
         model: request.model,
         effort: request.effort,

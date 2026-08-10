@@ -81,7 +81,7 @@ pub struct SweepResult {
 pub async fn sweep(spec: ClaudeSweep<'_>) -> Result<SweepResult, ProviderError> {
     let _ = spec.lane;
     let ultracode = spec.use_agents && crate::models::supports_ultracode(spec.model);
-    let first = invoke(Run {
+    let first = invoke::<RawFindings>(Run {
         repo: spec.repo,
         model: spec.model,
         effort: if ultracode { "ultracode" } else { spec.effort },
@@ -148,13 +148,15 @@ pub(crate) struct Run<'a> {
 /// then fails to answer. Sweeps, the severity triage pass and applying fixes all
 /// lost whole invocations to it — the triage pass most often, and it has no
 /// repository to read at all.
-pub(crate) async fn invoke(mut run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {
+pub(crate) async fn invoke<T: serde::de::DeserializeOwned>(
+    mut run: Run<'_>,
+) -> Result<ResultEnvelope, ProviderError> {
     crate::models::validate_effort(VENDOR, run.model, run.effort).await?;
     if run.resume.is_none() && run.session_id.is_none() {
         run.session_id = Some(salvage::new_session_id());
     }
     let recovery = run.clone();
-    salvage::recover(invoke_once(run).await, recovery).await
+    salvage::recover::<T>(invoke_once(run).await, recovery).await
 }
 
 pub(super) async fn invoke_once(run: Run<'_>) -> Result<ResultEnvelope, ProviderError> {

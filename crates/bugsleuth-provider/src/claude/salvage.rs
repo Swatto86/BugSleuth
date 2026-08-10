@@ -87,7 +87,7 @@ so inventing wastes the salvage and reports nothing either way.";
 /// Recover work that is still inside a conversation, once. A successful CLI
 /// envelope without a structured answer is the same incomplete outcome as a
 /// timeout: starting the whole review over would only spend the quota twice.
-pub(super) async fn recover(
+pub(super) async fn recover<T: serde::de::DeserializeOwned>(
     first: Result<ResultEnvelope, ProviderError>,
     run: Run<'_>,
 ) -> Result<ResultEnvelope, ProviderError> {
@@ -97,8 +97,7 @@ pub(super) async fn recover(
     let timeout = run.timeout.min(Duration::from_secs(300));
     match first {
         Ok(outcome) if !run.schema.is_null() => {
-            let Err(original) = crate::json::structured::<Value>(outcome.structured_result())
-            else {
+            let Err(original) = crate::json::structured::<T>(outcome.structured_result()) else {
                 return Ok(outcome);
             };
             let Some(session) = outcome

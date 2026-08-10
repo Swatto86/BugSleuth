@@ -324,6 +324,7 @@ rust claude::tests::a_salvage_is_never_itself_salvaged
 rust claude::tests::a_salvage_run_resumes_the_session_rather_than_starting_a_new_one
 rust claude::tests::a_timed_out_run_resumes_the_same_session_once
 rust claude::tests::a_turn_budget_exhaustion_is_reported_as_its_own_failure_not_a_generic_one
+rust claude::tests::a_wrong_shaped_successful_reply_resumes_the_same_session_once
 rust claude::tests::agent_enabled_sweeps_only_add_read_only_delegation_tools
 rust claude::tests::an_empty_denylist_omits_the_flag_rather_than_passing_an_empty_value
 rust claude::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument

@@ -3,7 +3,7 @@
 
 use super::super::claude::args::build_args;
 use super::super::claude::*;
-use bugsleuth_domain::finding_schema;
+use bugsleuth_domain::{Lane, finding_schema};
 use std::path::Path;
 use std::time::Duration;
 
@@ -152,7 +152,7 @@ async fn a_timed_out_run_resumes_the_same_session_once() {
     request.schema = serde_json::Value::Null;
     request.binary = Some(&binary);
     request.timeout = Duration::from_millis(500);
-    let outcome = invoke(request)
+    let outcome = invoke::<Value>(request)
         .await
         .expect("resume should recover the answer");
 
@@ -202,7 +202,7 @@ async fn an_empty_successful_reply_resumes_the_same_session_once() {
     let mut request = run("");
     request.repo = &dir;
     request.binary = Some(&binary);
-    let outcome = invoke(request)
+    let outcome = invoke::<RawFindings>(request)
         .await
         .expect("the empty answer should be recovered from its session");
 
@@ -213,6 +213,76 @@ async fn an_empty_successful_reply_resumes_the_same_session_once() {
     );
     let calls = std::fs::read_to_string(dir.join("calls.txt")).expect("call log");
     assert_eq!(calls.lines().count(), 2, "recovery must run exactly once");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn a_wrong_shaped_successful_reply_resumes_the_same_session_once() {
+    let dir = std::env::temp_dir().join(format!(
+        "bugsleuth-claude-wrong-shape-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch directory");
+    #[cfg(windows)]
+    let (stub, script) = (
+        dir.join("claude.cmd"),
+        "@echo off\r\n\
+         echo %* >> calls.txt\r\n\
+         echo %* | findstr /c:\"--resume\" > nul && goto resumed\r\n\
+         echo {\"result\":\"\",\"structured_output\":{},\"is_error\":false,\"session_id\":\"same-session\"}\r\n\
+         exit /b 0\r\n\
+         :resumed\r\n\
+         echo {\"result\":\"\",\"structured_output\":{\"findings\":[{\"title\":\"known-finding\",\"severity\":\"medium\",\"file\":\"src/lib.rs\",\"line\":1,\"snippet\":\"known\",\"explanation\":\"known\",\"failure_scenario\":\"known\"}]},\"is_error\":false,\"session_id\":\"same-session\"}\r\n",
+    );
+    #[cfg(unix)]
+    let (stub, script) = (
+        dir.join("claude"),
+        "#!/bin/sh\n\
+         printf '%s\\n' \"$*\" >> calls.txt\n\
+         case \"$*\" in\n\
+           *--resume*) printf '%s\\n' '{\"result\":\"\",\"structured_output\":{\"findings\":[{\"title\":\"known-finding\",\"severity\":\"medium\",\"file\":\"src/lib.rs\",\"line\":1,\"snippet\":\"known\",\"explanation\":\"known\",\"failure_scenario\":\"known\"}]},\"is_error\":false,\"session_id\":\"same-session\"}' ;;\n\
+           *) printf '%s\\n' '{\"result\":\"\",\"structured_output\":{},\"is_error\":false,\"session_id\":\"same-session\"}' ;;\n\
+         esac\n",
+    );
+    std::fs::write(&stub, script).expect("write CLI stub");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = std::fs::metadata(&stub)
+            .expect("read stub permissions")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&stub, permissions).expect("make CLI stub executable");
+    }
+    let binary = stub.to_string_lossy().into_owned();
+
+    let outcome = sweep(ClaudeSweep {
+        repo: &dir,
+        lane: Lane::Correctness,
+        model: "",
+        effort: "",
+        use_agents: false,
+        brief: "",
+        timeout: Duration::from_secs(60),
+        max_turns: 12,
+        binary: Some(&binary),
+        api_key: None,
+    })
+    .await
+    .expect("the wrong-shaped answer should be recovered from its session");
+
+    assert!(outcome.salvaged);
+    assert_eq!(outcome.findings.findings.len(), 1);
+    assert_eq!(outcome.findings.findings[0].title, "known-finding");
+    let calls = std::fs::read_to_string(dir.join("calls.txt")).expect("call log");
+    assert_eq!(calls.lines().count(), 2, "recovery must run exactly once");
+    assert!(
+        calls
+            .lines()
+            .nth(1)
+            .is_some_and(|call| { call.contains("--resume") && call.contains("same-session") })
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -258,7 +328,7 @@ async fn a_salvage_is_never_itself_salvaged() {
     request.schema = serde_json::Value::Null;
     request.binary = Some(&binary);
     request.resume = Some("earlier-session");
-    let outcome = invoke(request).await;
+    let outcome = invoke::<Value>(request).await;
 
     assert!(
         matches!(outcome, Err(ProviderError::TurnsExhausted { .. })),
