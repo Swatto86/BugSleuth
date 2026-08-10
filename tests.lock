@@ -95,6 +95,7 @@ node applying uses the repository that produced the displayed prompt
 node both sides are actually being read
 node both themes define the same set of colours
 node checksum fallback excludes and verifies its own manifest
+node clearing hands focus off before activityChanged disables its opener
 node dark theme meets WCAG AA everywhere the UI uses it
 node declining an available update clears the running status
 node editing a model refreshes its row action labels

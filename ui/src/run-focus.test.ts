@@ -211,3 +211,55 @@ test("a new run withdraws the previous run's report action", () => {
     "a finished run never offers its report for copying",
   );
 });
+
+/// Focus has to leave Clear before anything can disable it.
+///
+/// The confirmation dialog restores focus to Clear saved sweeps before
+/// resolving. `activityChanged()` then reaches `renderPlanSummary`, which
+/// disables that focused button — and WebView2 drops focus to `<body>`, so the
+/// `document.activeElement === ui.clearSaved` check below it was already false
+/// and the live status region never received focus. The keyboard user was left
+/// at the document root for the whole delete.
+test("clearing hands focus off before activityChanged disables its opener", () => {
+  const actions = frontendFiles().find(
+    (source) => source.fileName === "actions.ts",
+  );
+  assert.ok(actions, "actions.ts is no longer a shipped frontend module");
+
+  let handler: ts.ArrowFunction | undefined;
+  walk(actions, (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "addEventListener" &&
+      ts.isPropertyAccessExpression(node.expression.expression) &&
+      node.expression.expression.name.text === "clearSaved"
+    ) {
+      const candidate = node.arguments[1];
+      if (candidate && ts.isArrowFunction(candidate)) handler = candidate;
+    }
+  });
+  assert.ok(handler, "the Clear saved sweeps handler is gone");
+
+  let focus = -1;
+  let activity = -1;
+  walk(handler.body, (node) => {
+    if (
+      !ts.isCallExpression(node) ||
+      !ts.isPropertyAccessExpression(node.expression)
+    )
+      return;
+    if (node.expression.name.text === "focusStatus") {
+      focus = node.getStart(actions);
+    }
+    if (node.expression.name.text === "activityChanged" && activity < 0) {
+      activity = node.getStart(actions);
+    }
+  });
+  assert.ok(focus >= 0, "the clear handler never hands focus off");
+  assert.ok(activity >= 0, "the clear handler never updates global activity");
+  assert.ok(
+    focus < activity,
+    "activityChanged disables Clear before focus leaves it",
+  );
+});

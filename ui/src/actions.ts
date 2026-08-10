@@ -108,10 +108,16 @@ export function bindGuardedActions(deps: ActionDeps): void {
       // Flagged for the whole delete, so a quit while it runs is warned about
       // rather than exiting mid-delete. Cleared on both outcomes below — a flag
       // left set on either path would warn about a clear that had finished.
+      // Focus leaves first. `activityChanged()` reaches renderPlanSummary,
+      // which disables this very button — and in WebView2 disabling the focused
+      // element drops focus to <body>, so the check below it was already false
+      // and a keyboard user spent the whole delete at the document root.
+      // `clearing` is set before either, so Run and Clear are still correctly
+      // disabled; only the synchronous status and focus work moves ahead.
       clearing = true;
-      deps.activityChanged();
       deps.setStatus("Deleting the saved sweeps…", "running");
       if (document.activeElement === ui.clearSaved) deps.focusStatus();
+      deps.activityChanged();
       ui.clearSaved.disabled = true;
       invoke<{ removed: number }>("clear_saved", {
         settings: deps.settings(),
