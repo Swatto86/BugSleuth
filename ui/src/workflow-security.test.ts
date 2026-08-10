@@ -54,7 +54,7 @@ test("only the release publisher receives repository write authority", () => {
     publish,
     /actions\/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093/,
   );
-  assert.match(publish, /softprops\/action-gh-release@v2/);
+  assert.match(publish, /softprops\/action-gh-release@/);
   assert.equal(workflow.match(/^[ \t]*contents: write$/gm)?.length, 1);
 });
 
@@ -64,4 +64,8 @@ test("the release checkout is pinned to an immutable revision", () => {
 
 test("the release Node setup is pinned to an immutable revision", () => {
   assert.match(actionRef("actions/setup-node"), /^[0-9a-f]{40}$/);
+});
+
+test("the release publisher is pinned to an immutable revision", () => {
+  assert.match(actionRef("softprops/action-gh-release"), /^[0-9a-f]{40}$/);
 });
