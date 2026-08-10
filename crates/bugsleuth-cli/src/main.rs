@@ -29,6 +29,12 @@ async fn run_all(args: RunArgs) -> Result<()> {
         .iter()
         .any(|unit| matches!(sweep::Vendor::parse(&unit.model).0, sweep::Vendor::Claude));
     let max_turns = claude_turn_budget(args.max_turns, uses_claude, 40)?;
+    // Triage is a Claude call, so a plan of Codex and Kilo units with a triage
+    // model configured still has somewhere to spend the key.
+    validate_api_key_target(
+        args.use_api_key,
+        uses_claude || !args.triage_model.trim().is_empty(),
+    )?;
     let repo = real_path(&args.repo)?;
 
     // Print progress as it happens rather than after the fact.
@@ -186,6 +192,27 @@ fn api_key(requested: bool) -> Result<Option<String>> {
         .map_err(|_| anyhow::anyhow!("--use-api-key was given but ANTHROPIC_API_KEY is not set"))
 }
 
+/// Refuse API-key mode for a provider the key cannot reach.
+///
+/// `--use-api-key` supplies `ANTHROPIC_API_KEY`, and only the Claude adapter
+/// takes one — Codex and Kilo use the session configured in their own CLI. The
+/// flag was accepted for every model, so a Codex or Kilo sweep read the key and
+/// then ran without it: the signed-in account the user had explicitly asked not
+/// to use was used, and charged, with nothing said.
+///
+/// A mixed `run` is allowed, because the key really does apply to its Claude
+/// units and to the Claude triage pass; only a run that reaches no Claude call
+/// at all is refused.
+fn validate_api_key_target(requested: bool, uses_claude: bool) -> Result<()> {
+    if requested && !uses_claude {
+        anyhow::bail!(
+            "--use-api-key supplies ANTHROPIC_API_KEY and is only supported by Claude; Codex \
+             and Kilo use the session configured in their own CLI"
+        );
+    }
+    Ok(())
+}
+
 fn claude_turn_budget(requested: Option<u32>, uses_claude: bool, default: u32) -> Result<u32> {
     if requested.is_some() && !uses_claude {
         anyhow::bail!(
@@ -211,6 +238,9 @@ fn sweep_start_message(
 async fn run_sweep(args: SweepArgs) -> Result<()> {
     let uses_claude = matches!(sweep::Vendor::parse(&args.model).0, sweep::Vendor::Claude);
     let max_turns = claude_turn_budget(args.max_turns, uses_claude, 30)?;
+    // Before `api_key` reads the environment, so the refusal names the real
+    // problem rather than complaining that an irrelevant variable is unset.
+    validate_api_key_target(args.use_api_key, uses_claude)?;
     let repo = real_path(&args.repo)?;
 
     // The same check `run` makes, from the same function. `sweep` skipped it,
@@ -315,6 +345,52 @@ mod tests {
         assert_eq!(super::claude_turn_budget(None, false, 30).unwrap(), 30);
         assert_eq!(super::claude_turn_budget(Some(7), true, 40).unwrap(), 7);
         assert!(super::claude_turn_budget(Some(1), false, 30).is_err());
+    }
+
+    #[test]
+    fn api_key_mode_is_refused_for_a_provider_it_cannot_reach() {
+        // `--use-api-key` supplies ANTHROPIC_API_KEY. Accepting it for a Codex
+        // or Kilo sweep read the key and then invoked a CLI that never receives
+        // it, so the signed-in account the user meant to avoid was used and
+        // charged anyway.
+        assert!(super::validate_api_key_target(false, false).is_ok());
+        assert!(super::validate_api_key_target(true, true).is_ok());
+        let error =
+            super::validate_api_key_target(true, false).expect_err("api key mode is rejected");
+        assert!(
+            error.to_string().contains("only supported by Claude"),
+            "{error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_non_claude_sweep_rejects_api_key_mode_before_reading_the_environment() {
+        // Ordering matters, and this holds whichever way the environment is set
+        // up: without the fix an unset key complains that it is missing and a
+        // set one gets as far as the missing repository. Neither says this.
+        let cli = super::Cli::try_parse_from([
+            "bugsleuth",
+            "sweep",
+            "--repo",
+            "missing-api-key-test-repo",
+            "--lane",
+            "security",
+            "--model",
+            "codex:",
+            "--use-api-key",
+        ])
+        .expect("arguments parse");
+        let super::Command::Sweep(args) = cli.command else {
+            panic!("sweep command parsed as another command");
+        };
+
+        let error = super::run_sweep(args)
+            .await
+            .expect_err("api key mode is rejected");
+        assert!(
+            error.to_string().contains("only supported by Claude"),
+            "the environment was consulted before the provider was checked: {error}"
+        );
     }
 
     #[tokio::test]

@@ -61,6 +61,10 @@ pub(crate) struct RunArgs {
     /// again. Failed sweeps are retried.
     #[arg(long, requires = "out_dir")]
     pub(crate) resume: bool,
+    /// Use ANTHROPIC_API_KEY for Claude sweep and triage calls. Codex and Kilo
+    /// continue using the session configured in their own CLI, so a plan that
+    /// reaches neither a Claude unit nor Claude triage is refused rather than
+    /// silently ignoring the request.
     #[arg(long)]
     pub(crate) use_api_key: bool,
     /// Model that re-grades every severity once the sweeps are merged, seeing
@@ -121,9 +125,11 @@ pub(crate) struct SweepArgs {
     /// Write the machine-readable report here in addition to printing text.
     #[arg(long)]
     pub(crate) json_out: Option<PathBuf>,
-    /// Use an API key instead of the signed-in subscription session. The key is
-    /// read from `ANTHROPIC_API_KEY`; it is never accepted as an argument, so it
-    /// cannot end up in a shell history or a process listing.
+    /// Use ANTHROPIC_API_KEY instead of Claude's signed-in session. Only valid
+    /// with a Claude model — Codex and Kilo use the session configured in their
+    /// own CLI, and never receive this key. It is read from the environment and
+    /// never accepted as an argument, so it cannot end up in a shell history or
+    /// a process listing.
     #[arg(long)]
     pub(crate) use_api_key: bool,
 }
