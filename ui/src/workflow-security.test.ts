@@ -28,6 +28,15 @@ function section(name: string, indent: number): string {
   return lines.slice(start, end < 0 ? undefined : end).join("\n");
 }
 
+function actionRef(action: string): string {
+  const escaped = action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = [
+    ...workflow.matchAll(new RegExp(`${escaped}@([^\\s#]+)`, "g")),
+  ];
+  assert.equal(matches.length, 1, `expected one ${action} use`);
+  return matches[0]![1]!;
+}
+
 test("only the release publisher receives repository write authority", () => {
   const permissions = section("permissions", 0);
   const build = section("build", 2);
@@ -47,4 +56,8 @@ test("only the release publisher receives repository write authority", () => {
   );
   assert.match(publish, /softprops\/action-gh-release@v2/);
   assert.equal(workflow.match(/^[ \t]*contents: write$/gm)?.length, 1);
+});
+
+test("the release checkout is pinned to an immutable revision", () => {
+  assert.match(actionRef("actions/checkout"), /^[0-9a-f]{40}$/);
 });

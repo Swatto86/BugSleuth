@@ -72,7 +72,7 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The manifest version is taken from the tag, while the binary embeds the
       # workspace version. If they disagree the updater advertises one version
