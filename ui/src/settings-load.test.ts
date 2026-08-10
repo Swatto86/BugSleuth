@@ -64,3 +64,30 @@ test("startup renders do not persist settings back over the saved file", () => {
     assert.equal(calls, 1, `${name} must render once without persisting`);
   }
 });
+
+/// A completed sign-in check must survive the rest of startup.
+///
+/// The window is revealed before catalogue loading and preflight finish, but
+/// Check sign-in was enabled from the first paint. Both it and boot write the
+/// same vendor pills and status. With Codex and Kilo discovery near their
+/// sequential 60-second timeouts, a sign-in check started during startup could
+/// finish first and show that vendors were signed out — and boot then replaced
+/// that with the weaker executable-only preflight result and "Ready". The user
+/// had to pay for the check again to get the answer back.
+test("manual sign-in cannot be overwritten by startup preflight", () => {
+  const html = read("ui", "index.html");
+  assert.match(
+    html,
+    /<button id="check-signin"[^>]*disabled/,
+    "Check sign-in is clickable before any JavaScript has run",
+  );
+
+  const main = read("ui", "src", "main.ts");
+  const preflight = main.indexOf('invoke<VendorStatus[]>("preflight")');
+  const reenable = main.indexOf("ui.checkSignin.disabled = false");
+  assert.ok(preflight >= 0, "startup no longer performs provider preflight");
+  assert.ok(
+    reenable > preflight,
+    "Check sign-in becomes available before startup can finish overwriting its result",
+  );
+});

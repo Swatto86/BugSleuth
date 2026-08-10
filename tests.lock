@@ -134,6 +134,7 @@ node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node lane titles match the engine's own names, including UX
 node light theme meets WCAG AA everywhere the UI uses it
+node manual sign-in cannot be overwritten by startup preflight
 node names are joined the way English does
 node no CSS rule styles a class nothing uses
 node no call into Rust can fail without the user being told
@@ -146,6 +147,7 @@ node quit flushes pending settings before it can invoke exit
 node quit rechecks active work after its settings flush
 node release tag matches version embedded in the app
 node removing a configured model row is guarded by a confirmation
+node render redirects focus when the focused row was just removed
 node render redirects focus when the focused row was just removed
 node rounds are driven by the busiest vendor, not the total
 node run-directory documentation includes the backend path hash

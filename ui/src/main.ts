@@ -3,8 +3,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import {
-  LANE_TITLES,
-  type Lane,
   type Settings,
   batchCount,
   canRun,
@@ -12,7 +10,6 @@ import {
   preset,
   supportsAgents,
   usesUltracode,
-  uncoveredLanes,
   unitCount,
 } from "./model";
 import { bindGuardedActions, isClearing } from "./actions";
@@ -20,7 +17,6 @@ import { bindControls } from "./controls";
 import { matrixHandlers } from "./matrix";
 import { isUpdating, wireUpdate } from "./update";
 import { savingSettings } from "./persist";
-import { listOf } from "./format";
 import {
   type RunDeps,
   currentFixPrompt,
@@ -31,6 +27,7 @@ import {
 } from "./run";
 import { type ApplyBinding, bindApply, isApplying } from "./apply";
 import { ui } from "./elements";
+import { renderCoverage, withRestoredFocus } from "./plan-view";
 import {
   type Catalogue,
   type VendorModels,
@@ -81,33 +78,6 @@ function applyTheme(theme: Settings["theme"]): void {
 
 // ── Rendering ───────────────────────────────────────────────────────────────
 
-/**
- * Surface uncovered lanes prominently, and mark the column heads.
- *
- * This is the UI's most important job. The report will say "not swept" either
- * way, but by then the run is paid for; here it is still free to fix.
- */
-function renderCoverage(): void {
-  const uncovered = uncoveredLanes(settings.models);
-
-  for (const head of document.querySelectorAll<HTMLElement>("th.lane-cell")) {
-    const lane = head.dataset["lane"] ?? "";
-    head.classList.toggle("uncovered", uncovered.includes(lane as Lane));
-  }
-
-  if (uncovered.length === 0) {
-    ui.uncovered.classList.add("hidden");
-    ui.uncovered.textContent = "";
-    return;
-  }
-  const names = uncovered.map((lane) => LANE_TITLES[lane]);
-  ui.uncovered.classList.remove("hidden");
-  ui.uncovered.textContent =
-    `No model covers ${listOf(names)}. ${uncovered.length === 1 ? "That lane" : "Those lanes"} ` +
-    `will be reported as NOT SWEPT — nothing will be looked for there, which is not ` +
-    `the same as nothing being wrong.`;
-}
-
 function renderPlanSummary(): void {
   const units = unitCount(settings.models);
   const rounds = batchCount(settings.models);
@@ -123,42 +93,8 @@ function renderPlanSummary(): void {
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
 }
 
-/**
- * Rebuild the model table, putting keyboard focus back where it was.
- *
- * Toggling a lane replaces every element in the table, so focus fell to
- * `<body>` — on the app's busiest control, a keyboard user was thrown back to
- * the top of the page on every single tick. There is no workaround for that
- * except tabbing all the way in again, each time.
- *
- * The identity is a `data-focus-key` the row builder writes. Restoring by
- * position would put focus on a different lane the moment a row is removed.
- */
 function render(): void {
-  const focused = document.activeElement;
-  const key =
-    focused instanceof HTMLElement ? focused.dataset["focusKey"] : undefined;
-
-  renderRows();
-
-  if (key === undefined) return;
-  const restored = ui.matrixBody.querySelector<HTMLElement>(
-    `[data-focus-key="${CSS.escape(key)}"]`,
-  );
-  if (restored) {
-    restored.focus();
-    return;
-  }
-
-  // Removing the focused final row deletes its focus key. Continue at the new
-  // final row, or at Add model when the matrix is now empty — otherwise focus
-  // falls to <body> and a keyboard user restarts from the top of the page.
-  if (key.startsWith("remove-")) {
-    const lastRemove = ui.matrixBody.querySelector<HTMLElement>(
-      `[data-focus-key="remove-${settings.models.length - 1}"]`,
-    );
-    (lastRemove ?? ui.addModel).focus();
-  }
+  withRestoredFocus(settings.models.length, renderRows);
 }
 
 const rowHandlers = matrixHandlers({
@@ -191,7 +127,7 @@ function renderWithoutPersisting(): void {
 
 /** Re-render everything that depends on state but not on the table's identity. */
 function refresh(): void {
-  renderCoverage();
+  renderCoverage(settings.models);
   renderPlanSummary();
   if (!suppressPersistence) persist();
 }
@@ -391,10 +327,20 @@ async function boot(): Promise<void> {
 
 // A failure anywhere in boot must not leave an invisible window behind. Rust
 // also reveals the window on a timer as a second line of defence.
-void boot().catch((error: unknown) => {
-  // invoke-may-fail-silently: last-resort reveal on a failed boot. If this
-  // fails too, Rust's timer is the remaining line of defence and there is no
-  // surface left to report on.
-  void invoke("frontend_ready");
-  setStatus(`Startup problem: ${String(error)}`, "error");
-});
+//
+// Check sign-in is enabled only here, after the last startup writer of the
+// vendor pills and the status has settled. Enabled from the first paint, a
+// click during startup could finish first and then be replaced by boot's
+// weaker executable-only preflight result. A failed boot reaches the finalizer
+// too, and in that case no later startup writer remains.
+void boot()
+  .catch((error: unknown) => {
+    // invoke-may-fail-silently: last-resort reveal on a failed boot. If this
+    // fails too, Rust's timer is the remaining line of defence and there is no
+    // surface left to report on.
+    void invoke("frontend_ready");
+    setStatus(`Startup problem: ${String(error)}`, "error");
+  })
+  .finally(() => {
+    ui.checkSignin.disabled = false;
+  });

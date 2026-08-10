@@ -71,7 +71,16 @@
             <span class="pill"><span class="dot"></span>checking…</span>
           </div>
           <div class="row" style="margin-top: 10px">
-            <button id="check-signin" type="button">Check sign-in</button>
+            <!--
+              Disabled in the shipped markup, not only in JavaScript: startup
+              and this button write the same vendor pills and status, and a
+              click landing during startup could be overwritten by the weaker
+              executable-only preflight result. Boot's finalizer enables it once
+              the last startup writer has settled.
+            -->
+            <button id="check-signin" type="button" disabled>
+              Check sign-in
+            </button>
           </div>
         </section>
 
