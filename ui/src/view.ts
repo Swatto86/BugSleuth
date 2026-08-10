@@ -149,11 +149,11 @@ export function matrixRows(
         "aria-label",
         agentsSupported
           ? `Use parallel review agents for ${name}, row ${index + 1}`
-          : `Parallel review agents unavailable for ${name}, row ${index + 1}: Kilo Ask cannot delegate`,
+          : `Parallel review agents unavailable for ${name}, row ${index + 1}: ${selected.vendor} cannot delegate`,
       );
       if (agentControl) {
         const title = !agentsSupported
-          ? "Unavailable: BugSleuth uses Kilo's read-only Ask agent, which cannot delegate."
+          ? `Unavailable: ${selected.vendor} has no subagent mode BugSleuth can ask for.`
           : selected.vendor === "claude" && usesUltracode(id)
             ? "Use Claude Ultracode with two parallel foreground agents for this lane (provider limit: 16 concurrent). Uses more tokens."
             : `Ask ${selected.vendor === "claude" ? "Claude Code" : "Codex"} to delegate independent parts of this lane in parallel. Uses more tokens.`;

@@ -21,6 +21,8 @@ use crate::brief;
 use crate::report::{LaneReport, Rejected, Status, rank};
 // `clean_revision` is re-exported so `orchestrate::persist` reaches it as
 // `crate::sweep::clean_revision`, unchanged by the split.
+pub use agents::cannot_delegate;
+pub(crate) use agents::support as agent_support;
 pub use precheck::selected as precheck_selected;
 pub(crate) use revision::clean_revision;
 use revision::reviewed_commit;
@@ -216,13 +218,15 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
     };
 
     let agents_instruction = if use_agents {
-        let Some(instruction) = agents::instruction(vendor, model) else {
-            return not_swept(format!(
-                "{}'s read-only Ask agent cannot delegate",
-                vendor.label()
-            ));
-        };
-        Some(instruction)
+        // The reason comes from the same answer as the capability, so a vendor
+        // that cannot delegate is refused in its own terms rather than in
+        // Kilo's — "kimi's read-only Ask agent" described a thing Kimi has no
+        // concept of. `plan` refuses this before any quota is spent; reaching
+        // here means a configuration that bypassed it.
+        match agents::support(vendor, model) {
+            Ok(instruction) => Some(instruction),
+            Err(reason) => return not_swept(reason.to_string()),
+        }
     } else {
         None
     };

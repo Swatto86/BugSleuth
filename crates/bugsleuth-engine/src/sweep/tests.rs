@@ -91,15 +91,23 @@ fn only_kilo_needs_the_schema_spelled_out_in_its_prompt() {
 
 #[test]
 fn supported_vendors_get_their_own_agent_wording_and_kilo_gets_none() {
-    let claude = super::agents::instruction(Vendor::Claude, "sonnet").unwrap_or_default();
-    let codex = super::agents::instruction(Vendor::Codex, "").unwrap_or_default();
+    let claude = super::agents::support(Vendor::Claude, "sonnet").unwrap_or_default();
+    let codex = super::agents::support(Vendor::Codex, "").unwrap_or_default();
     assert!(claude.contains("foreground Explore subagents"), "{claude}");
     assert!(
         claude.contains("Do not use Workflow, background agents, or delayed wakeups"),
         "{claude}"
     );
     assert!(codex.contains("Codex subagents"), "{codex}");
-    assert_eq!(super::agents::instruction(Vendor::Kilo, ""), None);
+    // Both non-delegating vendors refuse, each in its own words.
+    assert_eq!(
+        super::agents::support(Vendor::Kilo, ""),
+        Err("Kilo's read-only Ask agent cannot delegate")
+    );
+    assert_eq!(
+        super::agents::support(Vendor::Kimi, ""),
+        Err("Kimi has no subagent mode BugSleuth can ask for")
+    );
 }
 
 /// A stand-in CLI that fails, printing its agent instruction and argv.

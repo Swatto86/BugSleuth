@@ -241,8 +241,19 @@ export function vendorOf(modelId: string): string {
 }
 
 /** Whether BugSleuth's read-only invocation of this provider can delegate. */
+export const CANNOT_DELEGATE = ["kilo", "kimi"] as const;
+
+/**
+ * Whether this vendor can be asked to split a lane across subagents.
+ *
+ * Must match `sweep::agents::support` in the engine, which is the authority —
+ * `bridge.test.ts` compares the two, because both sides are strings and no
+ * compiler spans them. It said `!== "kilo"` when Kimi was added, so the box was
+ * offered for a vendor that refuses: every lane came back NOT SWEPT and a whole
+ * run produced nothing.
+ */
 export function supportsAgents(modelId: string): boolean {
-  return vendorOf(modelId) !== "kilo";
+  return !(CANNOT_DELEGATE as readonly string[]).includes(vendorOf(modelId));
 }
 
 /** Whether this Claude selection can use the CLI's Ultracode workflow mode. */

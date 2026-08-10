@@ -214,3 +214,38 @@ fn canonical_spec_collapses_claude_but_keeps_the_default_and_other_vendors() {
     assert_eq!(canonical_spec("codex:gpt-5.6"), "codex:gpt-5.6");
     assert_eq!(canonical_spec("kilo:z-ai/glm"), "kilo:z-ai/glm");
 }
+
+/// Every vendor prefix must be recognised here, or a model is filed under the
+/// wrong one.
+///
+/// `vendor_of` decides which effort rules apply and which sweeps may run
+/// concurrently. An unrecognised prefix silently answers "claude", so a Kimi
+/// model was checked against Claude's effort rules — which accept anything
+/// unlisted — and an effort Kimi has nowhere to put was waved through instead
+/// of refused. The CLI then ignored it and the report never said the depth
+/// asked for was not applied.
+#[test]
+fn every_vendor_prefix_is_recognised() {
+    assert_eq!(super::vendor_of("sonnet"), "claude");
+    assert_eq!(super::vendor_of("claude:opus"), "claude");
+    assert_eq!(super::vendor_of("codex:gpt-5.6-codex"), "codex");
+    assert_eq!(super::vendor_of("kilo:kilo/x"), "kilo");
+    assert_eq!(
+        super::vendor_of("kimi:kimi-code/k3"),
+        "kimi",
+        "a Kimi model was filed under another vendor's rules"
+    );
+    assert_eq!(
+        super::canonical_spec("kimi:kimi-code/k3"),
+        "kimi:kimi-code/k3"
+    );
+}
+
+/// And the effort refusal actually reaches a Kimi model.
+#[test]
+fn an_effort_is_refused_for_a_vendor_that_has_no_such_flag() {
+    let error = super::check_effort("kimi:kimi-code/k3", "high")
+        .expect_err("Kimi has no effort flag, so an effort must not be accepted");
+    assert!(error.to_string().contains("kimi"), "{error}");
+    assert!(super::check_effort("kimi:kimi-code/k3", "").is_ok());
+}

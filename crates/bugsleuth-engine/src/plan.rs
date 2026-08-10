@@ -146,9 +146,18 @@ pub fn check_effort(id: &str, effort: &str) -> Result<()> {
 }
 
 /// The vendor prefix of a model spec. A bare name means Claude.
+///
+/// A prefix missing from this list answers "claude", silently — which is how a
+/// `kimi:` model came to be checked against Claude's effort rules. Those accept
+/// anything unlisted, so an effort Kimi has no flag for was waved through here
+/// and then ignored by the CLI, with nothing saying the depth asked for was
+/// never applied. Kept in step with [`crate::sweep::Vendor::parse`], which is
+/// the enum this mirrors.
 fn vendor_of(model: &str) -> String {
     match model.split_once(':') {
-        Some((vendor, _)) if matches!(vendor, "claude" | "codex" | "kilo") => vendor.to_string(),
+        Some((vendor, _)) if matches!(vendor, "claude" | "codex" | "kilo" | "kimi") => {
+            vendor.to_string()
+        }
         _ => "claude".to_string(),
     }
 }
@@ -166,7 +175,7 @@ pub fn canonical_spec(spec: &str) -> String {
     match spec.split_once(':') {
         Some(("claude", model)) if !model.trim().is_empty() => model.trim().to_string(),
         Some(("claude", _)) => "claude:".to_string(),
-        Some((vendor, model)) if matches!(vendor, "codex" | "kilo") => {
+        Some((vendor, model)) if matches!(vendor, "codex" | "kilo" | "kimi") => {
             format!("{vendor}:{}", model.trim())
         }
         _ => spec.to_string(),
@@ -208,11 +217,14 @@ pub fn plan(config: &Config) -> Result<Plan> {
                 model.id
             );
         }
-        if model.use_agents && vendor == "kilo" {
-            anyhow::bail!(
-                "model `{}` requests agents, but Kilo's read-only Ask agent cannot delegate",
-                model.id
-            );
+        // Asked of the same function the sweep asks, so a vendor added later
+        // is refused here — before any quota is spent — rather than turning
+        // every lane into NOT SWEPT after the run has been committed to.
+        if model.use_agents
+            && let Err(reason) =
+                crate::sweep::agent_support(crate::sweep::Vendor::parse(&model_id).0, &model_id)
+        {
+            anyhow::bail!("model `{}` requests agents, but {reason}", model.id);
         }
         // A config file is a file; the UI's picker is not the only way in.
         // Enumerating even a moderately large pass count hangs the run before

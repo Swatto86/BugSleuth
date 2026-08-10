@@ -204,6 +204,7 @@ node the two calls this rule was wrong about are classified correctly
 node the two themes are actually different
 node the updater is blocked while a review or an apply is in flight
 node the verification checkout is pinned to an immutable revision
+node the window and the engine agree on which vendors can delegate
 node the window never leaves a release armed while pushing is off
 node toggling a lane leaves other models untouched
 node toggling a lane off removes exactly it, and twice on is idempotent
@@ -617,6 +618,7 @@ rust plan::tests::a_fully_covered_run_reports_no_gaps
 rust plan::tests::a_huge_pass_count_is_refused_rather_than_enumerated_forever
 rust plan::tests::a_lane_with_no_model_is_reported_rather_than_quietly_omitted
 rust plan::tests::a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed
+rust plan::tests::an_effort_is_refused_for_a_vendor_that_has_no_such_flag
 rust plan::tests::an_effort_the_vendor_does_not_accept_is_refused_before_anything_is_paid_for
 rust plan::tests::an_unknown_lane_name_is_rejected_rather_than_silently_skipped
 rust plan::tests::batching_runs_every_unit_exactly_once
@@ -625,6 +627,7 @@ rust plan::tests::claude_effort_is_validated_per_model
 rust plan::tests::claude_ultracode_replaces_a_separate_effort_setting
 rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
 rust plan::tests::every_provider_runs_at_most_one_sweep_per_batch
+rust plan::tests::every_vendor_prefix_is_recognised
 rust plan::tests::kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
@@ -672,6 +675,8 @@ rust similarity::tests::one_terse_and_one_thorough_account_of_a_defect_still_mer
 rust similarity::tests::stopwords_alone_do_not_make_two_findings_look_alike
 rust similarity::tests::the_same_defect_described_by_two_vendors_scores_high_enough_to_merge
 rust similarity::tests::two_different_defects_in_the_same_function_score_far_lower
+rust sweep::agents::tests::every_vendor_either_delegates_or_says_why_not
+rust sweep::agents::tests::the_refusing_vendors_are_derived_from_the_same_answer
 rust sweep::isolate::tests::a_repository_cannot_redefine_the_agent_that_reviews_it
 rust sweep::isolate::tests::a_rules_directory_goes_whole
 rust sweep::isolate::tests::an_instruction_directory_name_is_removed_regardless_of_entry_type

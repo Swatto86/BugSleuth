@@ -306,3 +306,55 @@ test("every event has both an emitter and a listener", () => {
     "Rust sends these and nothing is listening, so whatever they report is lost",
   );
 });
+
+test("the window and the engine agree on which vendors can delegate", () => {
+  // Four places used to encode this: `supportsAgents` here, a `vendor == "kilo"`
+  // check in plan.rs, the sweep's own lookup, and two hardcoded strings in
+  // view.ts. Adding Kimi updated one of them, so the Agents box was offered for
+  // a vendor that refuses — every lane came back NOT SWEPT and the run produced
+  // nothing. The engine derives its list from the same match the sweep asks.
+  const agents = fs
+    .readFileSync(
+      path.join(
+        here,
+        "..",
+        "..",
+        "crates",
+        "bugsleuth-engine",
+        "src",
+        "sweep",
+        "agents.rs",
+      ),
+      "utf8",
+    )
+    .replace(/\r\n?/g, "\n");
+
+  const refusing = [...agents.matchAll(/Vendor::(\w+) => Err\(/g)].map(
+    (match) => match[1]!.toLowerCase(),
+  );
+  assert.ok(
+    refusing.length >= 1,
+    "found no refusing vendors in agents.rs; this scan needs updating",
+  );
+  // Known-present control: the file must also contain vendors that *can*
+  // delegate, or a scan matching nothing would satisfy the comparison below.
+  assert.ok(
+    /Vendor::\w+ => Ok\(/.test(agents),
+    "found no delegating vendors in agents.rs; this scan needs updating",
+  );
+
+  const shown = frontend();
+  const table = /\bconst CANNOT_DELEGATE = \[([^\]]*)\]/.exec(shown);
+  assert.ok(
+    table,
+    "no CANNOT_DELEGATE list in the frontend; the scan is broken",
+  );
+  const declared = [...table[1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+
+  assert.deepEqual(
+    declared.sort(),
+    refusing.sort(),
+    "the window offers parallel agents for a vendor the engine refuses, or hides " +
+      "them from one that supports them",
+  );
+});
