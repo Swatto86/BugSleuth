@@ -7,6 +7,75 @@
 
 use super::*;
 
+/// The pre-check must ask about the model the run will actually use.
+///
+/// Kilo authenticates per route: an Ollama model, an OpenRouter key, a Kilo plan
+/// and the configured default are each available or not independently. Reducing
+/// the plan to "wants Kilo" and asking the default therefore gated every lane on
+/// an invocation the run was never going to make — and passed runs whose real
+/// route was signed out.
+#[tokio::test]
+async fn selected_kilo_model_is_the_one_prechecked() {
+    let dir = std::env::temp_dir()
+        .join("bugsleuth-precheck-route")
+        .join(format!("{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch");
+    let recorded = dir.join("argv.txt");
+
+    #[cfg(windows)]
+    let stub = {
+        let path = dir.join("kilo.cmd");
+        std::fs::write(
+            &path,
+            format!(
+                "@echo off\r\nfindstr /R \".*\" > nul\r\necho %* > \"{}\"\r\nexit /b 1\r\n",
+                recorded.display()
+            ),
+        )
+        .expect("write stub");
+        path
+    };
+    #[cfg(not(windows))]
+    let stub = {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join("kilo.sh");
+        std::fs::write(
+            &path,
+            format!(
+                "#!/bin/sh\ncat >/dev/null\necho \"$@\" > '{}'\nexit 1\n",
+                recorded.display()
+            ),
+        )
+        .expect("write stub");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        path
+    };
+
+    let outcome =
+        bugsleuth_provider::kilo::signin_for("ollama/qwen", "high", Some(&stub.to_string_lossy()))
+            .await;
+    assert!(
+        !outcome.usable(),
+        "the stub exits non-zero, so this must not read as a working session"
+    );
+
+    let argv = std::fs::read_to_string(&recorded).expect("the stub recorded no argv");
+    assert!(
+        argv.contains("--agent"),
+        "the check no longer uses the sweep's own arguments: {argv}"
+    );
+    assert!(
+        argv.contains("-m ollama/qwen"),
+        "the pre-check asked about a different route from the one selected: {argv}"
+    );
+    assert!(
+        argv.contains("--variant high"),
+        "the pre-check dropped the effort the lane will pass: {argv}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[tokio::test]
 async fn a_kilo_sweep_stops_at_the_preflight_before_doing_any_work() {
     // Whichever way this machine is configured, a Kilo sweep must consult

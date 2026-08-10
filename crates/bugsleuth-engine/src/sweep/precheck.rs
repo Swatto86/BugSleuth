@@ -51,8 +51,31 @@ pub(super) fn summarize(checks: Vec<(Vendor, SignIn)>) -> Result<(), String> {
     finish(checks, vec![])
 }
 
+/// The distinct Kilo routes a plan will actually invoke.
+///
+/// Kilo authentication is per route, not per vendor, so reducing the plan to
+/// "wants Kilo" and asking the configured default tested an invocation the run
+/// was never going to make. Deduplicated because several lanes commonly share
+/// one model, and each check costs a real minimal call.
+fn kilo_routes(units: &[crate::plan::Unit]) -> Vec<(String, String)> {
+    let mut routes: Vec<(String, String)> = Vec::new();
+    for unit in units {
+        let (vendor, model) = Vendor::parse(&unit.model);
+        if vendor != Vendor::Kilo {
+            continue;
+        }
+        let route = (model.to_string(), unit.effort.trim().to_string());
+        if !routes.contains(&route) {
+            routes.push(route);
+        }
+    }
+    routes
+}
+
 /// Check each selected provider once, concurrently, before lane work starts.
-pub async fn selected(models: &[String]) -> Result<(), String> {
+pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
+    let models: Vec<String> = units.iter().map(|unit| unit.model.clone()).collect();
+    let models = &models[..];
     let vendors = vendors_for(models);
     let wants_claude = vendors.contains(&Vendor::Claude);
     let wants_codex = vendors.contains(&Vendor::Codex);
@@ -76,18 +99,26 @@ pub async fn selected(models: &[String]) -> Result<(), String> {
             }
         },
         async {
+            let mut results = Vec::new();
             if check_kilo {
-                Some((Vendor::Kilo, kilo::signin().await))
-            } else {
-                None
+                // Sequentially, and one per distinct selected route. Kilo
+                // processes share a mutable credential store, so concurrent
+                // invocations collide there; and each route authenticates
+                // separately, so the configured default's answer says nothing
+                // about the model this run will actually ask for.
+                for (model, effort) in kilo_routes(units) {
+                    results.push((Vendor::Kilo, kilo::signin_for(&model, &effort, None).await));
+                }
             }
+            results
         }
     );
 
     finish(
-        [claude_result, codex_result, kilo_result]
+        [claude_result, codex_result]
             .into_iter()
             .flatten()
+            .chain(kilo_result)
             .collect(),
         kilo_error.into_iter().collect(),
     )

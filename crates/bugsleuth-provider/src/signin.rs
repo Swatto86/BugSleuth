@@ -120,6 +120,9 @@ pub async fn check_all() -> Vec<(&'static str, SignIn)> {
 pub(crate) async fn one_shot(
     binary: &str,
     args: &[String],
+    // The environment a real invocation gets. A check run under a different
+    // environment from the work is not checking the work.
+    env: &[(String, String)],
     vendor: &'static str,
     // How to get the model's actual words out of whatever the CLI printed.
     // Kilo answers in NDJSON, so "stdout was not empty" is satisfied by its own
@@ -133,7 +136,7 @@ pub(crate) async fn one_shot(
         args,
         cwd: Path::new("."),
         stdin: Some(PROMPT.as_bytes()),
-        env: &[],
+        env,
         timeout: TIMEOUT,
         what: vendor,
     })
@@ -183,6 +186,7 @@ mod tests {
         let result = one_shot(
             "/bin/sh",
             &["-c".into(), "kill -9 $$".into()],
+            &[],
             "test",
             str::to_string,
         )

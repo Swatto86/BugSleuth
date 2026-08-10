@@ -39,7 +39,9 @@ pub async fn start_run(
 ) -> CommandResult<()> {
     let repo = checked_repo(&settings.repo)?;
     let plan = plan::plan(&to_config(&settings)).map_err(|e| e.to_string())?;
-    let selected_models: Vec<String> = plan.units.iter().map(|unit| unit.model.clone()).collect();
+    // The units themselves, not just their model names: Kilo's pre-check has to
+    // ask the exact route each lane will use, effort included.
+    let selected_units = plan.units.clone();
     let out_dir = run_output_dir(&repo)?;
 
     // A fresh signal per run: reusing one would let a cancel from a finished
@@ -65,7 +67,7 @@ pub async fn start_run(
 
     tauri::async_runtime::spawn(async move {
         let checked = tokio::select! {
-            result = sweep::precheck_selected(&selected_models) => result,
+            result = sweep::precheck_selected(&selected_units) => result,
             _ = cancel.cancelled() => Err("Provider pre-check stopped; no lane started.".into())
         };
         let report = match checked {
