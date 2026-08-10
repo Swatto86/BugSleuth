@@ -148,7 +148,6 @@ node quit rechecks active work after its settings flush
 node release tag matches version embedded in the app
 node removing a configured model row is guarded by a confirmation
 node render redirects focus when the focused row was just removed
-node render redirects focus when the focused row was just removed
 node rounds are driven by the busiest vendor, not the total
 node run-directory documentation includes the backend path hash
 node safety docs describe the triage exception to lane-relative grades

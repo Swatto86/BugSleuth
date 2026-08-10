@@ -24,11 +24,14 @@ function functionText(source: ts.SourceFile, name: string): string | undefined {
 }
 
 test("render redirects focus when the focused row was just removed", () => {
-  const main = frontendFiles().find((file) => file.fileName === "main.ts");
-  assert.ok(main, "main.ts is no longer a shipped frontend module");
+  // The behaviour moved to plan-view.ts when main.ts was split at the line cap;
+  // the check follows it rather than staying pointed at a wrapper that no
+  // longer contains it.
+  const view = frontendFiles().find((file) => file.fileName === "plan-view.ts");
+  assert.ok(view, "plan-view.ts is no longer a shipped frontend module");
 
-  const render = functionText(main, "render");
-  assert.ok(render, "render() is gone from main.ts");
+  const render = functionText(view, "withRestoredFocus");
+  assert.ok(render, "withRestoredFocus() is gone from plan-view.ts");
 
   // When the focused control was the removed row's own Remove button, its focus
   // key no longer exists, so the rebuild must continue at the new final row or
