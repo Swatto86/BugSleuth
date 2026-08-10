@@ -12,31 +12,55 @@ import ts from "typescript";
 
 import { frontendFiles, walk } from "./ast.test.ts";
 
-function functionText(source: ts.SourceFile, name: string): string | undefined {
-  let text: string | undefined;
+function declaration(
+  source: ts.SourceFile,
+  name: string,
+): ts.FunctionDeclaration | undefined {
+  let found: ts.FunctionDeclaration | undefined;
   walk(source, (node) => {
     if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
-      text = node.getText();
+      found = node;
     }
   });
-  return text;
+  return found;
 }
 
 test("the confirmation dialog describes its message to assistive tech", () => {
   const dialog = frontendFiles().find((file) => file.fileName === "dialog.ts");
   assert.ok(dialog, "dialog.ts is no longer a shipped frontend module");
 
-  const confirmDialog = functionText(dialog, "confirmDialog");
+  const confirmDialog = declaration(dialog, "confirmDialog");
   assert.ok(confirmDialog, "confirmDialog() is gone from dialog.ts");
 
   assert.match(
-    confirmDialog,
+    confirmDialog.getText(),
     /body\.id\s*=/,
     "the dialog body paragraph has no id for aria-describedby to reference",
   );
-  assert.match(
-    confirmDialog,
-    /aria-describedby/,
+  // The IDREF's target, not just the attribute's name. Matching bare
+  // "aria-describedby" passed a panel described by its own heading, which
+  // announces the title twice and never reads the destructive-action warning.
+  let describedByBody = false;
+  walk(confirmDialog, (node) => {
+    if (!ts.isCallExpression(node)) return;
+    const [attribute, target] = node.arguments;
+    describedByBody =
+      describedByBody ||
+      (ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "panel" &&
+        node.expression.name.text === "setAttribute" &&
+        attribute !== undefined &&
+        ts.isStringLiteral(attribute) &&
+        attribute.text === "aria-describedby" &&
+        target !== undefined &&
+        ts.isPropertyAccessExpression(target) &&
+        ts.isIdentifier(target.expression) &&
+        target.expression.text === "body" &&
+        target.name.text === "id");
+  });
+  assert.ok(
+    describedByBody,
     "the dialog panel is not described by its warning paragraph",
   );
 });
@@ -44,10 +68,10 @@ test("the confirmation dialog describes its message to assistive tech", () => {
 test("Tab with focus outside the dialog's buttons re-enters the trap", () => {
   const dialog = frontendFiles().find((file) => file.fileName === "dialog.ts");
   assert.ok(dialog, "dialog.ts is no longer a shipped frontend module");
-  const confirmDialog = functionText(dialog, "confirmDialog");
+  const confirmDialog = declaration(dialog, "confirmDialog");
   assert.ok(confirmDialog, "confirmDialog() is gone from dialog.ts");
   assert.match(
-    confirmDialog,
+    confirmDialog.getText(),
     /active !== first && active !== last/,
     "Tab from <body> escapes the modal into the app behind the overlay",
   );
