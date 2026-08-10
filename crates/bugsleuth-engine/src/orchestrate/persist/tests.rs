@@ -183,6 +183,35 @@ fn every_historical_filename_grammar_is_still_reused() {
     }
 }
 
+/// A colliding legacy name must not let one vendor's report stand in for
+/// another's.
+///
+/// `ends_with` compared only the model half, so a Claude report labelled
+/// `claude:codex-foo` satisfied a request for `codex:foo` — the Codex sweep was
+/// skipped and Claude's findings were reported as its result.
+#[test]
+fn legacy_filename_collision_cannot_cross_vendor_model() {
+    let dir = scratch("cross-vendor");
+    let mut report = lane_report(Status::Swept {
+        turns: Some(2),
+        salvaged: false,
+    });
+    report.model = "claude:codex-foo".into();
+    let unit = Unit {
+        model: "codex:foo".into(),
+        lane: Lane::Correctness,
+        effort: String::new(),
+        use_agents: false,
+        pass: 1,
+    };
+    assert!(write_report(&dir, &legacy_file_name_for(&unit), &report).is_ok());
+    assert!(
+        reusable(&unit, &options(&dir, true)).is_none(),
+        "a Claude report was reused as a Codex sweep's result"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_legacy_file_belonging_to_a_different_model_is_not_adopted() {
     // The old encoding could not tell `codex:a/b` from `codex:a-b`, so a

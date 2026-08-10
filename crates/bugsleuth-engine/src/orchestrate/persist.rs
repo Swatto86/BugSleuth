@@ -46,8 +46,12 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
                     // through the legacy name, which is exactly the "fixed the
                     // first sink, missed the second" shape the correctness
                     // mandate hunts for.
+                    // The whole canonical `vendor:model`, compared for equality.
+                    // A suffix match saw only the model half, so a Claude report
+                    // labelled `claude:codex-foo` satisfied a request for
+                    // `codex:foo` and Codex's sweep was skipped in its favour.
                     let same_sweep = legacy.lane == unit.lane.title()
-                        && legacy.model.ends_with(model_of(&unit.model))
+                        && legacy.model == crate::sweep::resolved_label(&unit.model)
                         && same_scope(&legacy, options.scope)
                         && same_revision(&legacy, options);
                     same_sweep.then_some(legacy)
@@ -90,12 +94,6 @@ fn same_scope(report: &LaneReport, scope: Option<&str>) -> bool {
 fn same_revision(report: &LaneReport, options: &RunOptions<'_>) -> bool {
     let current = crate::sweep::clean_revision(options.repo);
     report.cache_revision.is_some() && report.cache_revision == current
-}
-
-/// The model half of a `vendor:model` spec. A report records the resolved
-/// `vendor:model`, while a unit may hold a bare alias.
-fn model_of(spec: &str) -> &str {
-    spec.split_once(':').map_or(spec, |(_, model)| model)
 }
 
 pub(super) fn file_name_for(unit: &Unit) -> String {
