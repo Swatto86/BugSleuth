@@ -60,4 +60,24 @@ describe("dialog focus", () => {
       "status",
     );
   });
+
+  it("moves focus into a newly added model row", async () => {
+    // The new row is inserted before the Add model button, so forward Tab goes
+    // on to the presets and never reaches it — and a blank row changes neither
+    // the sweep summary nor the coverage warning, so nothing is announced. A
+    // screen-reader user could press Add repeatedly and hear nothing.
+    const before = (await $$("#matrix-body tr")).length;
+    await $("#add-model").click();
+    await browser.waitUntil(
+      async () => (await $$("#matrix-body tr")).length === before + 1,
+      { timeout: 5_000, timeoutMsg: "the new model row never appeared" },
+    );
+
+    const focusKey = await browser.execute(() =>
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement.dataset["focusKey"]
+        : undefined,
+    );
+    assert.equal(focusKey, `model-${before}`);
+  });
 });

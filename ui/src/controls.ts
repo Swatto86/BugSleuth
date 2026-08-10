@@ -34,6 +34,8 @@ export interface ControlDeps {
     appVersion: HTMLParagraphElement;
     checkUpdate: HTMLButtonElement;
     addModel: HTMLButtonElement;
+    /** The row container, so focus can be moved into a newly added row. */
+    matrixBody: HTMLTableSectionElement;
     copyReport: HTMLButtonElement;
     copyPrompt: HTMLButtonElement;
   };
@@ -176,11 +178,20 @@ export function bindControls(deps: ControlDeps): void {
   });
 
   ui.addModel.addEventListener("click", () => {
+    // Focus moves into the row this created. It is inserted *before* the Add
+    // model button, so forward Tab went on to the presets and never reached it;
+    // and a blank row changes neither the sweep summary nor the coverage
+    // warning, so no live region announced anything either. A screen-reader
+    // user could press Add repeatedly and hear nothing at all.
+    const addedIndex = settings().models.length;
     settings().models = [
       ...settings().models,
       { id: "", lanes: [], effort: "", passes: 1 },
     ];
     render();
+    ui.matrixBody
+      .querySelector<HTMLElement>(`[data-focus-key="model-${addedIndex}"]`)
+      ?.focus();
   });
 
   bindCopy(ui.copyReport, deps.report, "Copy report", "Copy failed");
