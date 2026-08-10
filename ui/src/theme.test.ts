@@ -135,11 +135,13 @@ test("both themes define the same set of colours", () => {
   // stray dark value nobody notices.
   const darkKeys = Object.keys(dark).sort();
   const lightKeys = Object.keys(light).sort();
-  const missing = darkKeys.filter((key) => !lightKeys.includes(key));
+  // Compared directly, in both directions. A one-way difference passed a dark
+  // palette that had lost a property the light one still defines, leaving the
+  // dark hover rules referencing an undefined custom property.
   assert.deepEqual(
-    missing,
-    [],
-    `the light theme does not override: ${missing.join(", ")}`,
+    darkKeys,
+    lightKeys,
+    "the dark and light themes define different sets of colours",
   );
 });
 
