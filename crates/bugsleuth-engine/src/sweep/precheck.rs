@@ -2,12 +2,12 @@
 
 use bugsleuth_provider::process::redact_secrets;
 use bugsleuth_provider::signin::SignIn;
-use bugsleuth_provider::{claude, codex, kilo};
+use bugsleuth_provider::{claude, codex, kilo, kimi};
 
 use super::Vendor;
 
 pub(super) fn vendors_for(models: &[String]) -> Vec<Vendor> {
-    [Vendor::Claude, Vendor::Codex, Vendor::Kilo]
+    [Vendor::Claude, Vendor::Codex, Vendor::Kilo, Vendor::Kimi]
         .into_iter()
         .filter(|vendor| models.iter().any(|model| Vendor::parse(model).0 == *vendor))
         .collect()
@@ -51,17 +51,17 @@ pub(super) fn summarize(checks: Vec<(Vendor, SignIn)>) -> Result<(), String> {
     finish(checks, vec![])
 }
 
-/// The distinct Kilo routes a plan will actually invoke.
+/// The distinct routes a plan will actually invoke for one vendor.
 ///
-/// Kilo authentication is per route, not per vendor, so reducing the plan to
-/// "wants Kilo" and asking the configured default tested an invocation the run
-/// was never going to make. Deduplicated because several lanes commonly share
-/// one model, and each check costs a real minimal call.
-fn kilo_routes(units: &[crate::plan::Unit]) -> Vec<(String, String)> {
+/// Kilo and Kimi both authenticate per route rather than per vendor, so
+/// reducing the plan to "wants this vendor" and asking the configured default
+/// tests an invocation the run was never going to make. Deduplicated because
+/// several lanes commonly share one model, and each check costs a real call.
+fn routes_for(vendor_wanted: Vendor, units: &[crate::plan::Unit]) -> Vec<(String, String)> {
     let mut routes: Vec<(String, String)> = Vec::new();
     for unit in units {
         let (vendor, model) = Vendor::parse(&unit.model);
-        if vendor != Vendor::Kilo {
+        if vendor != vendor_wanted {
             continue;
         }
         let route = (model.to_string(), unit.effort.trim().to_string());
@@ -80,10 +80,11 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
     let wants_claude = vendors.contains(&Vendor::Claude);
     let wants_codex = vendors.contains(&Vendor::Codex);
     let wants_kilo = vendors.contains(&Vendor::Kilo);
+    let wants_kimi = vendors.contains(&Vendor::Kimi);
     let kilo_error = wants_kilo.then(kilo_permission_error).flatten();
     let check_kilo = wants_kilo && kilo_error.is_none();
 
-    let (claude_result, codex_result, kilo_result) = tokio::join!(
+    let (claude_result, codex_result, kilo_result, kimi_result) = tokio::join!(
         async {
             if wants_claude {
                 Some((Vendor::Claude, claude::signin().await))
@@ -106,8 +107,21 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
                 // invocations collide there; and each route authenticates
                 // separately, so the configured default's answer says nothing
                 // about the model this run will actually ask for.
-                for (model, effort) in kilo_routes(units) {
+                for (model, effort) in routes_for(Vendor::Kilo, units) {
                     results.push((Vendor::Kilo, kilo::signin_for(&model, &effort, None).await));
+                }
+            }
+            results
+        },
+        async {
+            let mut results = Vec::new();
+            if wants_kimi {
+                // Per selected model, for the reason the adapter exists: a Kimi
+                // subscription and a key-based route do not reach the same
+                // models, so the configured default's answer says nothing about
+                // the one this run asked for.
+                for (model, _) in routes_for(Vendor::Kimi, units) {
+                    results.push((Vendor::Kimi, kimi::signin_for(&model, None).await));
                 }
             }
             results
@@ -119,6 +133,7 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
             .into_iter()
             .flatten()
             .chain(kilo_result)
+            .chain(kimi_result)
             .collect(),
         kilo_error.into_iter().collect(),
     )

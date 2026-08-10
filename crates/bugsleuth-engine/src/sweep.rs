@@ -13,6 +13,7 @@ use bugsleuth_domain::{Finding, FindingId, Lane, ModelId, RawFinding};
 use bugsleuth_provider::claude::{self, ClaudeSweep};
 use bugsleuth_provider::codex::{self, CodexSweep};
 use bugsleuth_provider::kilo::{self, KiloSweep};
+use bugsleuth_provider::kimi::{self, KimiSweep};
 use bugsleuth_provider::process::redact_secrets;
 use bugsleuth_verify::verify_anchor;
 
@@ -32,6 +33,10 @@ pub enum Vendor {
     Claude,
     Codex,
     Kilo,
+    /// Moonshot's Kimi Code CLI. Present because a Kimi subscription reaches
+    /// models a bring-your-own-key route does not, and only the native CLI can
+    /// use that session.
+    Kimi,
 }
 
 impl Vendor {
@@ -42,6 +47,7 @@ impl Vendor {
             Some(("codex", model)) => (Vendor::Codex, model),
             Some(("claude", model)) => (Vendor::Claude, model),
             Some(("kilo", model)) => (Vendor::Kilo, model),
+            Some(("kimi", model)) => (Vendor::Kimi, model),
             _ => (Vendor::Claude, spec),
         }
     }
@@ -51,13 +57,14 @@ impl Vendor {
             Vendor::Claude => "claude",
             Vendor::Codex => "codex",
             Vendor::Kilo => "kilo",
+            Vendor::Kimi => "kimi",
         }
     }
 
     /// Whether the CLI can be handed a JSON Schema it will actually enforce.
     /// Kilo cannot, so its brief has to describe the shape in words instead.
     pub fn enforces_schema(self) -> bool {
-        !matches!(self, Vendor::Kilo)
+        !matches!(self, Vendor::Kilo | Vendor::Kimi)
     }
 
     /// Whether a sweep by this vendor must run in a throwaway checkout rather
@@ -69,7 +76,7 @@ impl Vendor {
     /// own global config — so the only way to guarantee a review cannot modify
     /// the code it is reviewing is to give it a copy.
     pub fn needs_isolation(self) -> bool {
-        matches!(self, Vendor::Kilo)
+        matches!(self, Vendor::Kilo | Vendor::Kimi)
     }
 }
 
@@ -160,6 +167,18 @@ async fn invoke_vendor(
         })
         .await
         .map(|r| (r.findings.findings, None, r.salvaged, None)),
+        // No effort: Kimi has no reasoning-depth flag, and inventing one would
+        // send a value its CLI rejects. `plan::check_effort` refuses the
+        // combination before a sweep is paid for.
+        Vendor::Kimi => kimi::sweep(KimiSweep {
+            worktree: reviewed,
+            model,
+            brief,
+            timeout: request.timeout,
+            binary: request.binary,
+        })
+        .await
+        .map(|r| (r.findings.findings, None, false, None)),
     }
 }
 

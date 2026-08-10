@@ -289,6 +289,16 @@ async fn run_provider(
             )
             .await
         }
+        Vendor::Kimi => {
+            bugsleuth_provider::kimi::apply(
+                request.repo,
+                model,
+                request.effort,
+                request.prompt,
+                request.timeout,
+            )
+            .await
+        }
     }
 }
 

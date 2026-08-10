@@ -59,7 +59,7 @@ export interface ModelSetting {
 }
 
 /** The vendors that can be picked, in the order they are offered. */
-export const VENDORS = ["claude", "codex", "kilo"] as const;
+export const VENDORS = ["claude", "codex", "kilo", "kimi"] as const;
 export type Vendor = (typeof VENDORS)[number];
 
 /**

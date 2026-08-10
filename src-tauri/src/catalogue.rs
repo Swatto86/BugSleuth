@@ -10,7 +10,7 @@ use bugsleuth_engine::models::{self, ModelGroup};
 use serde::Serialize;
 
 /// Vendors offered in the model dropdown, in the order they appear.
-const VENDORS: [&str; 3] = ["claude", "codex", "kilo"];
+const VENDORS: [&str; 4] = ["claude", "codex", "kilo", "kimi"];
 
 /// One vendor's menu.
 #[derive(Serialize)]
@@ -43,6 +43,13 @@ pub async fn available_models() -> Vec<VendorModels> {
     let mut out = Vec::with_capacity(VENDORS.len());
     for vendor in VENDORS {
         let (catalogue, error) = match models::available(vendor).await {
+            // An empty list with nothing said is the failure this module's note
+            // warns about: it looks identical to a vendor with no models. Kimi
+            // has no list command, so the box is a free-text field and this is
+            // the only place that can say what to put in it.
+            Ok(catalogue) if catalogue.groups.is_empty() => {
+                (catalogue, Some(empty_list_reason(vendor)))
+            }
             Ok(catalogue) => (catalogue, None),
             Err(error) => (models::VendorCatalogue::default(), Some(error.to_string())),
         };
@@ -60,6 +67,19 @@ pub async fn available_models() -> Vec<VendorModels> {
     out
 }
 
+/// Why a vendor offers nothing, in words that say what to do about it.
+fn empty_list_reason(vendor: &str) -> String {
+    match vendor {
+        "kimi" => concat!(
+            "Kimi has no model list command, and which aliases exist depends on your ",
+            "own sign-in. Type the alias from ~/.kimi-code/config.toml (kimi-code/k3 ",
+            "for K3), or leave this empty to use the default_model set there."
+        )
+        .to_string(),
+        other => format!("{other} returned no models"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,14 +95,32 @@ mod tests {
         // a vendor forces a deliberate answer instead of defaulting to one.
         const PER_MODEL: [&str; 3] = ["claude", "kilo", "codex"];
 
-        // What must never happen is a vendor with neither, which would render a
-        // control that does nothing.
+        // And a third answer, which is not the same as having no answer: Kimi
+        // has no reasoning-depth flag of any kind, so the only truthful thing
+        // its control can do is refuse. `efforts_for` says so explicitly rather
+        // than leaving it unknown, and that is what makes the refusal happen —
+        // an unknown vendor is waved through on the assumption it knows best.
+        const NO_EFFORT: [&str; 1] = ["kimi"];
+
+        // What must never happen is a vendor with none of the three, which
+        // would render a control that silently does nothing.
         for vendor in VENDORS {
             let cli_wide = !models::efforts(vendor).is_empty();
             let per_model = PER_MODEL.contains(&vendor);
-            assert!(
-                cli_wide != per_model,
-                "{vendor} must answer about effort exactly one way, not both or neither"
+            let refuses = NO_EFFORT.contains(&vendor);
+            assert_eq!(
+                u8::from(cli_wide) + u8::from(per_model) + u8::from(refuses),
+                1,
+                "{vendor} must answer about effort exactly one way, not several or none"
+            );
+        }
+
+        // The refusal is real, not merely declared in the list above.
+        for vendor in NO_EFFORT {
+            assert_eq!(
+                models::efforts_for(vendor, "anything"),
+                Some(&[][..]),
+                "{vendor} is listed as accepting no effort but does not say so"
             );
         }
     }
