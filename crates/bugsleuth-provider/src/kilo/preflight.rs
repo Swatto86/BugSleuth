@@ -33,6 +33,11 @@ use serde_json::Value;
 /// the two cannot drift apart.
 pub(crate) const SWEEP_AGENT: &str = "ask";
 
+/// The agent an apply runs under. A different one, deliberately: the sweep's
+/// agent is required to deny every way of changing the checkout, which is
+/// exactly what an apply is for.
+pub(crate) const APPLY_AGENT: &str = "code";
+
 /// Permissions that cannot mutate the checkout or reach the host/network.
 const SAFE_SWEEP_PERMISSIONS: &[&str] = &["read", "glob", "grep", "todoread", "todowrite"];
 
@@ -182,6 +187,43 @@ pub(crate) fn gap_in(candidates: &[PathBuf]) -> Option<String> {
         path.display(),
         open.join(" or ")
     ))
+}
+
+/// Returns why an apply cannot be run as [`APPLY_AGENT`], or `None`.
+///
+/// The opposite question to [`permission_gap`], and a much narrower one. An
+/// apply makes no confinement claim — Kilo has nothing to make one with — so
+/// this is not a safety gate. It exists because the failure it catches is
+/// expensive and silent: run as an agent whose `edit` is denied and the model
+/// spends a whole paid run reporting that it could not change anything.
+///
+/// Unreadable or absent configuration is **not** a refusal here, for the same
+/// reason: with no config of its own the CLI applies its own defaults, and
+/// there is nothing to warn about. A missing agent is left to the CLI too — it
+/// names the agent it could not find better than a guess here would.
+pub fn apply_gap() -> Option<String> {
+    apply_gap_in(&config_paths())
+}
+
+pub(crate) fn apply_gap_in(candidates: &[PathBuf]) -> Option<String> {
+    let (path, config) = candidates.iter().find_map(|path| {
+        let text = std::fs::read_to_string(path).ok()?;
+        let value: Value = serde_json::from_str(&strip_jsonc(&text)).ok()?;
+        Some((path, value))
+    })?;
+
+    let permission = config
+        .get("agent")
+        .and_then(|a| a.get(APPLY_AGENT))
+        .and_then(|a| a.get("permission"))?;
+
+    denies(permission, "edit").then(|| {
+        format!(
+            "the `{APPLY_AGENT}` agent in {} denies `edit`, so applying fixes with it would \
+             change nothing. Allow `edit` for that agent, or apply the generated handoff manually.",
+            path.display()
+        )
+    })
 }
 
 fn rule_denies_everything(rule: &Value) -> bool {

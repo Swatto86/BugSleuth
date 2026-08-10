@@ -197,3 +197,57 @@ fn a_config_without_the_sweep_agent_fails_closed() {
         "gap should name the agent: {gap}"
     );
 }
+
+#[test]
+fn an_apply_agent_that_cannot_edit_is_refused_before_the_run_is_spent() {
+    let path = config(
+        "apply-denied",
+        r#"{"agent":{"code":{"permission":{"edit":"deny"}}}}"#,
+    );
+    let gap = apply_gap_in(&[path]).expect("an agent that cannot edit must refuse the apply");
+    assert!(
+        gap.contains(APPLY_AGENT),
+        "gap should name the agent: {gap}"
+    );
+    assert!(
+        gap.contains("edit"),
+        "gap should name the permission: {gap}"
+    );
+}
+
+#[test]
+fn an_apply_agent_that_can_edit_is_allowed_through() {
+    let path = config(
+        "apply-allowed",
+        r#"{"agent":{"code":{"permission":{"edit":{"*":"allow","**/id_rsa*":"deny"},"task":"ask"}}}}"#,
+    );
+    assert_eq!(apply_gap_in(&[path]), None);
+}
+
+#[test]
+fn an_apply_is_not_refused_merely_because_the_machine_has_no_kilo_config() {
+    // The apply path makes no confinement claim — Kilo has nothing to make one
+    // with — so absence is left to the CLI's own defaults rather than turned
+    // into a refusal the user cannot act on. The sweep, which does make such a
+    // claim, fails closed on the same input.
+    let missing = std::env::temp_dir().join("bugsleuth-preflight-absent/kilo.jsonc");
+    assert_eq!(apply_gap_in(&[missing.clone()]), None);
+    assert_eq!(apply_gap_in(&[]), None);
+    assert!(
+        gap_in(&[missing]).is_some(),
+        "the sweep must still fail closed on the same input"
+    );
+}
+
+#[test]
+fn hardening_the_sweep_agent_does_not_block_the_apply_agent() {
+    // The two live in one file and are read for opposite properties. A config
+    // that denies everything to `ask` must still let `code` write.
+    let path = config(
+        "both-agents",
+        r#"{"agent":{"ask":{"permission":{"*":"deny","read":"allow"}},
+             "code":{"permission":{"edit":{"*":"allow"}}}}}"#,
+    );
+    assert_eq!(gap_in(&[path.clone()]), None);
+    assert_eq!(apply_gap_in(&[path]), None);
+}
