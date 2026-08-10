@@ -171,14 +171,19 @@ async fn run_inner(
         written
     };
 
-    // Readers live independently of the completion wait, so a timeout can kill
-    // the child, drain what it already wrote, and hand session events to the
-    // adapter for recovery. Keeping them inside `timeout` discarded those bytes
-    // along with the timed-out future.
-    let stdout_task = tokio::spawn(capture::read(stdout, output_cap));
-    let stderr_task = tokio::spawn(capture::read(stderr, output_cap));
+    // The buffers live outside the deadline so a timed-out invocation retains
+    // every byte already read, while pipe completion itself remains bounded. A
+    // descendant can inherit a pipe after the direct child exits, so waiting
+    // for EOF later would otherwise bypass the invocation timeout entirely.
+    let mut out = capture::Captured::default();
+    let mut err = capture::Captured::default();
     let combined = async {
-        let (status, fed) = tokio::join!(child.wait(), feed);
+        let (status, fed, (), ()) = tokio::join!(
+            child.wait(),
+            feed,
+            capture::read_into(stdout, output_cap, &mut out),
+            capture::read_into(stderr, output_cap, &mut err),
+        );
         (status, fed)
     };
 
@@ -188,8 +193,8 @@ async fn run_inner(
                 what: invocation.what.to_string(),
                 source,
             })?;
-            // Reaped, so the pid is finished with. Anything still answering to
-            // it belongs to whoever the OS gave it to next.
+            // Reaped and both pipes reached EOF, so nothing in this invocation
+            // still relies on the pid as a process-tree anchor.
             tree.disarm();
             // A prompt that never arrived is not a sweep. Reported as a failed
             // invocation, which the caller already renders as NOT SWEPT with a
@@ -198,9 +203,6 @@ async fn run_inner(
                 what: format!("{} (writing the prompt)", invocation.what),
                 source,
             })?;
-            let (out, err) = tokio::join!(stdout_task, stderr_task);
-            let out = out.unwrap_or_default();
-            let err = err.unwrap_or_default();
             capture::result(invocation.what, output_cap, status.code(), out, err, None)
         }
         Err(_) => {
@@ -208,12 +210,10 @@ async fn run_inner(
             // on its own leaves the CLI and everything the CLI started running.
             tree.fire();
             let _ = child.start_kill();
-            // Reap before reading the buffers: process exit closes both pipes,
-            // which lets the reader tasks return every byte already written.
+            // Reap the direct child; dropping the timed drain futures already
+            // closed this process's pipe readers, so inherited handles cannot
+            // hold the return path open past the deadline.
             let _ = child.wait().await;
-            let (out, err) = tokio::join!(stdout_task, stderr_task);
-            let out = out.unwrap_or_default();
-            let err = err.unwrap_or_default();
             capture::result(
                 invocation.what,
                 output_cap,

@@ -13,13 +13,13 @@ pub(super) struct Captured {
 /// Keep at most `cap` bytes, but drain to EOF so a full pipe cannot block the
 /// child. The first byte beyond the cap marks the retained prefix incomplete;
 /// exactly `cap` bytes followed by EOF is still complete.
-pub(super) async fn read<R: AsyncRead + Unpin + Send + 'static>(
+pub(super) async fn read_into<R: AsyncRead + Unpin>(
     stream: Option<R>,
     cap: usize,
-) -> Captured {
-    let mut captured = Captured::default();
+    captured: &mut Captured,
+) {
     let Some(mut reader) = stream else {
-        return captured;
+        return;
     };
     let mut chunk = [0u8; 8192];
     loop {
@@ -32,7 +32,6 @@ pub(super) async fn read<R: AsyncRead + Unpin + Send + 'static>(
             }
         }
     }
-    captured
 }
 
 pub(super) fn result(

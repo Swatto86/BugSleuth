@@ -105,6 +105,66 @@ async fn a_timeout_keeps_output_written_before_the_cutoff() {
     );
 }
 
+#[tokio::test]
+async fn a_descendant_holding_pipes_cannot_outlive_the_deadline() {
+    const ROLE: &str = "BUGSLEUTH_PIPE_HOLDER_ROLE";
+    const TEST: &str = "process::tests::a_descendant_holding_pipes_cannot_outlive_the_deadline";
+    let role = std::env::var(ROLE).unwrap_or_default();
+    if role == "descendant" {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        return;
+    }
+    let executable = std::env::current_exe().expect("find this test executable");
+    let helper_args = ["--exact", TEST, "--nocapture"];
+    if role == "parent" {
+        let mut descendant = std::process::Command::new(executable)
+            .args(helper_args)
+            .env(ROLE, "descendant")
+            .spawn()
+            .expect("start pipe-holding descendant");
+        std::thread::spawn(move || descendant.wait());
+        use std::io::Write as _;
+        println!("parent-done");
+        std::io::stdout().flush().expect("flush parent output");
+        return;
+    }
+
+    let binary = executable.to_string_lossy().into_owned();
+    let args = helper_args.map(str::to_string);
+    let started = std::time::Instant::now();
+    let result = tokio::time::timeout(
+        Duration::from_secs(2),
+        run(Invocation {
+            binary: &binary,
+            args: &args,
+            cwd: Path::new("."),
+            stdin: None,
+            env: &[(ROLE.to_string(), "parent".to_string())],
+            timeout: Duration::from_millis(200),
+            what: "pipe holder",
+        }),
+    )
+    .await
+    .expect("provider timeout did not include pipe completion")
+    .expect_err("a live inherited pipe was reported as complete");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "the 200ms provider timeout returned after {:?}",
+        started.elapsed()
+    );
+
+    assert!(
+        matches!(result, ProcessError::Timeout { .. }),
+        "expected a timeout, got {result:?}"
+    );
+    assert!(
+        result
+            .output()
+            .is_some_and(|output| output.stdout.contains("parent-done")),
+        "output before the deadline was lost: {result:?}"
+    );
+}
+
 /// A scratch directory that is empty at the start of every run, so a marker
 /// left by an earlier run cannot be read as this one's evidence.
 #[cfg(windows)]
