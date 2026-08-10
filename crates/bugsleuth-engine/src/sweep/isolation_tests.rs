@@ -183,31 +183,19 @@ async fn kilo_does_not_silently_omit_submodule_contents() {
         "the fixture has no gitlink, so there is no partial checkout to detect"
     );
 
-    let report = run(Request {
-        repo: &parent,
-        lane: Lane::Correctness,
-        model: "kilo:",
-        scope: None,
-        effort: "",
-        max_turns: 1,
-        // Short deliberately: the guard fires before any provider is invoked, so
-        // a regression that reaches the real CLI costs seconds rather than a
-        // minute of somebody's subscription quota.
-        timeout: Duration::from_secs(5),
-        api_key: None,
-        binary: None,
-    })
-    .await;
+    // The guard itself, not `run()`. Reaching it through `run` puts the Kilo
+    // permission precheck in front, so on a machine with no Kilo config the
+    // lane is refused for that reason instead and this test would pass or fail
+    // on how the host happens to be set up rather than on the defect.
+    let refusal = isolate::checkout_for(Vendor::Kilo, &parent)
+        .expect_err("a partial checkout was accepted for review");
 
-    // The exact reason. Asserting only `NotSwept` would be satisfied by the
-    // Kilo permission precheck, a missing CLI, or any other refusal that has
-    // nothing to do with submodules.
-    let Status::NotSwept { reason } = &report.status else {
-        panic!("a partial checkout was reviewed as a normal sweep: {report:?}");
-    };
+    // The exact reason. Asserting only that it was refused would be satisfied
+    // by a worktree that could not be created at all.
     assert!(
-        reason.contains("does not initialize submodules"),
-        "the lane was refused for some other reason: {reason}"
+        refusal.contains("does not initialize submodules"),
+        "the lane was refused for some other reason: {refusal}"
     );
+
     let _ = std::fs::remove_dir_all(&dir);
 }
