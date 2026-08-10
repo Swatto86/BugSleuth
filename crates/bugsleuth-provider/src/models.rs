@@ -251,6 +251,13 @@ async fn codex_models() -> VendorCatalogue {
     let Ok(output) = output else {
         return fixed("Codex", CODEX_MODELS);
     };
+    codex_catalogue_from_output(output)
+}
+
+fn codex_catalogue_from_output(output: process::CliOutput) -> VendorCatalogue {
+    if !output.succeeded() {
+        return fixed("Codex", CODEX_MODELS);
+    }
     let Some(entries) = codex_catalogue::parse(&output.stdout) else {
         return fixed("Codex", CODEX_MODELS);
     };

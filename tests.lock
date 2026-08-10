@@ -520,6 +520,7 @@ rust models::kilo_catalogue::tests::each_model_gets_its_own_efforts_rather_than_
 rust models::kilo_catalogue::tests::the_banner_is_not_mistaken_for_a_model
 rust models::kilo_catalogue::tests::the_byok_flag_is_read_per_record_and_does_not_leak
 rust models::kilo_catalogue::tests::unknown_effort_names_sort_after_known_ones_rather_than_at_random
+rust models::tests::a_failed_codex_listing_uses_the_fallback
 rust models::tests::a_failed_kilo_listing_is_an_error_not_an_empty_catalogue
 rust models::tests::a_kilo_model_billed_to_your_own_plan_is_not_filed_under_the_subscription
 rust models::tests::claude_catalogue_offers_the_documented_fable_alias

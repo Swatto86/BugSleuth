@@ -106,6 +106,43 @@ fn a_failed_kilo_listing_is_an_error_not_an_empty_catalogue() {
 }
 
 #[test]
+fn a_failed_codex_listing_uses_the_fallback() {
+    let live = r#"{"models":[{"slug":"live-only","visibility":"list","supported_reasoning_levels":[{"effort":"high"}]}]}"#;
+    let output = |code| process::CliOutput {
+        code: Some(code),
+        stdout: live.to_string(),
+        stderr: String::new(),
+    };
+    let ids = |catalogue: VendorCatalogue| {
+        catalogue
+            .groups
+            .into_iter()
+            .flat_map(|group| group.models)
+            .collect::<Vec<_>>()
+    };
+
+    let failed = ids(codex_catalogue_from_output(output(1)));
+    assert!(
+        failed.iter().any(|model| model == "gpt-5.6-codex"),
+        "the known fallback vanished: {failed:?}"
+    );
+    assert!(
+        !failed.iter().any(|model| model == "live-only"),
+        "failed-process stdout was trusted: {failed:?}"
+    );
+
+    let succeeded = ids(codex_catalogue_from_output(output(0)));
+    assert!(
+        succeeded.iter().any(|model| model == "live-only"),
+        "a successful live catalogue was ignored: {succeeded:?}"
+    );
+    assert!(
+        !succeeded.iter().any(|model| model == "gpt-5.6-codex"),
+        "the live catalogue was replaced by the fallback: {succeeded:?}"
+    );
+}
+
+#[test]
 fn efforts_are_recorded_per_model_and_only_where_the_model_has_any() {
     let catalogue = group_by_route(VERBOSE);
     assert_eq!(
