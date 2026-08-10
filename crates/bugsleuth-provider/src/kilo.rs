@@ -133,11 +133,41 @@ pub struct KiloResult {
     pub salvaged: bool,
 }
 
+/// One Kilo process at a time, across every entry point in this crate.
+///
+/// Kilo processes share a mutable credential store, and two of them running at
+/// once could fail to update it or corrupt the live session — which is why
+/// parallel same-provider sweeps were removed. That left the diagnostic paths
+/// unguarded: Check sign-in, and the model catalogue, both start a real Kilo
+/// call and could land in the middle of an hour-long sweep.
+///
+/// The guard is **not reentrant**. Recovery and repair passes are reached from
+/// inside a guarded sweep and must never take it again.
+static KILO_OPERATIONS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Wait for the Kilo slot. For work the user has already committed to.
+pub(crate) async fn operation_guard() -> tokio::sync::MutexGuard<'static, ()> {
+    KILO_OPERATIONS.lock().await
+}
+
+/// Take the Kilo slot, or report that it is busy.
+///
+/// Fail-fast rather than queueing, for the two *diagnostic* callers. A sweep
+/// holds this for tens of minutes, and a Check sign-in button that silently
+/// waited half an hour would read as a hung window.
+pub(crate) fn try_operation_guard() -> Option<tokio::sync::MutexGuard<'static, ()>> {
+    KILO_OPERATIONS.try_lock().ok()
+}
+
 pub async fn sweep(spec: KiloSweep<'_>) -> Result<KiloResult, ProviderError> {
     let binary = match spec.binary {
         Some(path) => PathBuf::from(path),
         None => discover::resolve_binary().ok_or_else(not_found)?,
     };
+
+    // After the purely local checks above, before a process exists. Recovery and
+    // repair below are reached while this is held and must not reacquire it.
+    let _operation = operation_guard().await;
 
     let args = build_args(&spec);
     let env = sweep_environment();

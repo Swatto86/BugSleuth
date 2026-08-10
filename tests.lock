@@ -475,6 +475,8 @@ rust kilo::tests::an_id_with_no_prefix_leaves_the_choice_to_kilo
 rust kilo::tests::every_route_can_be_described_to_a_person
 rust kilo::tests::external_plugins_are_skipped_so_the_machine_cannot_change_the_review
 rust kilo::tests::external_project_skills_are_disabled
+rust kilo::tests::kilo_diagnostics_refuse_while_an_operation_holds_the_slot
+rust kilo::tests::kilo_operations_are_serialized
 rust kilo::tests::kilos_native_timeout_exit_resumes_the_session_it_reported
 rust kilo::tests::the_model_id_says_which_account_a_sweep_will_spend_from
 rust kilo::tests::the_preflight_checks_the_agent_the_sweep_actually_runs_as

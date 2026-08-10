@@ -276,6 +276,18 @@ async fn kilo_models() -> Result<VendorCatalogue, ProviderError> {
         vendor: kilo::VENDOR,
         hint: "install the Kilo CLI to list its models".into(),
     })?;
+    // Fail fast rather than queue: this fills a dropdown, and a menu that hangs
+    // for the length of a sweep is worse than one that says why it is empty.
+    // Kilo processes share a mutable credential store, so this must not run
+    // beside a live sweep or apply.
+    let Some(_operation) = kilo::try_operation_guard() else {
+        return Err(ProviderError::NotFound {
+            vendor: kilo::VENDOR,
+            hint: "a Kilo review or apply is running; its model list cannot be read at the \
+                   same time"
+                .into(),
+        });
+    };
     let output = process::run(process::Invocation {
         binary: &binary.to_string_lossy(),
         // `--verbose` rather than the bare list, because the bare list cannot

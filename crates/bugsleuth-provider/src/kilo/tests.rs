@@ -14,6 +14,104 @@ fn spec<'a>(model: &'a str) -> KiloSweep<'a> {
     }
 }
 
+/// Two Kilo processes must never overlap, whichever entry point started them.
+///
+/// Kilo processes share a mutable credential store; parallel same-provider
+/// sweeps were removed for exactly this reason, but the diagnostic entry points
+/// were left able to start a second `kilo run` beside a live one.
+///
+/// Two real sweeps against a stub that records when it starts and stops. Under
+/// the guard the record reads start/end/start/end; without it, the two starts
+/// come first.
+#[tokio::test]
+async fn kilo_operations_are_serialized() {
+    let dir = scratch("serialized");
+    let log = dir.join("order.txt");
+
+    #[cfg(windows)]
+    let stub = {
+        let path = dir.join("kilo.cmd");
+        std::fs::write(
+            &path,
+            format!(
+                "@echo off\r\nfindstr /R \".*\" > nul\r\n>>\"{0}\" echo start\r\nping -n 2 127.0.0.1 > nul\r\n>>\"{0}\" echo end\r\nexit /b 1\r\n",
+                log.display()
+            ),
+        )
+        .expect("write stub");
+        path
+    };
+    #[cfg(not(windows))]
+    let stub = {
+        use std::os::unix::fs::PermissionsExt as _;
+        let path = dir.join("kilo.sh");
+        std::fs::write(
+            &path,
+            format!(
+                "#!/bin/sh\ncat >/dev/null\necho start >> '{0}'\nsleep 1\necho end >> '{0}'\nexit 1\n",
+                log.display()
+            ),
+        )
+        .expect("write stub");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        path
+    };
+    let stub = stub.to_string_lossy().into_owned();
+
+    // A real working directory: the sweep spawns the stub with `cwd` set to the
+    // worktree, and a missing one fails before the process exists.
+    let one = sweep(KiloSweep {
+        binary: Some(&stub),
+        worktree: &dir,
+        ..spec("")
+    });
+    let two = sweep(KiloSweep {
+        binary: Some(&stub),
+        worktree: &dir,
+        ..spec("")
+    });
+    let (first, second) = tokio::join!(one, two);
+    assert!(first.is_err() && second.is_err(), "the stub always fails");
+
+    let order: Vec<String> = std::fs::read_to_string(&log)
+        .expect("the stub recorded nothing, so this test would prove nothing")
+        .lines()
+        .map(|line| line.trim().to_string())
+        .filter(|line| !line.is_empty())
+        .collect();
+    assert_eq!(
+        order,
+        ["start", "end", "start", "end"],
+        "two Kilo processes overlapped over one credential store"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The diagnostics refuse rather than queue behind an hour-long sweep.
+///
+/// Waiting would be safe but would read as a hung window: Check sign-in and the
+/// model dropdown both go through Kilo, and a sweep holds the slot for tens of
+/// minutes. Saying why is the honest answer.
+#[tokio::test]
+async fn kilo_diagnostics_refuse_while_an_operation_holds_the_slot() {
+    let held = operation_guard().await;
+    let checked = signin_for("", "", None).await;
+    assert!(
+        !checked.usable(),
+        "the sign-in check ran a second Kilo process beside a live one"
+    );
+    assert!(
+        format!("{checked:?}").contains("already running"),
+        "the refusal does not say why: {checked:?}"
+    );
+    let catalogue = crate::models::available("kilo").await;
+    assert!(
+        catalogue.is_err(),
+        "the model catalogue ran a second Kilo process beside a live one"
+    );
+    drop(held);
+}
+
 /// A scratch directory that is empty at the start of every run.
 ///
 /// Cleared rather than merely created: a process id is reused eventually, and a

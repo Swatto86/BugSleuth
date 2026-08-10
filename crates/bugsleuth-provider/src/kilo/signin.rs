@@ -57,7 +57,19 @@ pub async fn signin_for(model: &str, effort: &str, binary: Option<&str>) -> crat
             "could not create a private directory to ask Kilo from".to_string(),
         );
     };
-    let _guard = repair::Cleanup(sandbox.clone());
+    let _cleanup = repair::Cleanup(sandbox.clone());
+
+    // Fail fast rather than queue. A live sweep holds the Kilo slot for tens of
+    // minutes, and this used to start a second `kilo run` beside it: two
+    // processes writing one credential store, either able to break the session
+    // the sweep was already paying for.
+    let Some(_operation) = super::try_operation_guard() else {
+        return crate::signin::SignIn::Failed(
+            "a Kilo review or apply is already running; its session cannot be checked at the \
+             same time without disturbing it"
+                .to_string(),
+        );
+    };
 
     // Built by the sweep's own argument builder, from the sweep's own struct.
     // This used to assemble the flags by hand, so the model and effort a lane
