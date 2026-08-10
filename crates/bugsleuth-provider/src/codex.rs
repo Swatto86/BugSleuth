@@ -179,7 +179,11 @@ fn finish(
     output: Result<crate::process::CliOutput, crate::process::ProcessError>,
     answer_path: &Path,
 ) -> Result<String, ProviderError> {
-    let output = output?;
+    let output = match output {
+        Ok(output) => output,
+        Err(process::ProcessError::OutputTruncated { output, .. }) if output.succeeded() => *output,
+        Err(error) => return Err(error.into()),
+    };
 
     if !output.succeeded() {
         let code = output.code.unwrap_or(-1);
@@ -354,3 +358,7 @@ pub async fn signin() -> crate::signin::SignIn {
 #[cfg(test)]
 #[path = "codex/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "codex/output_tests.rs"]
+mod output_tests;

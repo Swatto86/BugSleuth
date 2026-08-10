@@ -347,6 +347,7 @@ rust cluster::tests::two_different_defects_one_line_apart_stay_separate
 rust cluster::tests::two_models_in_one_lane_still_merge
 rust cluster::tests::two_vendors_reporting_the_same_defect_become_one_cluster_with_agreement_two
 rust cluster::tests::without_a_triage_pass_the_models_own_grade_stands
+rust codex::output_tests::codex_only_accepts_truncation_when_the_answer_file_is_authoritative
 rust codex::recover::tests::the_started_thread_is_the_only_event_worth_resuming
 rust codex::scratch::tests::a_directory_already_sitting_at_the_chosen_name_is_never_adopted
 rust codex::scratch::tests::a_failure_event_on_stdout_is_preferred_over_empty_stderr
@@ -611,6 +612,9 @@ rust process::tests::captures_stdout_and_a_zero_exit_code
 rust process::tests::kills_a_child_that_outlives_its_timeout
 rust process::tests::reports_a_nonzero_exit_code_rather_than_erroring
 rust process::tests::the_result_of_writing_the_prompt_is_still_consumed
+rust process::truncation_tests::output_exactly_at_the_cap_is_complete
+rust process::truncation_tests::output_over_the_cap_is_never_reported_as_complete
+rust process::truncation_tests::overflow_before_timeout_keeps_both_facts
 rust rank::tests::agreement_does_not_affect_the_order
 rust rank::tests::identical_severity_and_agreement_order_by_location_so_runs_are_stable
 rust rank::tests::positions_are_one_based_and_contiguous

@@ -9,9 +9,10 @@ use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
+mod capture;
 mod tree;
 use tree::KillTree;
 
@@ -36,6 +37,19 @@ pub enum ProcessError {
         /// the session rather than restarting paid work from scratch.
         output: CliOutput,
     },
+    #[error(
+        "`{what}` output was truncated {context}: {streams} exceeded the {limit}-byte capture limit; retained output is only a prefix"
+    )]
+    OutputTruncated {
+        what: String,
+        streams: &'static str,
+        limit: usize,
+        /// Whether the process had exited or reached its timeout when capture
+        /// completed. Kept because timeout and successful-exit truncation have
+        /// different recovery semantics.
+        context: String,
+        output: Box<CliOutput>,
+    },
     #[error("`{what}` process error: {source}")]
     Wait {
         what: String,
@@ -59,10 +73,11 @@ impl CliOutput {
 }
 
 impl ProcessError {
-    /// Output captured before a timeout killed the child, when there is any.
+    /// Partial output retained from an incomplete invocation, when there is any.
     pub fn output(&self) -> Option<&CliOutput> {
         match self {
             ProcessError::Timeout { output, .. } => Some(output),
+            ProcessError::OutputTruncated { output, .. } => Some(output.as_ref()),
             _ => None,
         }
     }
@@ -93,18 +108,19 @@ pub struct Invocation<'a> {
 /// Non-zero exit is *not* an error here — the caller decides, because some CLIs
 /// report a usable result alongside a non-zero code.
 pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> {
-    run_inner(invocation, false).await
+    run_inner(invocation, false, OUTPUT_CAP).await
 }
 
 /// Run a subprocess in an isolated process group where the platform supports
 /// it, so dropping this future also terminates helpers it started.
 pub async fn run_with_process_group(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> {
-    run_inner(invocation, true).await
+    run_inner(invocation, true, OUTPUT_CAP).await
 }
 
 async fn run_inner(
     invocation: Invocation<'_>,
     isolate_process_group: bool,
+    output_cap: usize,
 ) -> Result<CliOutput, ProcessError> {
     let mut command = Command::new(invocation.binary);
     command
@@ -159,8 +175,8 @@ async fn run_inner(
     // the child, drain what it already wrote, and hand session events to the
     // adapter for recovery. Keeping them inside `timeout` discarded those bytes
     // along with the timed-out future.
-    let stdout_task = tokio::spawn(read_capped(stdout));
-    let stderr_task = tokio::spawn(read_capped(stderr));
+    let stdout_task = tokio::spawn(capture::read(stdout, output_cap));
+    let stderr_task = tokio::spawn(capture::read(stderr, output_cap));
     let combined = async {
         let (status, fed) = tokio::join!(child.wait(), feed);
         (status, fed)
@@ -185,11 +201,7 @@ async fn run_inner(
             let (out, err) = tokio::join!(stdout_task, stderr_task);
             let out = out.unwrap_or_default();
             let err = err.unwrap_or_default();
-            Ok(CliOutput {
-                code: status.code(),
-                stdout: String::from_utf8_lossy(&out).into_owned(),
-                stderr: String::from_utf8_lossy(&err).into_owned(),
-            })
+            capture::result(invocation.what, output_cap, status.code(), out, err, None)
         }
         Err(_) => {
             // The tree first, then the process at the top of it: `start_kill`
@@ -200,15 +212,16 @@ async fn run_inner(
             // which lets the reader tasks return every byte already written.
             let _ = child.wait().await;
             let (out, err) = tokio::join!(stdout_task, stderr_task);
-            Err(ProcessError::Timeout {
-                what: invocation.what.to_string(),
-                seconds: invocation.timeout.as_secs(),
-                output: CliOutput {
-                    code: None,
-                    stdout: String::from_utf8_lossy(&out.unwrap_or_default()).into_owned(),
-                    stderr: String::from_utf8_lossy(&err.unwrap_or_default()).into_owned(),
-                },
-            })
+            let out = out.unwrap_or_default();
+            let err = err.unwrap_or_default();
+            capture::result(
+                invocation.what,
+                output_cap,
+                None,
+                out,
+                err,
+                Some(invocation.timeout.as_secs()),
+            )
         }
     }
 }
@@ -237,30 +250,6 @@ fn no_console_window(command: &mut Command) {
 /// Nothing to do: only Windows conjures a console for a child process.
 #[cfg(not(windows))]
 fn no_console_window(_command: &mut Command) {}
-
-/// Drain a child stream, retaining at most [`OUTPUT_CAP`] bytes but continuing to
-/// read (and discard) beyond it so the child is never blocked by a full pipe.
-async fn read_capped<R: tokio::io::AsyncRead + Unpin + Send + 'static>(
-    stream: Option<R>,
-) -> Vec<u8> {
-    let mut out = Vec::new();
-    let Some(mut reader) = stream else {
-        return out;
-    };
-    let mut chunk = [0u8; 8192];
-    loop {
-        match reader.read(&mut chunk).await {
-            Ok(0) | Err(_) => break,
-            Ok(n) => {
-                if out.len() < OUTPUT_CAP {
-                    let take = n.min(OUTPUT_CAP - out.len());
-                    out.extend_from_slice(&chunk[..take]);
-                }
-            }
-        }
-    }
-    out
-}
 
 /// First `max_chars` characters of `s`, with credential-shaped tokens removed,
 /// sliced by character so a multi-byte codepoint straddling the limit cannot panic.
@@ -332,3 +321,7 @@ fn jwt_len(bytes: &[u8], is_b64url: &impl Fn(u8) -> bool) -> Option<usize> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "process/truncation_tests.rs"]
+mod truncation_tests;
