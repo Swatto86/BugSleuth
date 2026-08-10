@@ -181,8 +181,8 @@ async fn confirm_version_tags(
 /// itself rather than re-derived by splitting an `upstream` display string on
 /// '/' — a remote name may itself contain a slash, and splitting sent the tag to
 /// the wrong place. `commit` is the exact object confirmed there and anchors
-/// version-history selection if local HEAD moves. If the commits went to a fork,
-/// so does the tag.
+/// version-history selection and the tag target if local HEAD moves. If the
+/// commits went to a fork, so does the tag.
 pub(super) async fn tag(
     repo: &Path,
     pushed: bool,
@@ -291,7 +291,14 @@ pub(super) async fn tag(
     // find is worse than no tag.
     if let Err(error) = git(
         repo,
-        &["tag", "-a", &next, "-m", &format!("{next}: bug fixes")],
+        &[
+            "tag",
+            "-a",
+            &next,
+            commit,
+            "-m",
+            &format!("{next}: bug fixes"),
+        ],
     ) {
         return TagOutcome::Failed(error.to_string());
     }
@@ -315,51 +322,62 @@ async fn publish_tag(
         }
     };
 
-    // By name, never `--tags`: bulk publication can expose private backup tags.
-    match network::git(repo, &["push", remote, tag], cancel, timeout).await {
-        Ok(_) => TagOutcome::Tagged {
-            tag: tag.to_string(),
-            remote: remote.to_string(),
-        },
-        Err(network::Error::Cancelled) => TagOutcome::Unknown {
+    let reference = format!("refs/tags/{tag}");
+    let result = super::remote::push_ref(repo, remote, &desired, &reference, cancel, timeout).await;
+    if matches!(&result, Err(network::Error::Cancelled)) {
+        return TagOutcome::Unknown {
             tag: tag.to_string(),
             remote: remote.to_string(),
             error: "publication was cancelled while the tag push was in flight; the remote may have accepted the tag before the process was stopped"
                 .to_string(),
+        };
+    }
+    let result = result.map_err(|error| error.to_string());
+
+    // A success reply is still only a claim until the exact tag object is
+    // observed. An error can likewise arrive after the release started.
+    let after = super::remote::remote_oid(repo, remote, &reference, cancel, timeout)
+        .await
+        .map_err(|error| error.to_string());
+    let confirmation_error = match &after {
+        Ok(Some(actual)) => format!(
+            "git push reported success, but {tag} on {remote} points to {actual} instead of the new tag object {desired}; whether the release started is unknown"
+        ),
+        Ok(None) => format!(
+            "git push reported success, but {tag} was not found on {remote} afterward; whether the release started is unknown"
+        ),
+        Err(error) => format!(
+            "git push reported success, but {tag} on {remote} could not be confirmed afterward: {error}; whether the release started is unknown"
+        ),
+    };
+    match (
+        result,
+        super::remote::classify(&remote_before, &desired, &after),
+    ) {
+        (_, super::remote::UpdateAfterError::Landed) => TagOutcome::Tagged {
+            tag: tag.to_string(),
+            remote: remote.to_string(),
         },
-        Err(error) => {
-            // A push error only means the client got no success reply. The tag
-            // may already be on the remote and the release already running, so
-            // re-read the ref before deciding — and never delete the local tag
-            // unless the remote is confirmed to have stayed unchanged.
-            let reference = format!("refs/tags/{tag}");
-            let after = super::remote::remote_oid(repo, remote, &reference, cancel, timeout)
-                .await
-                .map_err(|error| error.to_string());
-            match super::remote::classify(&remote_before, &desired, &after) {
-                super::remote::UpdateAfterError::Landed => TagOutcome::Tagged {
-                    tag: tag.to_string(),
-                    remote: remote.to_string(),
-                },
-                super::remote::UpdateAfterError::Rejected => {
-                    // Confirmed absent on the remote: safe to remove the local
-                    // tag so a retry is not blocked by the collision check.
-                    let cleanup = git(repo, &["tag", "-d", tag]);
-                    match cleanup {
-                        Ok(_) => TagOutcome::Failed(error.to_string()),
-                        Err(cleanup_error) => TagOutcome::Failed(format!(
-                            "{error}; and the local tag {tag} could not be removed afterward: \
-                             {cleanup_error}"
-                        )),
-                    }
-                }
-                super::remote::UpdateAfterError::Unknown => TagOutcome::Unknown {
-                    tag: tag.to_string(),
-                    remote: remote.to_string(),
-                    error: error.to_string(),
-                },
+        (Err(error), super::remote::UpdateAfterError::Rejected) => {
+            // Confirmed absent remotely: remove the local tag so retry is possible.
+            match git(repo, &["tag", "-d", tag]) {
+                Ok(_) => TagOutcome::Failed(error),
+                Err(cleanup_error) => TagOutcome::Failed(format!(
+                    "{error}; and the local tag {tag} could not be removed afterward: \
+                     {cleanup_error}"
+                )),
             }
         }
+        (Err(error), super::remote::UpdateAfterError::Unknown) => TagOutcome::Unknown {
+            tag: tag.to_string(),
+            remote: remote.to_string(),
+            error,
+        },
+        (Ok(_), _) => TagOutcome::Unknown {
+            tag: tag.to_string(),
+            remote: remote.to_string(),
+            error: confirmation_error,
+        },
     }
 }
 

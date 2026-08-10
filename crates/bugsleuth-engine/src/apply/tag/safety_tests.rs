@@ -141,3 +141,59 @@ async fn the_confirmed_pushed_commit_controls_version_history() {
         let _ = std::fs::remove_dir_all(dir);
     }
 }
+
+#[tokio::test]
+async fn release_tag_targets_the_exact_confirmed_push_when_head_advances() {
+    let (repo, remote, _) = published("frozen-release-target");
+    let branch = git_ok(&repo, &["symbolic-ref", "--short", "HEAD"]);
+    let base = git_ok(&repo, &["rev-parse", "HEAD"]);
+    git_ok(&repo, &["tag", "-a", "v1.0.0", "-m", "released"]);
+    git_ok(&repo, &["push", "-q", "origin", "v1.0.0"]);
+
+    std::fs::write(repo.join("fix.txt"), "the published fix\n").expect("write fix");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "the published fix"]);
+    let pushed = super::super::push::push(
+        &repo,
+        &super::super::Baseline::Commit(base),
+        1,
+        &[],
+        &crate::cancel::Cancel::new(),
+        Duration::from_secs(10),
+    )
+    .await;
+    let super::super::PushOutcome::Pushed {
+        remote: remote_name,
+        oid,
+        ..
+    } = &pushed
+    else {
+        panic!("the apply commit was not published: {pushed:?}");
+    };
+
+    std::fs::write(repo.join("later.txt"), "later local work\n").expect("write later");
+    git_ok(&repo, &["add", "-A"]);
+    git_ok(&repo, &["commit", "-qm", "later local work"]);
+    assert_ne!(git_ok(&repo, &["rev-parse", "HEAD"]), *oid);
+
+    let outcome = tag_at(&repo, remote_name, oid).await;
+    assert_eq!(
+        outcome,
+        TagOutcome::Tagged {
+            tag: "v1.0.1".to_string(),
+            remote: "origin".to_string(),
+        },
+        "{outcome:?}"
+    );
+    assert_eq!(git_ok(&repo, &["rev-parse", "v1.0.1^{}"]), *oid);
+    assert_eq!(git_ok(&remote, &["rev-parse", "v1.0.1^{}"]), *oid);
+    assert_eq!(
+        git_ok(&remote, &["rev-parse", &format!("refs/heads/{branch}")]),
+        *oid,
+        "tagging moved or republished the branch"
+    );
+
+    for dir in [&repo, &remote] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
