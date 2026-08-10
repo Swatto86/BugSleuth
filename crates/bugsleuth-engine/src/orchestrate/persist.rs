@@ -269,3 +269,7 @@ mod tests;
 #[cfg(test)]
 #[path = "persist/naming_tests.rs"]
 mod naming_tests;
+
+#[cfg(test)]
+#[path = "persist/legacy_tests.rs"]
+mod legacy_tests;
