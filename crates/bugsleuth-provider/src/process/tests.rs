@@ -313,34 +313,30 @@ fn a_vendors_own_credential_dump_is_redacted_from_previewed_output() {
     );
 }
 
-/// A prompt that never reached the child must not be reported as a sweep.
-///
-/// The defect: `let _ = stdin.write_all(&bytes).await`. A failed write was
-/// discarded, so a truncated or empty prompt looked exactly like a normal
-/// run — the model answered whatever it had received, possibly nothing, and
-/// that was presented as a review of the code.
-///
-/// **Structural, and honest about it.** The behavioural version needs a
-/// child that closes stdin mid-write, which is a race rather than a test.
-/// What can be checked deterministically is that the result is still
-/// consumed: the fix was shipped claiming a test it did not have, which an
-/// independent audit found by reverting it and watching every existing test
-/// pass. This is the assertion that would have failed.
-#[test]
-fn the_result_of_writing_the_prompt_is_still_consumed() {
-    let source = include_str!("../process.rs");
-    let code = source
-        .split_once("#[cfg(test)]")
-        .map_or(source, |(before, _)| before);
-
+#[tokio::test]
+async fn the_result_of_writing_the_prompt_is_still_consumed() {
+    let (binary, mut args) = shell();
+    args.push(if cfg!(windows) {
+        "exit /b 0".into()
+    } else {
+        "exit 0".into()
+    });
+    let prompt = vec![b'x'; 8 * 1024 * 1024];
+    let result = run(Invocation {
+        binary,
+        args: &args,
+        cwd: Path::new("."),
+        stdin: Some(prompt.as_slice()),
+        env: &[],
+        timeout: Duration::from_secs(30),
+        what: "closed stdin test",
+    })
+    .await;
     assert!(
-        !code.contains("let _ = stdin.write_all"),
-        "the prompt write is discarded again, so a prompt that never arrived \
-         would be reported as a completed sweep"
-    );
-    assert!(
-        code.contains("fed.map_err"),
-        "nothing consumes the outcome of writing the prompt, so a failed \
-         write cannot become a failed invocation"
+        matches!(
+            &result,
+            Err(ProcessError::Wait { what, .. }) if what.contains("writing the prompt")
+        ),
+        "a failed prompt write was not propagated: {result:?}"
     );
 }
