@@ -10,6 +10,7 @@ use super::persist::file_name_for;
 use crate::plan::Unit;
 use crate::sweep;
 use bugsleuth_domain::Lane;
+use tokio::task::JoinSet;
 
 pub(super) struct SweepOutcome {
     pub(super) lane: Lane,
@@ -17,12 +18,31 @@ pub(super) struct SweepOutcome {
     pub(super) file_name: Option<String>,
 }
 
+/// Abort what is still running, then await every JoinSet result.
+///
+/// A non-blocking `try_join_next` drain left a window: a sweep could finish
+/// after the drain saw nothing and before the set was dropped, and its result
+/// was discarded even though the provider work had completed. Aborting first
+/// does not wait out provider timeouts — it only reaps wrappers — and awaiting
+/// still collects anything that completed during the cancellation race.
+pub(super) async fn reap_cancelled<T: 'static>(tasks: &mut JoinSet<T>, out: &mut Vec<T>) {
+    tasks.abort_all();
+    while let Some(joined) = tasks.join_next().await {
+        match joined {
+            Ok(outcome) => out.push(outcome),
+            Err(error) => {
+                eprintln!("warning: a sweep task failed to complete: {error}");
+            }
+        }
+    }
+}
+
 pub(super) async fn run_batch(
     batch: &[Unit],
     options: &RunOptions<'_>,
     panicked: &mut Vec<String>,
 ) -> Vec<SweepOutcome> {
-    let mut tasks = tokio::task::JoinSet::new();
+    let mut tasks = JoinSet::new();
 
     for unit in batch {
         let unit = unit.clone();
@@ -59,29 +79,16 @@ pub(super) async fn run_batch(
     let mut out = Vec::with_capacity(batch.len());
     loop {
         tokio::select! {
-            // Cancellation wins the race deliberately: `JoinSet` aborts its
-            // tasks when dropped, and every CLI is spawned with `kill_on_drop`,
-            // so leaving this loop is what actually stops the spending. Waiting
-            // politely for the in-flight sweeps would mean waiting the full
-            // per-sweep timeout — up to forty-five minutes — after the user
-            // asked to stop.
+            // Cancellation wins the race deliberately: aborting in-flight work
+            // is what actually stops the spending. Waiting politely for every
+            // sweep would mean waiting the full per-sweep timeout — up to
+            // forty-five minutes — after the user asked to stop.
             () = options.cancel.cancelled() => {
-                // Anything already finished is collected before the set is
-                // dropped. `select!` picks at random among ready branches, so
-                // a sweep that had completed — minutes of real subscription
-                // quota, its result sitting right there — was discarded
-                // whenever cancellation happened to win the toss. This drains
-                // without waiting, so it costs nothing and still stops the
-                // in-flight work immediately.
-                while let Some(joined) = tasks.try_join_next() {
-                    match joined {
-                        Ok(outcome) => out.push(outcome),
-                        Err(error) => {
-                            eprintln!("warning: a sweep task failed to complete: {error}");
-                        }
-                    }
-                }
-                eprintln!("cancelled: stopping {} sweep(s) in flight. Sweeps already finished are on disk and a later --resume will reuse them.", tasks.len());
+                reap_cancelled(&mut tasks, &mut out).await;
+                eprintln!(
+                    "cancelled: stopping sweep(s) in flight. Sweeps already finished \
+                     are on disk and a later --resume will reuse them."
+                );
                 break;
             }
             joined = tasks.join_next() => {
@@ -107,3 +114,7 @@ pub(super) async fn run_batch(
     }
     out
 }
+
+#[cfg(test)]
+#[path = "batch_tests.rs"]
+mod tests;
