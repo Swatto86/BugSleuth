@@ -261,6 +261,39 @@ fn creating_a_worktree_outside_a_git_repository_is_refused() {
     assert!(matches!(result, Err(WorktreeError::NotAGitRepo(_))));
 }
 
+/// `git worktree add` runs the repository's post-checkout hook, so creating the
+/// supposedly isolated checkout could execute attacker-controlled code with the
+/// user's permissions before the model is confined to the throwaway tree. The
+/// hardened `git` helper points `core.hooksPath` at a null path, so the hook is
+/// never run.
+#[test]
+fn a_post_checkout_hook_in_the_repository_is_not_run_by_worktree_creation() {
+    let Some(repo) = temp_repo("post-checkout-hook") else {
+        return;
+    };
+
+    // A hook that leaves a marker behind if git ever runs it.
+    let marker = repo.join("post_checkout_ran");
+    let hook = repo.join(".git").join("hooks").join("post-checkout");
+    let marker_fwd = marker.to_string_lossy().replace('\\', "/");
+    std::fs::write(&hook, format!("#!/bin/sh\necho ran > \"{marker_fwd}\"\n")).expect("hook");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&hook).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&hook, perms).unwrap();
+    }
+
+    let _ = Worktree::create(&repo, "HEAD", "security");
+    assert!(
+        !marker.exists(),
+        "the repository's post-checkout hook ran while creating an isolated worktree"
+    );
+
+    let _ = std::fs::remove_dir_all(long_path(&repo));
+}
+
 /// A `.git` file pointing at a *different* repository must be refused, or the
 /// worktree is checked out from the victim's object store and the model reviews
 /// the wrong source — and cleanup can rewrite the victim's refs. The shared

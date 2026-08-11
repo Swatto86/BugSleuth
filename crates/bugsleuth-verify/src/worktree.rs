@@ -347,7 +347,19 @@ use paths::{git_arg, porcelain_paths};
 pub use paths::{git_path, worktree_roots};
 
 fn git(cwd: &Path, args: &[&str]) -> Result<String, WorktreeError> {
+    // The repository is untrusted, so its `.git/config` is not: `core.fsmonitor`
+    // would point git at an executable of the repository's choosing, and
+    // `git worktree add` runs the post-checkout hook. Both are disabled ahead
+    // of the subcommand so setup, cleanup and inspection cannot execute
+    // repository-controlled code before the model is confined to the throwaway
+    // tree. `/dev/null` resolves on Git for Windows through its POSIX layer.
     let output = crate::console::hide(&mut Command::new("git"))
+        .args([
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ])
         .args(args)
         .current_dir(cwd)
         .output()
