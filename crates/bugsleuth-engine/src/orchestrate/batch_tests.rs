@@ -44,7 +44,8 @@ async fn a_sweep_that_finishes_during_cancellation_is_still_collected() {
     let mut out = Vec::new();
     reap_cancelled(&mut tasks, &mut out).await;
     assert_eq!(
-        out, [7],
+        out,
+        [7],
         "a completed sweep in the cancellation race window was discarded"
     );
 }

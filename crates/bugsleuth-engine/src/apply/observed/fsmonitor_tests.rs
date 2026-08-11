@@ -9,10 +9,8 @@ use crate::apply::Baseline;
 /// subcommand stops it executing that code with the user's permissions.
 #[test]
 fn a_repo_fsmonitor_hook_is_not_run_during_apply() {
-    let dir = std::env::temp_dir().join(format!(
-        "bugsleuth-apply-fsmonitor-{}",
-        std::process::id()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("bugsleuth-apply-fsmonitor-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch");
     let git = |args: &[&str]| {

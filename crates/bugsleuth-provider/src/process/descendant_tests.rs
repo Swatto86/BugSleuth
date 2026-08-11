@@ -51,9 +51,7 @@ async fn a_timeout_on_run_kills_unix_descendants_not_only_the_child() {
     // Background job stays in the shell's process group under a non-interactive
     // `/bin/sh -c` (no job control). Isolating that group is what lets one
     // signal reach the helper; without it, killing the shell leaves it alive.
-    let script = format!(
-        "touch '{started_q}'; (sleep 5; touch '{survived_q}') & sleep 30"
-    );
+    let script = format!("touch '{started_q}'; (sleep 5; touch '{survived_q}') & sleep 30");
     let args = vec!["-c".into(), script];
 
     let result = run(Invocation {

@@ -70,11 +70,7 @@ fn take_batch_result(
 ) {
     match result {
         BatchResult::Completed(outcome) => out.push(outcome),
-        BatchResult::Panicked {
-            lane,
-            model,
-            error,
-        } => {
+        BatchResult::Panicked { lane, model, error } => {
             eprintln!("warning: a sweep task failed to complete: {error}");
             panicked.push((lane, model, error));
         }
