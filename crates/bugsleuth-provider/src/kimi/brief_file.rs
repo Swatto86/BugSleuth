@@ -289,6 +289,9 @@ mod tests {
                 std::env::temp_dir().join(format!("bugsleuth-kimi-{pid}-{next}")),
             );
         }
-        assert!(!adopted, "a brief directory an attacker pre-created was adopted");
+        assert!(
+            !adopted,
+            "a brief directory an attacker pre-created was adopted"
+        );
     }
 }

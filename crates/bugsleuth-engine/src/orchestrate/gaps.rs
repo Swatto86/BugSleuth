@@ -243,7 +243,10 @@ mod tests {
             units: vec![unit("kimi:kimi-code/k3")],
             uncovered: vec![],
         };
-        assert!(!plan_includes_kilo(&kimi_only), "a Kimi-only run triggers a warning about Kilo");
+        assert!(
+            !plan_includes_kilo(&kimi_only),
+            "a Kimi-only run triggers a warning about Kilo"
+        );
         let kilo = crate::plan::Plan {
             units: vec![unit("kilo:kilo/k3")],
             uncovered: vec![],
