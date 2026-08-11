@@ -162,5 +162,68 @@ async fn a_repository_without_git_is_refused_before_anything_is_spent() {
     .map(|e| e.to_string())
     .unwrap_or_default();
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(error.contains("not a git repository"), "{error}");
+    assert!(
+        error.contains("refused without one"),
+        "a non-repository was not refused: {error}"
+    );
+}
+
+/// A `.git` file pointing at a *different* repository must be refused before
+/// the provider starts. Apply runs git for baseline, commit counting, attribution
+/// and optional push, so it must not operate on a victim repository that the
+/// chosen directory only points at — the check uses git's own resolution, which
+/// follows the indirection, so a directory whose `.git` resolves elsewhere is
+/// rejected as not its own.
+#[tokio::test]
+async fn a_git_file_pointing_at_another_repository_is_refused_before_anything_is_spent() {
+    let root =
+        std::env::temp_dir().join(format!("bugsleuth-apply-identity-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let attacker = root.join("attacker");
+    let victim = root.join("victim");
+    std::fs::create_dir_all(&attacker).expect("mkdir");
+    std::fs::create_dir_all(&victim).expect("mkdir");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(&victim)
+            .output()
+            .expect("git")
+    };
+    git(&["init", "-q"]);
+    git(&["config", "user.email", "t@x.invalid"]);
+    git(&["config", "user.name", "t"]);
+    std::fs::write(victim.join("f.txt"), "x\n").expect("write");
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "base"]);
+
+    // The attacker directory's `.git` is a file pointing at the victim's git
+    // directory: git would read the victim's HEAD and refs from here.
+    std::fs::write(
+        attacker.join(".git"),
+        format!("gitdir: {}\n", victim.join(".git").display()),
+    )
+    .expect("write gitfile");
+
+    let error = apply(ApplyRequest {
+        repo: &attacker,
+        model: "haiku",
+        effort: "",
+        prompt: "fix it",
+        timeout: Duration::from_secs(1),
+        max_turns: 1,
+        cancel: crate::cancel::Cancel::new(),
+        push: false,
+        tag: false,
+    })
+    .await
+    .err()
+    .map(|e| e.to_string())
+    .unwrap_or_default();
+
+    let _ = std::fs::remove_dir_all(&root);
+    assert!(
+        error.contains("not an independent git repository"),
+        "the cross-repository `.git` indirection was accepted: {error}"
+    );
 }

@@ -126,13 +126,15 @@ pub struct ApplyReport {
 /// than as an empty result.
 pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     let repo = request.repo;
-    if !repo.join(".git").exists() {
-        anyhow::bail!(
-            "{} is not a git repository. Applying fixes edits your files in place, and git is \
-             the only thing that makes that reversible — so it is refused without one.",
-            repo.display()
-        );
-    }
+    bugsleuth_verify::validate_repository_identity(repo).map_err(|error| {
+        anyhow::anyhow!(
+            "{} is not an independent git repository or worktree ({}). Applying fixes edits your \
+             files in place, and git is the only thing that makes that reversible — so it is \
+             refused without one.",
+            repo.display(),
+            error
+        )
+    })?;
 
     refuse_if_dirty(repo)?;
 

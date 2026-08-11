@@ -281,6 +281,7 @@ rust apply::tag::tests::the_patch_number_is_the_one_that_moves
 rust apply::tag::tests::the_tag_reaches_the_remote_and_points_at_the_fixes
 rust apply::tests::a_credential_in_an_apply_failure_is_redacted_like_a_sweep_error_is
 rust apply::tests::a_failed_apply_still_says_what_it_had_already_changed
+rust apply::tests::a_git_file_pointing_at_another_repository_is_refused_before_anything_is_spent
 rust apply::tests::a_repository_without_git_is_refused_before_anything_is_spent
 rust apply::tests::an_unreadable_repository_after_a_failure_is_not_reported_as_clean
 rust apply::tests::only_a_push_that_succeeded_can_lead_to_a_tag

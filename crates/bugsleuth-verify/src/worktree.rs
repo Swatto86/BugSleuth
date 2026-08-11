@@ -336,6 +336,9 @@ fn long_path(path: &Path) -> PathBuf {
     PathBuf::from(format!(r"\\?\{}", text.replace('/', "\\")))
 }
 
+mod identity;
+pub use identity::validate_repository_identity;
+
 mod paths;
 use paths::{git_arg, porcelain_paths};
 pub use paths::{git_path, worktree_roots};
