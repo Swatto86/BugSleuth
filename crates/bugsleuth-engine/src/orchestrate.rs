@@ -187,6 +187,11 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
     // Sweeps whose task died outright. Carried out of the batch loop so they
     // can be reported as gaps rather than only logged.
     let mut panicked: Vec<String> = Vec::new();
+    // Durable-write failures from the current batch. Collected rather than
+    // printed and forgotten: out_dir explicitly asks for recoverable per-sweep
+    // output, so a report that did not reach disk is a failed run, not a
+    // warning on a stream the desktop app never shows.
+    let mut persistence_errors: Vec<anyhow::Error> = Vec::new();
 
     let outstanding = take_reusable(plan, &options, &mut findings, &mut swept);
 
@@ -222,7 +227,7 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
             if let (Some(dir), Some(name)) = (options.out_dir, report.file_name.as_ref())
                 && let Err(error) = write_report(dir, name, &report.lane_report)
             {
-                eprintln!("warning: {error}");
+                persistence_errors.push(error);
             }
 
             emit(
@@ -263,6 +268,12 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
                 }),
             }
         }
+
+        // Every completed sweep in this batch has had its write attempted. A
+        // report that did not reach disk is not recoverable by resume, so the
+        // run fails here rather than charging ahead and losing more work that
+        // the user would have to pay for again.
+        fail_unless_persisted(&mut persistence_errors)?;
     }
 
     if common_scope(&swept).is_err() {
@@ -289,6 +300,22 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         gaps,
         cancelled,
     })
+}
+
+/// Fail the run if any completed sweep in the just-finished batch could not be
+/// persisted. `out_dir` is what makes a run recoverable by `--resume`, so a
+/// report that never reached disk is a loss of paid work — reported, not
+/// swallowed onto a stream the desktop application never shows.
+fn fail_unless_persisted(errors: &mut Vec<anyhow::Error>) -> Result<()> {
+    if errors.is_empty() {
+        return Ok(());
+    }
+    let details = errors
+        .drain(..)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>()
+        .join("; ");
+    anyhow::bail!("one or more completed sweeps could not be saved: {details}")
 }
 
 /// Consume whatever an earlier run already paid for, returning what is left.
