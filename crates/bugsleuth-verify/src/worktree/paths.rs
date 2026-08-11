@@ -102,6 +102,27 @@ pub(super) fn porcelain_paths(porcelain: &str) -> Vec<String> {
     out
 }
 
+/// Reduce a label to something safe in a branch name and a path.
+pub(super) fn sanitize(label: &str) -> String {
+    let cleaned: String = label
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let trimmed = cleaned.trim_matches('-');
+    let slug: String = trimmed.chars().take(48).collect();
+    if slug.is_empty() {
+        "run".to_string()
+    } else {
+        slug
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

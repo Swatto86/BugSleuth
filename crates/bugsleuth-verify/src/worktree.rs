@@ -343,7 +343,7 @@ mod identity;
 pub use identity::validate_repository_identity;
 
 mod paths;
-use paths::{git_arg, porcelain_paths};
+use paths::{git_arg, porcelain_paths, sanitize};
 pub use paths::{git_path, worktree_roots};
 
 fn git(cwd: &Path, args: &[&str]) -> Result<String, WorktreeError> {
@@ -374,30 +374,13 @@ fn git(cwd: &Path, args: &[&str]) -> Result<String, WorktreeError> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Reduce a label to something safe in a branch name and a path.
-fn sanitize(label: &str) -> String {
-    let cleaned: String = label
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' {
-                c.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect();
-    let trimmed = cleaned.trim_matches('-');
-    let slug: String = trimmed.chars().take(48).collect();
-    if slug.is_empty() {
-        "run".to_string()
-    } else {
-        slug
-    }
-}
-
 #[cfg(test)]
 #[path = "worktree/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "worktree/path_arg_tests.rs"]
+mod path_arg_tests;
 
 #[cfg(test)]
 #[path = "worktree/ownership_tests.rs"]

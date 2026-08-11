@@ -373,3 +373,7 @@ use batch::run_batch;
 #[cfg(test)]
 #[path = "orchestrate/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "orchestrate/persist_failure_tests.rs"]
+mod persist_failure_tests;

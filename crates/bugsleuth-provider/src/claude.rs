@@ -374,3 +374,7 @@ mod tests;
 #[cfg(test)]
 #[path = "claude/permission_tests.rs"]
 mod permission_tests;
+
+#[cfg(test)]
+#[path = "claude/signin_probe_tests.rs"]
+mod signin_probe_tests;

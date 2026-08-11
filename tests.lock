@@ -341,6 +341,7 @@ rust claude::salvage::tests::a_turn_limit_failure_offers_its_session_for_salvage
 rust claude::salvage::tests::a_turn_limit_with_no_session_id_cannot_be_salvaged
 rust claude::salvage::tests::any_other_failure_is_not_worth_resuming
 rust claude::salvage::tests::the_salvage_prompt_forbids_investigating_and_inventing
+rust claude::signin_probe_tests::the_signin_probe_uses_safe_mode_and_a_private_directory
 rust claude::tests::a_new_run_names_its_session_so_a_timeout_can_be_resumed
 rust claude::tests::a_salvage_is_never_itself_salvaged
 rust claude::tests::a_salvage_run_resumes_the_session_rather_than_starting_a_new_one
@@ -356,7 +357,6 @@ rust claude::tests::customizations_are_disabled_so_the_reviewed_repo_cannot_alte
 rust claude::tests::every_invocation_tells_the_cli_not_to_sign_the_commit
 rust claude::tests::read_only_sweeps_cannot_be_granted_write_tools
 rust claude::tests::the_schema_is_passed_as_one_argv_entry_not_shell_text
-rust claude::tests::the_signin_probe_uses_safe_mode_and_a_private_directory
 rust cli::tests::the_lane_help_lists_every_lane
 rust cluster::tests::a_cluster_reports_the_most_severe_assessment_not_the_mildest
 rust cluster::tests::a_triage_grade_decides_the_severity_and_the_original_is_still_readable
@@ -615,6 +615,7 @@ rust orchestrate::persist::tests::a_truncated_report_is_swept_again_rather_than_
 rust orchestrate::persist::tests::every_sweep_writes_to_its_own_file
 rust orchestrate::persist::tests::nothing_is_reused_unless_resume_was_asked_for
 rust orchestrate::persist::tests::the_legacy_name_does_not_smuggle_a_differently_scoped_sweep_back_in
+rust orchestrate::persist_failure_tests::a_run_whose_completed_sweep_could_not_be_saved_fails_instead_of_swallowing_it
 rust orchestrate::progress::tests::a_failed_sweep_reads_as_a_failure_rather_than_as_zero_findings
 rust orchestrate::render::tests::a_complete_run_says_nothing_about_unswept_lanes
 rust orchestrate::render::tests::a_failed_sweep_is_named_with_its_reason
@@ -640,7 +641,6 @@ rust orchestrate::render::tests::two_models_on_one_lane_is_still_one_lane
 rust orchestrate::tests::a_bare_alias_resolves_to_the_label_a_report_records
 rust orchestrate::tests::a_cancelled_run_names_every_sweep_it_never_reached
 rust orchestrate::tests::a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model
-rust orchestrate::tests::a_run_whose_completed_sweep_could_not_be_saved_fails_instead_of_swallowing_it
 rust orchestrate::tests::a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted
 rust orchestrate::tests::finishing_one_pass_leaves_the_other_passes_outstanding
 rust orchestrate::tests::live_sweep_metadata_reaches_the_aggregate_report
@@ -784,9 +784,11 @@ rust unrelated_defects_in_the_same_real_crate_stay_separate
 rust update::tests::the_updater_is_configured_against_this_repository_and_a_real_key
 rust worktree::ownership_tests::a_preexisting_exact_name_collision_is_not_deleted
 rust worktree::ownership_tests::a_user_branch_with_a_numeric_suffix_is_never_deleted
+rust worktree::path_arg_tests::a_git_argument_never_carries_the_extended_length_prefix
+rust worktree::path_arg_tests::a_worktree_of_this_repository_is_actually_created
+rust worktree::path_arg_tests::unc_verbatim_path
 rust worktree::paths::tests::a_newline_in_a_registered_path_does_not_split_it_in_two
 rust worktree::paths::tests::a_registered_path_is_never_trimmed
-rust worktree::tests::a_git_argument_never_carries_the_extended_length_prefix
 rust worktree::tests::a_git_file_pointing_at_another_repository_is_refused_without_touching_it
 rust worktree::tests::a_label_cannot_smuggle_path_or_flag_characters_into_a_branch_name
 rust worktree::tests::a_long_absolute_path_gets_the_extended_length_prefix_on_windows
@@ -794,11 +796,9 @@ rust worktree::tests::a_long_label_is_truncated_rather_than_producing_an_unusabl
 rust worktree::tests::a_path_that_already_has_the_prefix_is_not_given_a_second_one
 rust worktree::tests::a_post_checkout_hook_in_the_repository_is_not_run_by_worktree_creation
 rust worktree::tests::a_second_worktree_for_one_label_does_not_destroy_the_first
-rust worktree::tests::a_worktree_of_this_repository_is_actually_created
 rust worktree::tests::changed_files_reports_the_new_name_of_a_rename_not_the_arrow_string
 rust worktree::tests::committed_content_under_the_worktree_container_is_never_deleted
 rust worktree::tests::creating_a_worktree_outside_a_git_repository_is_refused
 rust worktree::tests::dropping_a_worktree_deletes_it_even_with_deeply_nested_build_output
 rust worktree::tests::git_paths_preserve_unicode_and_arrow
-rust worktree::tests::unc_verbatim_path
 rust worktree::tests::worktree_creation_refuses_a_linked_container_without_deleting_its_target
