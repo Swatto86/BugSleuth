@@ -23,7 +23,18 @@ pub(super) fn repository_is_not_confirmed_clean(repo: &std::path::Path) -> bool 
     // presentation setting and has no business deciding a correctness question:
     // with it set to `no`, an untracked source file vanished from this answer
     // and the run silently reviewed two different trees.
+    //
+    // The repository under review is untrusted, so its `.git/config` is not
+    // trusted either: `core.fsmonitor` and a hooks path could run an executable
+    // of the repository's choosing during this pre-run status check. Both are
+    // disabled ahead of the subcommand, mirroring `sweep::revision::git_query`.
     bugsleuth_verify::hide_console_window(&mut std::process::Command::new("git"))
+        .args([
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ])
         .args(["status", "--porcelain", "--untracked-files=all"])
         .current_dir(repo)
         .output()

@@ -721,6 +721,7 @@ rust sweep::isolate::tests::the_git_directory_is_never_touched
 rust sweep::isolation_tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
 rust sweep::isolation_tests::kilo_does_not_silently_omit_submodule_contents
 rust sweep::isolation_tests::selected_kilo_model_is_the_one_prechecked
+rust sweep::revision::tests::a_repository_fsmonitor_hook_is_not_run_by_the_revision_probe
 rust sweep::revision::tests::git_is_never_spawned_with_a_visible_console_window
 rust sweep::tests::a_bare_model_name_means_claude_so_the_common_case_stays_short
 rust sweep::tests::a_failed_sweeps_reason_is_scrubbed_of_credentials_before_it_is_stored
