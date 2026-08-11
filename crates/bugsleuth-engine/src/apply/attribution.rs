@@ -275,15 +275,17 @@ fn credits_a_tool(line: &str) -> bool {
     // Names, and the domains they sign from: a trailer reading
     // `Assistant <noreply@anthropic.com>` names no tool the first half of this
     // list would catch, and it is the same attribution.
-    const TOOLS: [&str; 9] = [
+    const TOOLS: [&str; 11] = [
         "claude",
         "codex",
         "kilo",
+        "kimi",
         "copilot",
         "chatgpt",
         "gemini",
         "anthropic.com",
         "openai.com",
+        "moonshot",
         "noreply@google.com",
     ];
     let line = line.trim().to_lowercase();

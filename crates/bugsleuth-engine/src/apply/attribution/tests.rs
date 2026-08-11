@@ -28,10 +28,16 @@ fn a_commit_crediting_the_tool_is_spotted_and_an_ordinary_one_is_not() {
         "feat: pairing\u{0}Co-authored-by: Sam <sam@example.com>\n\u{1e}",
         // Names nothing on the list, but signs from a domain that is.
         "docs: notes\u{0}Co-Authored-By: Assistant <noreply@anthropic.com>\n\u{1e}",
+        "fix: kimi apply\u{0}Body.\n\nCo-Authored-By: Kimi <noreply@moonshot.cn>\n\u{1e}",
     );
     assert_eq!(
         attributed(log),
-        ["fix(auth): stop the loop", "chore: tidy", "docs: notes"],
+        [
+            "fix(auth): stop the loop",
+            "chore: tidy",
+            "docs: notes",
+            "fix: kimi apply",
+        ],
         "a human co-author is not attribution and must not be flagged"
     );
 }
