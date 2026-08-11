@@ -261,6 +261,48 @@ fn creating_a_worktree_outside_a_git_repository_is_refused() {
     assert!(matches!(result, Err(WorktreeError::NotAGitRepo(_))));
 }
 
+/// A `.git` file pointing at a *different* repository must be refused, or the
+/// worktree is checked out from the victim's object store and the model reviews
+/// the wrong source — and cleanup can rewrite the victim's refs. The shared
+/// identity check follows the indirection git itself follows, so it sees the
+/// victim and rejects the directory as not its own repository.
+#[test]
+fn a_git_file_pointing_at_another_repository_is_refused_without_touching_it() {
+    let Some(attacker) = temp_repo("gitfile-attacker") else {
+        return;
+    };
+    let Some(victim) = temp_repo("gitfile-victim") else {
+        let _ = std::fs::remove_dir_all(long_path(&attacker));
+        return;
+    };
+
+    // Replace the attacker's own `.git` directory with a file pointing at the
+    // victim's git directory. Git reads the victim's HEAD and refs from here.
+    let _ = std::fs::remove_dir_all(long_path(&attacker.join(".git")));
+    std::fs::write(
+        attacker.join(".git"),
+        format!("gitdir: {}\n", victim.join(".git").display()),
+    )
+    .expect("write gitfile");
+
+    let result = Worktree::create(&attacker, "HEAD", "security");
+    assert!(
+        matches!(result, Err(WorktreeError::NotAGitRepo(_))),
+        "a cross-repository `.git` indirection was accepted: {result:?}"
+    );
+
+    // The victim must keep exactly the branches it started with: no
+    // `bugsleuth/*` branch was created in it by the refused worktree.
+    let branches = git(&victim, &["branch", "--list", "bugsleuth/*"]).unwrap_or_default();
+    assert!(
+        branches.trim().is_empty(),
+        "a branch was created in the victim repository: {branches}"
+    );
+
+    let _ = std::fs::remove_dir_all(long_path(&attacker));
+    let _ = std::fs::remove_dir_all(long_path(&victim));
+}
+
 /// Two worktrees for one label must not choose the same directory.
 ///
 /// The defect: the path was the sanitised label alone, so a second

@@ -776,6 +776,7 @@ rust worktree::ownership_tests::a_user_branch_with_a_numeric_suffix_is_never_del
 rust worktree::paths::tests::a_newline_in_a_registered_path_does_not_split_it_in_two
 rust worktree::paths::tests::a_registered_path_is_never_trimmed
 rust worktree::tests::a_git_argument_never_carries_the_extended_length_prefix
+rust worktree::tests::a_git_file_pointing_at_another_repository_is_refused_without_touching_it
 rust worktree::tests::a_label_cannot_smuggle_path_or_flag_characters_into_a_branch_name
 rust worktree::tests::a_long_absolute_path_gets_the_extended_length_prefix_on_windows
 rust worktree::tests::a_long_label_is_truncated_rather_than_producing_an_unusable_path

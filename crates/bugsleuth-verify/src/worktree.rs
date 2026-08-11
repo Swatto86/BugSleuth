@@ -58,9 +58,12 @@ impl Worktree {
         let repo = repo
             .canonicalize()
             .map_err(|_| WorktreeError::NotAGitRepo(repo.display().to_string()))?;
-        if !repo.join(".git").exists() {
-            return Err(WorktreeError::NotAGitRepo(repo.display().to_string()));
-        }
+        // `.git` existence is not an authorisation check: a file or link there
+        // can point at another repository, after which the worktree is created
+        // from the victim's objects and the model reviews the wrong source.
+        // The shared validator resolves the canonical top-level and common git
+        // directory and rejects anything that is not this directory's own.
+        validate_repository_identity(&repo)?;
 
         // The reviewed repository controls `.bugsleuth-worktrees`, so a
         // committed symlink or Windows junction there could point our cleanup
