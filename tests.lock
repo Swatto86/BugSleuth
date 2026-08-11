@@ -517,6 +517,7 @@ rust kimi::apply::tests::an_empty_model_is_omitted_rather_than_passed_blank
 rust kimi::apply::tests::skills_are_replaced_by_an_empty_directory_rather_than_left_discovered
 rust kimi::apply::tests::the_prompt_that_crosses_the_command_line_stays_small
 rust kimi::apply::tests::the_run_is_confined_by_an_agent_file_that_allows_writing
+rust kimi::brief_file::tests::a_precreated_brief_directory_is_never_adopted
 rust kimi::brief_file::tests::each_brief_gets_its_own_file
 rust kimi::brief_file::tests::the_brief_is_removed_when_the_sweep_ends
 rust kimi::brief_file::tests::the_prompt_that_reaches_the_command_line_is_tiny
@@ -581,6 +582,7 @@ rust one_defect_anchored_five_lines_apart_by_two_vendors_still_merges
 rust orchestrate::gaps::tests::a_dirty_repository_is_detected_and_a_clean_one_is_not
 rust orchestrate::gaps::tests::a_failed_git_status_is_not_mistaken_for_a_clean_tree
 rust orchestrate::gaps::tests::hidden_untracked_files_still_make_the_repository_dirty
+rust orchestrate::gaps::tests::the_unsandboxed_warning_is_about_kilo_not_about_every_isolated_vendor
 rust orchestrate::persist::legacy_tests::a_legacy_file_belonging_to_a_different_model_is_not_adopted
 rust orchestrate::persist::legacy_tests::a_report_written_under_the_old_naming_is_still_reused
 rust orchestrate::persist::legacy_tests::every_historical_filename_grammar_is_still_reused
