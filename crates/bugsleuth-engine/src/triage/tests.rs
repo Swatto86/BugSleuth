@@ -104,7 +104,9 @@ fn the_prompt_forbids_the_three_things_that_would_damage_the_report() {
 #[tokio::test]
 async fn a_single_defect_is_not_paid_to_be_compared_with_nothing() {
     // Comparison is the whole mechanism; with one defect there is nothing to
-    // compare and the call could only restate the model's own opinion.
+    // compare and the call could only restate the model's own opinion. The
+    // report must still say the displayed severity was never cross-graded —
+    // silence here used to read as a completed triage pass.
     let mut clusters = vec![cluster_at(Severity::Low, "only")];
     let outcome = apply(
         &mut clusters,
@@ -119,8 +121,27 @@ async fn a_single_defect_is_not_paid_to_be_compared_with_nothing() {
         },
     )
     .await;
-    assert_eq!(outcome, Outcome::default());
+    assert_eq!(outcome.graded, 0);
+    assert_eq!(outcome.changed, 0);
+    assert!(
+        outcome.note.to_lowercase().contains("ungraded"),
+        "a single defect must be named as ungraded, got note={:?}",
+        outcome.note
+    );
     assert_eq!(clusters[0].triaged, None);
+
+    let text = crate::orchestrate::RunReport {
+        ranked: vec![],
+        triage: outcome,
+        swept: vec![],
+        gaps: vec![],
+        cancelled: false,
+    }
+    .to_text();
+    assert!(
+        text.to_lowercase().contains("ungraded"),
+        "the rendered report must surface the ungraded note:\n{text}"
+    );
 }
 
 #[tokio::test]

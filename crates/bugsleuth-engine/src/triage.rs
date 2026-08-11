@@ -105,8 +105,16 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
     if clusters.len() < 2 {
         // Comparison is the entire mechanism. One defect has nothing to be
         // graded against, and paying for a call that can only restate one
-        // model's own opinion is waste.
-        return Outcome::default();
+        // model's own opinion is waste. An empty note still reads as a
+        // completed grading pass, so a lone defect must be named ungraded.
+        return if clusters.is_empty() {
+            Outcome::default()
+        } else {
+            Outcome {
+                note: format!("{UNGRADED}: fewer than two defects were available to compare"),
+                ..Outcome::default()
+            }
+        };
     }
 
     let prompt = prompt_for(clusters, Some(request.repo));
