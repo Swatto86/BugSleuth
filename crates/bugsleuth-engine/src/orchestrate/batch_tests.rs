@@ -78,3 +78,36 @@ fn cancellation_awaits_joinset_results_after_abort() {
         "reap_cancelled must await JoinSet results so completed sweeps are kept"
     );
 }
+
+/// A panic must carry the unit's lane and model out of the JoinSet, not a bare
+/// error string that note_panicked would have to invent a Correctness gap for.
+#[tokio::test]
+async fn a_panicking_inner_sweep_reports_its_own_lane_and_model() {
+    use bugsleuth_domain::Lane;
+    use tokio::task::JoinSet;
+
+    let mut tasks: JoinSet<(Lane, String, String)> = JoinSet::new();
+    let lane = Lane::Security;
+    let model = "claude:sonnet".to_string();
+    tasks.spawn(async move {
+        let lane_for_panic = lane;
+        let model_for_panic = model.clone();
+        let inner = tokio::spawn(async move {
+            panic!("sweep exploded");
+        });
+        let _abort_inner = super::AbortOnDrop(inner.abort_handle());
+        match inner.await {
+            Ok(()) => unreachable!("inner was meant to panic"),
+            Err(error) => (lane_for_panic, model_for_panic, error.to_string()),
+        }
+    });
+
+    let joined = tasks.join_next().await.expect("task").expect("outer");
+    assert_eq!(joined.0, Lane::Security);
+    assert_eq!(joined.1, "claude:sonnet");
+    assert!(
+        joined.2.contains("panicked") || joined.2.contains("sweep exploded"),
+        "expected a panic error, got {}",
+        joined.2
+    );
+}

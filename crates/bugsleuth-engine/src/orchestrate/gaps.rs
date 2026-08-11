@@ -128,14 +128,14 @@ pub(super) fn note_cancelled(cancelled: bool, remaining: &[Unit], gaps: &mut Vec
 /// which reads exactly like a lane that ran and found nothing. Found by this
 /// tool reviewing itself.
 ///
-/// The lane is unknown by the time a task has panicked, so these are recorded
-/// against Correctness with the error, rather than dropped for want of a
-/// perfect label.
-pub(super) fn note_panicked(panicked: &[String], gaps: &mut Vec<Gap>) {
-    for error in panicked {
+/// Lane and model are preserved through the batch boundary: fabricating
+/// Correctness with no model made a Security (or UX, contract, gate) panic
+/// look like a missing Correctness sweep and hid the lane that actually died.
+pub(super) fn note_panicked(panicked: &[(Lane, String, String)], gaps: &mut Vec<Gap>) {
+    for (lane, model, error) in panicked {
         gaps.push(Gap {
-            lane: Lane::Correctness,
-            model: None,
+            lane: *lane,
+            model: Some(model.clone()),
             reason: format!("a sweep failed to complete and produced nothing: {error}"),
         });
     }
@@ -239,6 +239,30 @@ mod tests {
             "a failed git status must warn rather than silently authorize a mixed-version review"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A panic gap must name the unit that died, not a fabricated Correctness
+    /// hole. A Security sweep that panics otherwise leaves Security looking
+    /// swept and Correctness looking missing.
+    #[test]
+    fn a_panicked_security_sweep_is_named_as_security_not_correctness() {
+        let mut gaps = Vec::new();
+        note_panicked(
+            &[(
+                Lane::Security,
+                "claude:sonnet".to_string(),
+                "task panicked".to_string(),
+            )],
+            &mut gaps,
+        );
+        assert_eq!(gaps.len(), 1);
+        assert_eq!(gaps[0].lane, Lane::Security);
+        assert_eq!(gaps[0].model.as_deref(), Some("claude:sonnet"));
+        assert!(
+            gaps[0].reason.contains("produced nothing"),
+            "{}",
+            gaps[0].reason
+        );
     }
 
     #[test]

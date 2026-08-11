@@ -185,8 +185,9 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
     gaps::caution(plan, options.repo);
 
     // Sweeps whose task died outright. Carried out of the batch loop so they
-    // can be reported as gaps rather than only logged.
-    let mut panicked: Vec<String> = Vec::new();
+    // can be reported as gaps rather than only logged. Lane and model travel
+    // with the error so a panic is not mis-labelled as Correctness.
+    let mut panicked: Vec<(Lane, String, String)> = Vec::new();
     // Durable-write failures from the current batch. Collected rather than
     // printed and forgotten: out_dir explicitly asks for recoverable per-sweep
     // output, so a report that did not reach disk is a failed run, not a
