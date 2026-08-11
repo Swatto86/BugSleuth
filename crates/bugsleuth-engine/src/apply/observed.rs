@@ -158,7 +158,17 @@ pub(super) fn git_with_env(
     for (key, value) in env {
         command.env(key, value);
     }
+    // A reviewed repository is untrusted: its `.git/config` can point
+    // `core.fsmonitor` at an executable and set a hooks path the same way.
+    // Disable both ahead of the subcommand, matching revision.rs / gaps.rs /
+    // worktree.rs, so apply cannot execute repository-controlled code.
     let output = bugsleuth_verify::hide_console_window(&mut command)
+        .args([
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+        ])
         .args(args)
         .current_dir(repo)
         .output()
@@ -172,6 +182,9 @@ pub(super) fn git_with_env(
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
+
+#[cfg(test)]
+mod fsmonitor_tests;
 
 #[cfg(test)]
 mod tests {
