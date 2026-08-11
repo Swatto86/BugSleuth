@@ -59,11 +59,7 @@ pub(super) fn caution(plan: &Plan, repo: &std::path::Path) {
 
     // Said before anything is paid for, because the choice it informs — whether
     // to point this vendor at this code at all — can still be made here.
-    if plan
-        .units
-        .iter()
-        .any(|unit| crate::sweep::Vendor::parse(&unit.model).0.needs_isolation())
-    {
+    if plan_includes_kilo(plan) {
         eprintln!("warning: {}", bugsleuth_domain::UNSANDBOXED_VENDOR_WARNING);
     }
 
@@ -86,6 +82,16 @@ pub(super) fn caution(plan: &Plan, repo: &std::path::Path) {
 /// Spawning needs owned data, so each task gets its own copy of the handful of
 /// small values it needs. That is cheaper than taking on a dependency purely to
 /// join a collection of borrowing futures.
+/// Whether any unit sweeps with Kilo, the one vendor whose confinement is the
+/// user's own configuration rather than a flag BugSleuth passes. Kimi also
+/// needs a worktree, but its allowlist is the `--agent-file` this tool hands
+/// it, so the Kilo-shaped warning must not fire for a Kimi-only run.
+pub(super) fn plan_includes_kilo(plan: &Plan) -> bool {
+    plan.units
+        .iter()
+        .any(|unit| crate::sweep::Vendor::parse(&unit.model).0 == crate::sweep::Vendor::Kilo)
+}
+
 /// Name every sweep a cancellation prevented.
 ///
 /// A cancelled run must never read as a finished one. Each unit that never ran
@@ -222,5 +228,26 @@ mod tests {
             "a failed git status must warn rather than silently authorize a mixed-version review"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_unsandboxed_warning_is_about_kilo_not_about_every_isolated_vendor() {
+        let unit = |model: &str| crate::plan::Unit {
+            model: model.to_string(),
+            lane: Lane::Correctness,
+            pass: 1,
+            effort: String::new(),
+            use_agents: false,
+        };
+        let kimi_only = crate::plan::Plan {
+            units: vec![unit("kimi:kimi-code/k3")],
+            uncovered: vec![],
+        };
+        assert!(!plan_includes_kilo(&kimi_only), "a Kimi-only run triggers a warning about Kilo");
+        let kilo = crate::plan::Plan {
+            units: vec![unit("kilo:kilo/k3")],
+            uncovered: vec![],
+        };
+        assert!(plan_includes_kilo(&kilo));
     }
 }
