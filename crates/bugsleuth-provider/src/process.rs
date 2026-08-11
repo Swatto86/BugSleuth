@@ -143,8 +143,11 @@ pub struct Invocation<'a> {
 ///
 /// Non-zero exit is *not* an error here — the caller decides, because some CLIs
 /// report a usable result alongside a non-zero code.
+///
+/// The child runs in an isolated process group where the platform supports it,
+/// so a timeout or cancelled future also terminates helpers the CLI started.
 pub async fn run(invocation: Invocation<'_>) -> Result<CliOutput, ProcessError> {
-    run_inner(invocation, false, OUTPUT_CAP).await
+    run_inner(invocation, true, OUTPUT_CAP).await
 }
 
 /// Run a subprocess in an isolated process group where the platform supports
@@ -380,6 +383,9 @@ mod environment_tests;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod descendant_tests;
 
 #[cfg(test)]
 #[path = "process/truncation_tests.rs"]
