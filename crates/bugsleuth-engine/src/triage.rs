@@ -350,7 +350,11 @@ pub(crate) fn prompt_for(clusters: &[Cluster], repo: Option<&Path>) -> String {
 /// about it.
 fn commentary_at(repo: &Path, finding: &bugsleuth_domain::Finding) -> Option<String> {
     const MOST: usize = 24;
-    let text = std::fs::read_to_string(repo.join(&finding.anchor.file)).ok()?;
+    // The anchor crossed a JSON boundary (a resumed or supplied report), so its
+    // path is untrusted until rechecked: read it only through the same lexical
+    // and canonical containment gate verify_anchor uses, never a bare join.
+    let path = bugsleuth_verify::checked_repo_file(repo, &finding.anchor.file).ok()?;
+    let text = std::fs::read_to_string(path).ok()?;
     let lines: Vec<&str> = text.lines().collect();
     // Anchors are 1-based, and the comment sits above the line itself.
     let mut index = usize::try_from(finding.anchor.line).ok()?.checked_sub(1)?;

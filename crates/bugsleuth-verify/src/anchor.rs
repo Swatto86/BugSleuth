@@ -20,6 +20,32 @@ pub enum Rejection {
     ResolvesOutsideRepo(String),
 }
 
+/// A repository file at `raw`, checked to exist and stay inside `repo`.
+///
+/// The lexical and canonical containment checks [`verify_anchor`] applies to a
+/// model's claim, factored out so a path that has crossed a JSON boundary — a
+/// resumed or externally-supplied report — can be revalidated before it is read.
+/// `Finding` and `LaneReport` both derive `Deserialize`, so a cached report can
+/// carry an arbitrary anchor path; reading it unchecked would let one escape
+/// the repository.
+pub fn checked_repo_file(repo: &Path, raw: &str) -> Result<PathBuf, Rejection> {
+    let relative = safe_relative_path(raw)?;
+    let absolute = repo.join(&relative);
+    if !absolute.is_file() {
+        return Err(Rejection::NoSuchFile(raw.to_string()));
+    }
+    // The component check above is lexical: it runs before the path touches the
+    // disk, so it says nothing about where the path *resolves*. A reviewed
+    // repository is untrusted input, and one containing a symlink at an
+    // innocent-looking path — `src/util.rs` pointing at a private key or at the
+    // user's own settings — would otherwise have its target read and quoted
+    // back into a report that gets copied into a prompt.
+    if !resolves_inside(repo, &absolute) {
+        return Err(Rejection::ResolvesOutsideRepo(raw.to_string()));
+    }
+    Ok(absolute)
+}
+
 /// Confirm that `raw`'s snippet appears in the file it names, and report where.
 ///
 /// Deliberately *not* an exact `file:line` equality check. Models reliably quote
@@ -33,20 +59,7 @@ pub enum Rejection {
 /// Comparison ignores leading and trailing whitespace per line, because a model
 /// re-indents quoted code far more often than it invents it.
 pub fn verify_anchor(repo: &Path, raw: &RawFinding) -> Result<VerifiedAnchor, Rejection> {
-    let relative = safe_relative_path(&raw.file)?;
-    let absolute = repo.join(&relative);
-    if !absolute.is_file() {
-        return Err(Rejection::NoSuchFile(raw.file.clone()));
-    }
-    // The component check above is lexical: it runs before the path touches the
-    // disk, so it says nothing about where the path *resolves*. A reviewed
-    // repository is untrusted input, and one containing a symlink at an
-    // innocent-looking path — `src/util.rs` pointing at a private key or at the
-    // user's own settings — would otherwise have its target read and quoted
-    // back into a report that gets copied into a prompt.
-    if !resolves_inside(repo, &absolute) {
-        return Err(Rejection::ResolvesOutsideRepo(raw.file.clone()));
-    }
+    let absolute = checked_repo_file(repo, &raw.file)?;
 
     let contents = std::fs::read_to_string(&absolute)
         .map_err(|e| Rejection::Unreadable(raw.file.clone(), e.to_string()))?;
@@ -78,7 +91,11 @@ pub fn verify_anchor(repo: &Path, raw: &RawFinding) -> Result<VerifiedAnchor, Re
     let snippet = haystack[found..end].join("\n");
 
     Ok(VerifiedAnchor {
-        file: relative.to_string_lossy().replace('\\', "/"),
+        file: absolute
+            .strip_prefix(repo)
+            .unwrap_or(&absolute)
+            .to_string_lossy()
+            .replace('\\', "/"),
         line: u32::try_from(found + 1).unwrap_or(u32::MAX),
         claimed_line: raw.line,
         snippet,

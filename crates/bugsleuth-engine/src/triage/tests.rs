@@ -337,3 +337,42 @@ fn rust_attributes_are_skipped_instead_of_quoted_as_commentary() {
     assert!(commentary_at(&dir, &finding.findings[0]).is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// An anchor that crossed a JSON boundary (a resumed or supplied report) is
+/// untrusted, so a path escaping the repository must not be read into the
+/// triage prompt. `commentary_at` used to join it straight onto the repo, so a
+/// crafted report with `../outside.txt` read an arbitrary local file and sent
+/// its comment block to the grading model.
+#[test]
+fn a_deserialized_anchor_escaping_the_repository_is_not_read_into_the_prompt() {
+    let parent = std::env::temp_dir()
+        .join("bugsleuth-triage-escape")
+        .join(format!("{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&parent);
+    let repo = parent.join("repo");
+    std::fs::create_dir_all(&repo).expect("repo");
+    // The outside file a forged anchor would reach, holding a comment block
+    // distinctive enough that its presence in the prompt is unambiguous.
+    std::fs::write(
+        parent.join("outside.txt"),
+        "// SECRET distinctive outside marker\nfn boom() {}\n",
+    )
+    .expect("outside");
+
+    let mut finding = cluster().findings[0].clone();
+    finding.anchor.file = "../outside.txt".into();
+    // The comment sits above line 2, so a successful read would capture it.
+    finding.anchor.line = 2;
+    let forged = Cluster {
+        findings: vec![finding],
+        ..cluster()
+    };
+
+    let prompt = prompt_for(&[forged], Some(&repo));
+    assert!(
+        !prompt.contains("SECRET distinctive outside marker"),
+        "an anchor escaping the repository was read into the triage prompt: {prompt}"
+    );
+
+    let _ = std::fs::remove_dir_all(&parent);
+}
