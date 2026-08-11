@@ -4,21 +4,21 @@ mod agents;
 mod isolate;
 mod precheck;
 mod revision;
+mod verify;
 
 use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
-use bugsleuth_domain::{Finding, FindingId, Lane, ModelId, RawFinding};
+use bugsleuth_domain::{Lane, ModelId, RawFinding};
 use bugsleuth_provider::claude::{self, ClaudeSweep};
 use bugsleuth_provider::codex::{self, CodexSweep};
 use bugsleuth_provider::kilo::{self, KiloSweep};
 use bugsleuth_provider::kimi::{self, KimiSweep};
 use bugsleuth_provider::process::redact_secrets;
-use bugsleuth_verify::verify_anchor;
 
 use crate::brief;
-use crate::report::{LaneReport, Rejected, Status, rank};
+use crate::report::{LaneReport, Status};
 // `clean_revision` is re-exported so `orchestrate::persist` reaches it as
 // `crate::sweep::clean_revision`, unchanged by the split.
 pub use agents::cannot_delegate;
@@ -268,6 +268,19 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
         .map_or(request.repo, |worktree| worktree.path());
 
     let outcome = invoke_vendor(vendor, model, reviewed, &request, &brief, use_agents).await;
+    // A transient blip — a silent overloaded response, an empty completion, a
+    // rate limit — is worth one more attempt before a whole lane reads as never
+    // run. The decision is the provider's own: `is_transient` knows which of its
+    // failures look the same every time and which do not. Only one retry: a
+    // second identical failure means the condition is not momentary, and paying
+    // for a third is what `--resume` is for.
+    let outcome = match outcome {
+        Ok(outcome) => Ok(outcome),
+        Err(error) if error.is_transient() => {
+            invoke_vendor(vendor, model, reviewed, &request, &brief, use_agents).await
+        }
+        Err(error) => Err(error),
+    };
 
     let (raw, turns, salvaged, usage) = match outcome {
         Ok(outcome) => outcome,
@@ -277,7 +290,8 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
         Err(error) => return not_swept(redact_secrets(&error.to_string())),
     };
 
-    let (findings, rejected) = verify_all(reviewed, request.lane, &ModelId::new(&model_label), raw);
+    let (findings, rejected) =
+        verify::verify_all(reviewed, request.lane, &ModelId::new(&model_label), raw);
 
     // Only reusable if the repository was clean at the start and is still at the
     // same clean revision now: a HEAD that moved, or a working tree that was
@@ -296,36 +310,6 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
         rejected,
         usage,
     }
-}
-
-/// Split reported findings into those whose quoted code was located in the file
-/// they name, and those that were not.
-fn verify_all(
-    repo: &Path,
-    lane: Lane,
-    model: &ModelId,
-    raw: Vec<RawFinding>,
-) -> (Vec<Finding>, Vec<Rejected>) {
-    let mut verified = Vec::new();
-    let mut rejected = Vec::new();
-
-    for (index, finding) in raw.into_iter().enumerate() {
-        match verify_anchor(repo, &finding) {
-            Ok(anchor) => {
-                let id = FindingId::new(format!("{}-{index}", lane.slug()));
-                verified.push(Finding::new(id, lane, model.clone(), finding, anchor));
-            }
-            Err(reason) => rejected.push(Rejected {
-                title: finding.title,
-                claimed_file: finding.file,
-                claimed_line: finding.line,
-                reason: reason.to_string(),
-            }),
-        }
-    }
-
-    rank(&mut verified);
-    (verified, rejected)
 }
 
 /// Confirm the provider CLI can actually be started before a run commits to it.

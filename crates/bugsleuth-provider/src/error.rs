@@ -80,6 +80,10 @@ impl ProviderError {
     pub fn is_transient(&self) -> bool {
         match self {
             ProviderError::FailedSilently { .. } => true,
+            // A clean exit with no answer is the shape of a provider-side empty
+            // completion — a blip, not a permanent condition. Worth one more
+            // attempt before a whole lane is reported as never run.
+            ProviderError::Empty(_) => true,
             ProviderError::Process(ProcessError::Timeout { .. }) => true,
             ProviderError::Failed { message, .. } => {
                 let lower = message.to_lowercase();
@@ -111,6 +115,10 @@ mod tests {
                 code: 1
             }
             .is_transient()
+        );
+        assert!(
+            ProviderError::Empty("kilo").is_transient(),
+            "a silent empty completion is the shape of a transient blip"
         );
         assert!(
             !ProviderError::NotFound {

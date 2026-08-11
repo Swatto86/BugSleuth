@@ -280,6 +280,41 @@ async fn a_timed_out_sweep_resumes_the_session_reported_by_kilo() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn an_exit_zero_with_error_events_but_no_answer_reports_the_error_not_silence() {
+    // Kilo emits its failures as NDJSON `error` events on stdout and can exit
+    // 0 having produced no `text` event at all. Without reading those events
+    // here the real reason was discarded and the report said only "produced no
+    // output" — the case this whole fix exists for.
+    let output = crate::process::CliOutput {
+        code: Some(0),
+        stdout: r#"{"type":"error","error":{"name":"UpstreamError","data":{"message":"model overloaded"}}}"#
+            .to_string(),
+        stderr: String::new(),
+    };
+    let error = assistant_text_or_error(&output).expect_err("an error event is a failure");
+    let message = format!("{error}");
+    assert!(
+        message.contains("overloaded"),
+        "the gateway's own reason was discarded: {message}"
+    );
+}
+
+#[test]
+fn a_genuinely_silent_exit_zero_still_reads_as_empty() {
+    // No text event and no error event: nothing the stream can explain, so the
+    // honest report is the generic Empty rather than a fabricated message.
+    let output = crate::process::CliOutput {
+        code: Some(0),
+        stdout: r#"{"type":"step_finish"}"#.to_string(),
+        stderr: String::new(),
+    };
+    assert!(matches!(
+        assistant_text_or_error(&output),
+        Err(ProviderError::Empty(VENDOR))
+    ));
+}
+
 #[cfg(windows)]
 #[tokio::test]
 async fn kilos_native_timeout_exit_resumes_the_session_it_reported() {

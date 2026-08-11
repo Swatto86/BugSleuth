@@ -267,7 +267,22 @@ pub(crate) fn assistant_text_or_error(
 
     let text = events::assistant_text(&output.stdout);
     if text.trim().is_empty() {
-        return Err(ProviderError::Empty(VENDOR));
+        // Kilo streams its errors as NDJSON on stdout even when it exits
+        // cleanly, so a gateway failure that produced no answer still has its
+        // reason sitting in the event stream. Reading it here keeps that reason
+        // rather than reporting an unexplained "no output" — which is what a
+        // transient provider-side empty looked like, and why a whole lane was
+        // written off with no diagnostic to act on.
+        let errors = events::error_events(&output.stdout);
+        return Err(if errors.is_empty() {
+            ProviderError::Empty(VENDOR)
+        } else {
+            ProviderError::Failed {
+                vendor: VENDOR,
+                code: 0,
+                message: errors,
+            }
+        });
     }
     Ok(text)
 }

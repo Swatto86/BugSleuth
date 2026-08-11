@@ -500,8 +500,10 @@ rust kilo::repair::tests::a_reply_at_the_limit_is_repaired_whole_and_one_over_is
 rust kilo::repair::tests::the_repair_is_pointed_at_an_empty_directory_of_its_own
 rust kilo::repair::tests::the_repair_prompt_forbids_inventing_and_forbids_reviewing_again
 rust kilo::repair::tests::the_scratch_directory_is_removed_when_the_repair_ends
+rust kilo::tests::a_genuinely_silent_exit_zero_still_reads_as_empty
 rust kilo::tests::a_timed_out_sweep_resumes_the_session_reported_by_kilo
 rust kilo::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
+rust kilo::tests::an_exit_zero_with_error_events_but_no_answer_reports_the_error_not_silence
 rust kilo::tests::an_id_with_no_prefix_leaves_the_choice_to_kilo
 rust kilo::tests::every_route_can_be_described_to_a_person
 rust kilo::tests::external_plugins_are_skipped_so_the_machine_cannot_change_the_review
@@ -721,6 +723,7 @@ rust sweep::revision::tests::git_is_never_spawned_with_a_visible_console_window
 rust sweep::tests::a_bare_model_name_means_claude_so_the_common_case_stays_short
 rust sweep::tests::a_failed_sweeps_reason_is_scrubbed_of_credentials_before_it_is_stored
 rust sweep::tests::a_kimi_model_selects_kimi_for_the_precheck
+rust sweep::tests::a_transient_failure_is_retried_once_before_reporting_not_swept
 rust sweep::tests::a_vendor_prefix_selects_that_vendor
 rust sweep::tests::agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_policy
 rust sweep::tests::an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped

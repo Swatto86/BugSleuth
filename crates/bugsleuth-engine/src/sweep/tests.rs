@@ -218,6 +218,64 @@ async fn bare_alias_reports_use_the_resolved_label_on_both_paths() {
     }
 }
 
+/// A stub that fails transiently on its first invocation and answers on the
+/// second. One retry is the whole contract: the first failure is a silent
+/// non-zero exit — the shape of an overloaded provider — which is transient,
+/// so the sweep gets one more attempt before the lane is reported as not run.
+fn flaky_stub(name: &str) -> String {
+    let dir = std::env::temp_dir()
+        .join("bugsleuth-sweep-tests")
+        .join(format!("{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch directory");
+
+    #[cfg(windows)]
+    let path = {
+        let path = dir.join("stub.cmd");
+        std::fs::write(
+            &path,
+            "@echo off\r\nfindstr /R \".*\" > nul\r\nif exist \"%~dp0tried\" goto ok\r\ncopy nul \"%~dp0tried\" > nul\r\nexit /b 1\r\n:ok\r\necho {\"structured_output\":{\"findings\":[]},\"is_error\":false,\"num_turns\":1}\r\nexit /b 0\r\n",
+        )
+        .expect("write stub");
+        path
+    };
+    #[cfg(not(windows))]
+    let path = {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join("stub.sh");
+        std::fs::write(
+            &path,
+            "#!/bin/sh\ncat >/dev/null\nif [ -f \"$(dirname \"$0\")/tried\" ]; then\n  printf '%s\\n' '{\"structured_output\":{\"findings\":[]},\"is_error\":false,\"num_turns\":1}'\n  exit 0\nfi\ntouch \"$(dirname \"$0\")/tried\"\nexit 1\n",
+        )
+        .expect("write stub");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        path
+    };
+    path.to_string_lossy().into_owned()
+}
+
+#[tokio::test]
+async fn a_transient_failure_is_retried_once_before_reporting_not_swept() {
+    let stub = flaky_stub("transient-retry");
+    let report = run(Request {
+        repo: Path::new("."),
+        lane: Lane::Correctness,
+        model: "sonnet",
+        scope: None,
+        effort: "",
+        max_turns: 1,
+        timeout: Duration::from_secs(60),
+        api_key: None,
+        binary: Some(&stub),
+    })
+    .await;
+    assert!(
+        matches!(&report.status, Status::Swept { .. }),
+        "a transient blip should be retried, not reported as never run: {:?}",
+        report.status
+    );
+}
+
 #[tokio::test]
 async fn the_vendor_prefix_never_reaches_the_cli() {
     // 0.2.19 passed the whole spec to `-m`, so every Kilo and Codex sweep in a
