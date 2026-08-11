@@ -105,7 +105,7 @@ fn answer_from(
 /// minute can tell you.
 pub async fn check_all() -> Vec<(&'static str, SignIn)> {
     let (claude, codex, kilo, kimi) = tokio::join!(
-        crate::claude::signin(),
+        crate::claude::signin(None),
         crate::codex::signin(),
         crate::kilo::signin(),
         crate::kimi::signin()

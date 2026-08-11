@@ -316,23 +316,55 @@ pub(crate) struct ResultEnvelope {
 ///
 /// `--print` with no tools and no schema: the cheapest thing this CLI can be
 /// asked to do that still requires being signed in.
-pub async fn signin() -> crate::signin::SignIn {
-    let Some(binary) = resolve_binary() else {
-        return crate::signin::SignIn::Failed(not_found().to_string());
+///
+/// `--safe-mode` disables every customization the machine or the surrounding
+/// repository would inject — CLAUDE.md, hooks, skills, MCP servers — exactly as
+/// a real review does. The probe is invoked before any sweep, so without it a
+/// run from an untrusted checkout would load that checkout's instructions or
+/// hooks as part of the supposedly harmless one-word check. The probe also runs
+/// from a private empty directory rather than the caller's working directory, so
+/// a future CLI change cannot make it depend on the files around it.
+pub async fn signin(binary: Option<&str>) -> crate::signin::SignIn {
+    let binary = match binary {
+        Some(path) => PathBuf::from(path),
+        None => match resolve_binary() {
+            Some(path) => path,
+            None => return crate::signin::SignIn::Failed(not_found().to_string()),
+        },
     };
-    let args: Vec<String> = ["--print", "--output-format", "text"]
+    let args: Vec<String> = ["--print", "--safe-mode", "--output-format", "text"]
         .iter()
         .map(|a| (*a).to_string())
         .collect();
-    crate::signin::one_shot(
+    let sandbox = empty_probe_dir();
+    let cwd = sandbox.as_deref().unwrap_or_else(|| Path::new("."));
+    let result = crate::signin::one_shot(
         &binary.to_string_lossy(),
         &args,
-        Path::new("."),
+        cwd,
         &[],
         "claude",
         str::to_string,
     )
-    .await
+    .await;
+    if let Some(dir) = sandbox {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    result
+}
+
+/// A private empty directory for the sign-in probe, or `None` if one cannot be
+/// made. `create_dir` rather than `create_dir_all` so a collision proves the
+/// path was not ours.
+fn empty_probe_dir() -> Option<PathBuf> {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let dir = std::env::temp_dir().join(format!(
+        "bugsleuth-claude-signin-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir(&dir).ok().map(|_| dir)
 }
 
 #[cfg(test)]

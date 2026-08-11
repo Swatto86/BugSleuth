@@ -87,7 +87,7 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
     let (claude_result, codex_result, kilo_result, kimi_result) = tokio::join!(
         async {
             if wants_claude {
-                Some((Vendor::Claude, claude::signin().await))
+                Some((Vendor::Claude, claude::signin(None).await))
             } else {
                 None
             }

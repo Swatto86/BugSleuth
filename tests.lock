@@ -355,6 +355,7 @@ rust claude::tests::customizations_are_disabled_so_the_reviewed_repo_cannot_alte
 rust claude::tests::every_invocation_tells_the_cli_not_to_sign_the_commit
 rust claude::tests::read_only_sweeps_cannot_be_granted_write_tools
 rust claude::tests::the_schema_is_passed_as_one_argv_entry_not_shell_text
+rust claude::tests::the_signin_probe_uses_safe_mode_and_a_private_directory
 rust cli::tests::the_lane_help_lists_every_lane
 rust cluster::tests::a_cluster_reports_the_most_severe_assessment_not_the_mildest
 rust cluster::tests::a_triage_grade_decides_the_severity_and_the_original_is_still_readable
