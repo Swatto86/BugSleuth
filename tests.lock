@@ -686,6 +686,7 @@ rust report::tests::a_swept_lane_reports_usage_when_it_is_known
 rust report::tests::a_swept_lane_with_nothing_found_says_so_explicitly
 rust report::tests::an_unswept_lane_is_never_rendered_as_having_no_findings
 rust report::tests::findings_rank_most_severe_first
+rust report::tests::rejected_finding_fields_are_stripped_of_terminal_control_characters
 rust settings::tests::a_missing_settings_file_is_first_launch_and_yields_defaults
 rust settings::tests::a_read_error_that_is_not_a_missing_file_is_surfaced
 rust settings::tests::malformed_settings_are_reported_and_left_in_place

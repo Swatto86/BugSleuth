@@ -147,9 +147,17 @@ impl LaneReport {
         if !self.rejected.is_empty() {
             out.push_str("\n  Discarded (quoted code not found in the file named):\n");
             for rejected in &self.rejected {
+                // Sanitised at the terminal boundary, exactly as verified
+                // findings are. These values are model-controlled and never
+                // passed through `printable` at construction, so an ANSI or
+                // cursor-control sequence in a rejected title or reason would
+                // be acted on by the terminal and could hide the finding.
+                let title = bugsleuth_domain::printable(&rejected.title);
+                let claimed_file = bugsleuth_domain::printable(&rejected.claimed_file);
+                let reason = bugsleuth_domain::printable(&rejected.reason);
                 out.push_str(&format!(
-                    "    - {} [{}:{}] — {}\n",
-                    rejected.title, rejected.claimed_file, rejected.claimed_line, rejected.reason
+                    "    - {title} [{claimed_file}:{}] — {reason}\n",
+                    rejected.claimed_line
                 ));
             }
         }
@@ -272,6 +280,42 @@ mod tests {
         assert_eq!(
             order,
             vec![Severity::Critical, Severity::Medium, Severity::Low]
+        );
+    }
+
+    /// A rejected finding's model-controlled fields are terminal output, so they
+    /// must be sanitised like a verified finding's snippet is. Without this, a
+    /// rejected title or reason carrying an ANSI clear-screen sequence would be
+    /// acted on by the terminal and could hide the report's findings.
+    #[test]
+    fn rejected_finding_fields_are_stripped_of_terminal_control_characters() {
+        let report = LaneReport {
+            lane: "Security".into(),
+            model: "claude:sonnet".into(),
+            commit: None,
+            cache_revision: None,
+            scope: None,
+            status: Status::Swept {
+                turns: None,
+                salvaged: false,
+            },
+            findings: vec![],
+            rejected: vec![Rejected {
+                title: "\u{1b}[2Jhidden".into(),
+                claimed_file: "\u{1b}[2Jsrc/x.rs".into(),
+                claimed_line: 4,
+                reason: "\u{1b}[2Jnot there".into(),
+            }],
+            usage: None,
+        };
+        let text = report.to_text();
+        assert!(
+            text.contains("<0x1b>"),
+            "the escape was dropped entirely: {text}"
+        );
+        assert!(
+            !text.contains('\u{1b}'),
+            "a raw control character reached the terminal output: {text}"
         );
     }
 }
