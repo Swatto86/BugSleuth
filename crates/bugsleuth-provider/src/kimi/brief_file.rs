@@ -42,19 +42,55 @@ impl BriefFile {
     /// tool boundary: a review gets [`REVIEW_AGENT`] and an apply gets
     /// [`APPLY_AGENT`], and nothing else may reach this.
     pub(super) fn write(brief: &str, agent: &str) -> Result<Self, ProviderError> {
-        // Unique per process *and* per call: two lanes sweep concurrently, and
-        // a shared name would have one overwrite the other's brief mid-run.
+        // Unique per process *and* per call, and created exclusively. The name
+        // carries the process id and a counter, both guessable, and
+        // `create_dir_all` succeeds on a directory that already exists: a local
+        // process that pre-created the path — or left a link there — would own
+        // the directory the agent definition is written into and could swap
+        // `agent.md` (the tool allowlist this run is confined by) or the brief
+        // itself before the CLI reads them. `create_dir` without `_all` fails
+        // when the path exists, which is what proves the directory is ours.
+        // The same fix the Codex scratch directory carries — see
+        // `crates/bugsleuth-provider/src/codex/scratch.rs`.
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let dir = std::env::temp_dir().join(format!(
-            "bugsleuth-kimi-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
+        let pid = std::process::id();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0);
         let scratch = |error: std::io::Error| ProviderError::Scratch {
             vendor: super::VENDOR,
             detail: format!("could not write the review brief: {error}"),
         };
-        std::fs::create_dir_all(&dir).map_err(scratch)?;
+        let mut dir = PathBuf::new();
+        for attempt in 0..64 {
+            let candidate = std::env::temp_dir().join(format!(
+                "bugsleuth-kimi-{pid}-{nanos:08x}-{}-{attempt}",
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ));
+            match std::fs::create_dir(&candidate) {
+                Ok(()) => {
+                    dir = candidate;
+                    break;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(scratch(error)),
+            }
+        }
+        if dir.as_os_str().is_empty() {
+            return Err(scratch(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "could not reserve a private brief directory",
+            )));
+        }
+        // The brief and the agent definition sit in the shared temp area while
+        // the run is in flight; neither is another local account's business.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
+                .map_err(scratch)?;
+        }
         // An empty directory to point skill discovery at. Deliberately not the
         // brief's own: pointed there, Kimi listed the brief as a *skill*, which
         // is not what it is and not a classification worth depending on.
@@ -230,5 +266,29 @@ mod tests {
             path
         };
         assert!(!path.exists(), "the brief outlived its sweep at {path:?}");
+    }
+
+    /// A brief directory must be created, never adopted. The name used to be
+    /// `bugsleuth-kimi-<pid>-<counter>` with `create_dir_all`, so any local
+    /// process could pre-create it and own the directory the agent definition
+    /// (the run's tool allowlist) is written into.
+    #[test]
+    fn a_precreated_brief_directory_is_never_adopted() {
+        let pid = std::process::id();
+        // Every name the old, predictable scheme could pick for this process.
+        // The suite makes far fewer than 256 BriefFile::write calls per process.
+        for next in 0..=256_u64 {
+            let dir = std::env::temp_dir().join(format!("bugsleuth-kimi-{pid}-{next}"));
+            let _ = std::fs::create_dir(&dir);
+            let _ = std::fs::write(dir.join("planted.txt"), "attacker");
+        }
+        let brief = BriefFile::write("real", REVIEW_AGENT).expect("write");
+        let adopted = brief.dir().join("planted.txt").exists();
+        for next in 0..=256_u64 {
+            let _ = std::fs::remove_dir_all(
+                std::env::temp_dir().join(format!("bugsleuth-kimi-{pid}-{next}")),
+            );
+        }
+        assert!(!adopted, "a brief directory an attacker pre-created was adopted");
     }
 }
