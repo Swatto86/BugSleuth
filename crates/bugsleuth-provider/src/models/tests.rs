@@ -197,10 +197,12 @@ fn effort_not_supported_by_codex_model_is_rejected() {
     assert!(effort_ok("claude", &catalogue, "opus", "max").is_ok());
 }
 
-#[tokio::test]
-async fn claude_effort_is_recorded_per_model() {
+#[test]
+fn claude_effort_is_recorded_per_model() {
+    // The fixed catalogue, not `available()`: that refuses when the CLI is
+    // missing, and CI runners do not install Claude Code.
     assert!(efforts("claude").is_empty());
-    let catalogue = available("claude").await.expect("Claude catalogue");
+    let catalogue = claude_models();
     assert_eq!(
         catalogue.efforts_by_model.get("opus"),
         Some(
@@ -286,12 +288,10 @@ fn available_consults_cli_installed_before_any_catalogue() {
     assert!(gate < match_arm);
 }
 
-#[tokio::test]
-async fn claude_catalogue_offers_the_documented_fable_alias() {
-    if !cli_installed("claude") {
-        return;
-    }
-    let catalogue = available("claude").await.expect("fixed Claude catalogue");
+#[test]
+fn claude_catalogue_offers_the_documented_fable_alias() {
+    // Fixed catalogue — same reason as `claude_effort_is_recorded_per_model`.
+    let catalogue = claude_models();
     let models: Vec<&str> = catalogue
         .groups
         .iter()
