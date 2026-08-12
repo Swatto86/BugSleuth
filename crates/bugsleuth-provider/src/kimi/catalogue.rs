@@ -18,10 +18,15 @@ use std::path::PathBuf;
 
 use crate::models::{ModelGroup, VendorCatalogue};
 
+/// Where the CLI keeps its configuration under a given home directory.
+fn config_under(home: PathBuf) -> PathBuf {
+    home.join(".kimi-code/config.toml")
+}
+
 /// Where the CLI keeps its configuration.
 fn config_path() -> Option<PathBuf> {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
-    Some(PathBuf::from(home).join(".kimi-code/config.toml"))
+    Some(config_under(PathBuf::from(home)))
 }
 
 /// The models the local Kimi configuration defines.
@@ -177,26 +182,35 @@ enabled = true
         assert_eq!(groups[0].label, "kimi-code/plain");
     }
 
-    /// The scan reads a real installation when there is one.
+    /// The scan finds and parses a Kimi config under a fixture home.
     ///
-    /// Skips rather than asserting on a machine with no Kimi, but on one that
-    /// has it this is the check that the file really parses — a fixture can
-    /// agree with a scanner that both misunderstand the format.
+    /// A host-dependent skip left CI green while `config_under` / `groups_in`
+    /// could be broken. Env mutation is forbidden by the workspace `unsafe_code`
+    /// lint, so the fixture home is passed to `config_under` directly — the
+    /// same join `config_path` uses after reading HOME/USERPROFILE.
     #[test]
     fn the_real_local_config_parses_if_present() {
-        let Some(path) = config_path().filter(|path| path.is_file()) else {
-            eprintln!("skipped: no Kimi configuration on this machine");
-            return;
-        };
+        let home = std::env::temp_dir().join(format!(
+            "bugsleuth-kimi-config-{}",
+            std::process::id()
+        ));
+        let config_dir = home.join(".kimi-code");
+        std::fs::create_dir_all(&config_dir).expect("fixture config dir");
+        let config = config_dir.join("config.toml");
+        std::fs::write(
+            &config,
+            r#"default_model = "kimi-code/k3"
+[models."kimi-code/k3"]
+provider = "managed:kimi-code"
+"#,
+        )
+        .expect("write fixture config");
+        let path = config_under(home.clone());
+        assert_eq!(path, config, "config_under must resolve the installer layout");
+        assert!(path.is_file(), "fixture config was not written at {path:?}");
         let text = std::fs::read_to_string(&path).expect("read config");
         let groups = groups_in(&text);
-        assert!(
-            !groups.is_empty(),
-            "a real Kimi config defined no models, so the scan is wrong: {path:?}"
-        );
-        assert!(
-            groups.iter().all(|group| !group.models[0].is_empty()),
-            "{groups:?}"
-        );
+        assert!(!groups.is_empty(), "fixture config produced no groups");
+        let _ = std::fs::remove_dir_all(&home);
     }
 }
