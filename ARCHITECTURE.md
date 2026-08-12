@@ -166,9 +166,10 @@ These are the ones to protect when changing anything:
   command piped it into `tail` and a pipeline exits with its last stage's
   status.
 - 400-line hard cap on every `.rs`, `.ts`, `.tsx`.
-- **`tests.lock`** — the name of every test. A test that stops running fails the
-  build. Splitting files under the line cap lost tests twice in one day and the
-  count did not move either time, because tests were added in the same change.
+- **`tests.lock.<platform>`** — the name of every test on that OS. A test that
+  stops running fails the build. One lock per platform so the gate never skips
+  on linux/macos while Windows holds the only inventory. Refresh with
+  `scripts/test-inventory.sh` or the `test-inventory` workflow.
 - **The frontend's checks read TypeScript's own syntax tree**, not regular
   expressions. Six defects in one day were a regex over source that matched less
   than existed and returned a smaller answer instead of an error.

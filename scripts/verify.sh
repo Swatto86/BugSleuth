@@ -126,33 +126,19 @@ say "no test has gone missing"
 # twice in one day. The suite stayed green with less of it running, and the
 # count did not move because two tests were added in the same change. Names are
 # the only thing a comparison can be trusted on.
-# The header is validated before it is trusted. Anything other than the current
-# OS used to read as a legitimate foreign-platform lock and skip the comparison,
-# so `platform bogus` — or a missing, duplicated or misspelled header — switched
-# this gate off on all three platforms at once and no job said anything.
-# Read as one line rather than scanned, which also refuses a duplicate header.
-IFS= read -r recorded_header < tests.lock || {
-  echo "invalid tests.lock: missing platform header"
+#
+# Each OS has its own lock file. A single shared lock either skipped the check
+# on two CI platforms (so unix-only tests could vanish unnoticed) or failed
+# every foreign platform for #[cfg]-gated names. Per-platform locks keep the
+# gate on everywhere. Refresh with `scripts/test-inventory.sh`, or the
+# `test-inventory` workflow when you need another OS's file.
+lock="tests.lock.$(platform)"
+[ -f "$lock" ] || {
+  echo "invalid tests.lock: missing $lock"
+  echo "Run: scripts/test-inventory.sh"
+  echo "Or dispatch the test-inventory workflow for this OS."
   exit 1
 }
-recorded_header=${recorded_header%$'\r'}
-case "$recorded_header" in
-  "platform windows") recorded_on=windows ;;
-  "platform macos") recorded_on=macos ;;
-  "platform linux") recorded_on=linux ;;
-  *)
-    echo "invalid tests.lock platform header: ${recorded_header:-<missing>}"
-    exit 1
-    ;;
-esac
-if [ "$recorded_on" != "$(platform)" ]; then
-  # Some tests are #[cfg(windows)] and do not exist elsewhere, so a lock taken
-  # on one platform lists names another cannot run. Comparing anyway would fail
-  # every run on the other two for no defect, and a check that cries wolf gets
-  # switched off. This runs on every local gate and on the matching CI job,
-  # which is where a file split that loses tests actually happens.
-  echo "skipped: tests.lock was recorded on $recorded_on, this is $(platform)"
-else
 current=$(mktemp)
 scripts/test-inventory.sh "$current" > /dev/null
 # Both sides through the same filter before comparing: drop the platform
@@ -166,24 +152,23 @@ scripts/test-inventory.sh "$current" > /dev/null
 # about.
 strip() { tail -n +2 "$1" | tr -d '\r' | LC_ALL=C sort; }
 mine=$(mktemp); theirs=$(mktemp)
-strip tests.lock > "$mine"
+strip "$lock" > "$mine"
 strip "$current" > "$theirs"
 gone=$(LC_ALL=C comm -23 "$mine" "$theirs")
 added=$(LC_ALL=C comm -13 "$mine" "$theirs")
 rm -f "$current" "$mine" "$theirs"
 if [ -n "$gone" ]; then
-  echo "  these tests are in tests.lock and no longer run:"
+  echo "  these tests are in $lock and no longer run:"
   printf '%s\n' "$gone" | head -20 | sed 's/^/    /'
   echo "  If you deleted them on purpose, run scripts/test-inventory.sh and say why in the commit."
   exit 1
 fi
 if [ -n "$added" ]; then
-  echo "  new tests are not in tests.lock yet. Run: scripts/test-inventory.sh"
+  echo "  new tests are not in $lock yet. Run: scripts/test-inventory.sh"
   printf '%s\n' "$added" | head -10 | sed 's/^/    /'
   exit 1
 fi
-echo "no test has gone missing OK ($(($(wc -l < tests.lock) - 1)) recorded)"
-fi
+echo "no test has gone missing OK ($(($(wc -l < "$lock") - 1)) recorded)"
 
 say "file sizes"
 # 400 lines is the hard cap. Generated, vendored and lock files are exempt.

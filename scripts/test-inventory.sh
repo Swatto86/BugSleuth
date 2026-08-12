@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Write the name of every test in the repository to tests.lock.
+# Write the name of every test in the repository to tests.lock.<platform>.
 #
 # **A test that disappears is silent.** Splitting a file under the line cap,
 # this repository lost two tests twice in one day: an extraction assumed two
@@ -12,13 +12,13 @@
 # were added in the same change. Names are what a comparison can be trusted on.
 #
 # Run this after adding or renaming a test; the gate compares against it and
-# fails when a name it knew about is gone.
+# fails when a name it knew about is gone. Each OS has its own lock because
+# some tests are #[cfg]-gated. Refresh another platform's file via the
+# `test-inventory` workflow.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
-
-out="${1:-tests.lock}"
 
 # One stable name per operating system, so a version bump is not a new platform.
 platform() {
@@ -28,6 +28,8 @@ platform() {
     *) echo linux ;;
   esac
 }
+
+out="${1:-tests.lock.$(platform)}"
 
 
 # `|| true` on both, deliberately. Under `set -euo pipefail` a `grep` that
@@ -68,11 +70,9 @@ if [ "$rust_count" -lt 100 ] || [ "$node_count" -lt 20 ]; then
 fi
 
 {
-  # Which platform this was taken on, because some tests are #[cfg(windows)]
-  # and simply do not exist elsewhere. A lock taken on one platform reports
-  # those as missing on another, which is a false alarm, and a check that cries
-  # wolf gets switched off. The gate compares strictly on the recording
-  # platform and says plainly that it is skipping elsewhere.
+  # Which platform this was taken on. Kept as a header so a lock file opened by
+  # hand still says which OS produced it; the gate selects the file by
+  # `tests.lock.$(platform)` rather than by reading this line.
   # A stable token, not `uname -s` raw: Git Bash reports the Windows build
   # number in it, so a routine OS update would have looked like a different
   # platform and quietly switched the check off.

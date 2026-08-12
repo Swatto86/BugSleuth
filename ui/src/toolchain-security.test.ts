@@ -42,7 +42,7 @@ function between(source: string, from: string, to: string): string {
 
 test("the signature verifier refuses an executable Microsoft did not sign", (t) => {
   // Authenticode is a Windows trust-store facility; there is nothing to check
-  // elsewhere, and tests.lock is recorded on Windows.
+  // elsewhere; Authenticode itself is Windows-only.
   if (process.platform !== "win32") {
     t.skip("Authenticode verification is Windows-only");
     return;
