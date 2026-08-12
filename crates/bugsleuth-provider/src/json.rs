@@ -98,10 +98,8 @@ fn strip_fence(text: &str) -> &str {
     for open in ["```json", "```JSON", "```", "~~~json", "~~~"] {
         if let Some(rest) = text.strip_prefix(open) {
             let close = if open.starts_with('~') { "~~~" } else { "```" };
-            return match rest.rfind(close) {
-                Some(end) => rest[..end].trim(),
-                None => rest.trim(),
-            };
+            let rest = rest.trim();
+            return rest.strip_suffix(close).map(str::trim).unwrap_or(rest);
         }
     }
     text
@@ -166,6 +164,24 @@ mod tests {
         })
         .to_string();
         let parsed = structured::<RawFindings>(&Value::String(with_ticks));
+        assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
+    }
+
+    #[test]
+    fn an_unclosed_json_fence_does_not_cut_at_a_snippet_backtick() {
+        let with_ticks = json!({
+            "findings": [{
+                "title": "t",
+                "severity": "low",
+                "file": "a.md",
+                "line": 1,
+                "snippet": "```rust",
+                "explanation": "e",
+                "failure_scenario": "f"
+            }]
+        })
+        .to_string();
+        let parsed = structured::<RawFindings>(&Value::String(format!("```json\n{with_ticks}")));
         assert_eq!(parsed.map(|f| f.findings.len()).unwrap_or(0), 1);
     }
 
