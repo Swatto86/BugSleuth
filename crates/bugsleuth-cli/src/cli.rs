@@ -9,6 +9,16 @@ use std::path::PathBuf;
 use bugsleuth_domain::Lane;
 use clap::{Parser, Subcommand};
 
+/// Per-sweep timeout shared by `sweep` and `run`.
+///
+/// Generous on purpose: on a real crate, Claude finished in about five minutes
+/// while Codex was still working at twenty-five and was killed. Vendors differ
+/// by far more than seems reasonable, and a too-short timeout throws away a
+/// sweep that was nearly done. Both subcommands must agree — a single-lane
+/// `sweep` of the same vendor must not die sooner than the identical unit
+/// inside `run`.
+pub(crate) const DEFAULT_SWEEP_TIMEOUT_SECS: u64 = 2700;
+
 #[derive(Parser)]
 #[command(
     name = "bugsleuth",
@@ -47,11 +57,8 @@ pub(crate) struct RunArgs {
     /// only to Claude; Codex and Kilo use the per-invocation timeout instead.
     #[arg(long)]
     pub(crate) max_turns: Option<u32>,
-    /// Per-sweep timeout. Generous on purpose: on a real crate, Claude finished
-    /// in about five minutes while Codex was still working at twenty-five and
-    /// was killed. Vendors differ by far more than seems reasonable, and a
-    /// too-short timeout throws away a sweep that was nearly done.
-    #[arg(long, default_value_t = 2700)]
+    /// Per-sweep timeout. See [`DEFAULT_SWEEP_TIMEOUT_SECS`].
+    #[arg(long, default_value_t = DEFAULT_SWEEP_TIMEOUT_SECS)]
     pub(crate) timeout_secs: u64,
     /// Directory for each individual sweep's JSON, so a run that dies part way
     /// through does not discard the sweeps already paid for.
@@ -120,7 +127,8 @@ pub(crate) struct SweepArgs {
     /// per-invocation timeout plus one bounded recovery attempt.
     #[arg(long)]
     pub(crate) max_turns: Option<u32>,
-    #[arg(long, default_value_t = 900)]
+    /// Per-sweep timeout. See [`DEFAULT_SWEEP_TIMEOUT_SECS`].
+    #[arg(long, default_value_t = DEFAULT_SWEEP_TIMEOUT_SECS)]
     pub(crate) timeout_secs: u64,
     /// Write the machine-readable report here in addition to printing text.
     #[arg(long)]
@@ -157,5 +165,28 @@ mod tests {
                 lane.slug()
             );
         }
+    }
+
+    #[test]
+    fn sweep_and_run_default_to_the_same_timeout() {
+        let sweep = Cli::try_parse_from(["bugsleuth", "sweep", "--repo", ".", "--lane", "ux"])
+            .expect("parse sweep");
+        let run = Cli::try_parse_from([
+            "bugsleuth",
+            "run",
+            "--repo",
+            ".",
+            "--config",
+            "x.json",
+        ])
+        .expect("parse run");
+        let Command::Sweep(s) = sweep.command else {
+            panic!("expected sweep");
+        };
+        let Command::Run(r) = run.command else {
+            panic!("expected run");
+        };
+        assert_eq!(s.timeout_secs, r.timeout_secs);
+        assert_eq!(s.timeout_secs, DEFAULT_SWEEP_TIMEOUT_SECS);
     }
 }
