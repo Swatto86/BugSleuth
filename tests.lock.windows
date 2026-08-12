@@ -164,6 +164,7 @@ node splitId agrees with vendorOf on every shape
 node splitting a model spec and rejoining it settles on one spelling
 node starting a run moves focus off the disabled Run button to Stop
 node startup renders do not persist settings back over the saved file
+node system light and explicit light palettes stay identical
 node tauri-driver is installed at one reviewed version
 node the Agents header exposes its token-cost explanation to screen readers
 node the E2E build uses the locked local Tauri CLI

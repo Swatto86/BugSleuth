@@ -36,6 +36,7 @@ Cursor specs look like `cursor:composer-2.5`. The CLI binary users type is `agen
 
 ## Recent Context & Decisions
 
+- 2026-08-12: Theme WCAG gate also asserts system-preference light (`:root:not([data-theme="dark"])`) matches explicit `data-theme=light`, the palette default `theme: system` actually uses.
 - 2026-08-12: Cursor `BriefFile::write_in` stages then renames so a failed write cannot truncate `__bugsleuth_brief.md` in a real repository.
 - 2026-08-12: Cursor apply `build_args` pins `--workspace` to the repository (same as sweeps); cwd alone is not the documented headless workspace bound.
 - 2026-08-12: Codex repository review is refused at `plan` and removed from default/balanced/deep presets; Codex remains available for apply. UI `canRun` disables matrices that still list `codex:` sweep rows.

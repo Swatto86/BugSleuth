@@ -55,6 +55,7 @@ function contrast(a: string, b: string): number {
 
 const dark = paletteAfter(":root {");
 const light = paletteAfter(':root[data-theme="light"] {');
+const systemLight = paletteAfter(':root:not([data-theme="dark"]) {');
 
 /**
  * Every pair the UI genuinely renders, with the minimum it must clear.
@@ -128,6 +129,16 @@ for (const [name, palette] of [
     }
   });
 }
+
+test("system light and explicit light palettes stay identical", () => {
+  // Default theme is `system`; applyTheme clears data-theme so OS light mode
+  // uses the media-query block, not :root[data-theme="light"].
+  assert.deepEqual(
+    systemLight,
+    light,
+    "system-preference light theme drifted from data-theme=light",
+  );
+});
 
 test("both themes define the same set of colours", () => {
   // A property present in one theme and missing from the other renders as
