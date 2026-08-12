@@ -88,6 +88,47 @@ test("declining an available update clears the running status", () => {
   );
 });
 
+test("an available update clears the checking status before the install confirmation", () => {
+  const update = frontendFiles().find((file) => file.fileName === "update.ts");
+  assert.ok(update, "update.ts is no longer a shipped frontend module");
+
+  let busyGuard: ts.IfStatement | undefined;
+  walk(update, (node) => {
+    if (
+      ts.isIfStatement(node) &&
+      node.expression.getText(update) === "deps.busy()"
+    ) {
+      busyGuard ??= node;
+    }
+  });
+  assert.ok(busyGuard, "the update handler has no busy guard before confirm");
+
+  const confirms = callsTo(update, "confirmDialog");
+  assert.ok(
+    confirms.length >= 1,
+    "confirmDialog is no longer called from update.ts",
+  );
+  const confirm = confirms[0];
+
+  const statusCalls = callsTo(update, "setStatus").filter(
+    (call) =>
+      call.getStart(update) > busyGuard!.getEnd() &&
+      call.getStart(update) < confirm.getStart(update),
+  );
+  assert.ok(
+    statusCalls.length >= 1,
+    "no setStatus runs after the busy guard and before confirmDialog, so the checking spinner stays up during the install prompt",
+  );
+  for (const call of statusCalls) {
+    const kind = call.arguments[1]?.getText(update) ?? "";
+    assert.notEqual(
+      kind,
+      '"running"',
+      `pre-confirm setStatus still uses the running kind: ${call.getText(update)}`,
+    );
+  }
+});
+
 test("installing an update disables every operation its restart would interrupt", () => {
   const files = frontendFiles();
   const main = files.find((file) => file.fileName === "main.ts");

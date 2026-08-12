@@ -60,6 +60,8 @@ export function wireUpdate(deps: UpdateDeps): void {
           return;
         }
 
+        setStatus(`Version ${update.version} is available`);
+
         const notes = update.notes.trim();
         const agreed = await confirmDialog({
           title: `Version ${update.version} is available`,
