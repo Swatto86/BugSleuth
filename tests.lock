@@ -470,6 +470,7 @@ rust json::tests::a_reply_missing_required_fields_is_rejected
 rust json::tests::a_reply_that_is_not_findings_is_rejected_rather_than_silently_empty
 rust json::tests::an_unrelated_json_object_does_not_win_over_the_typed_answer
 rust json::tests::braces_in_leading_prose_do_not_hide_the_json_object
+rust json::tests::braces_in_malformed_output_are_bounded
 rust json::tests::candidate_offsets_follow_utf8_boundaries
 rust json::tests::reads_findings_delivered_as_a_json_object
 rust json::tests::reads_findings_delivered_as_a_json_string
