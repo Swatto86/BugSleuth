@@ -359,6 +359,7 @@ rust claude::tests::customizations_are_disabled_so_the_reviewed_repo_cannot_alte
 rust claude::tests::every_invocation_tells_the_cli_not_to_sign_the_commit
 rust claude::tests::read_only_sweeps_cannot_be_granted_write_tools
 rust claude::tests::the_schema_is_passed_as_one_argv_entry_not_shell_text
+rust cli::tests::sweep_and_run_default_to_the_same_timeout
 rust cli::tests::the_lane_help_lists_every_lane
 rust cluster::tests::a_cluster_reports_the_most_severe_assessment_not_the_mildest
 rust cluster::tests::a_triage_grade_decides_the_severity_and_the_original_is_still_readable
@@ -419,8 +420,11 @@ rust commands::tests::an_empty_repository_path_is_refused_with_something_actiona
 rust commands::tests::settings_map_onto_the_engine_config_without_losing_lanes
 rust commands::tests::the_fix_prompt_carries_the_repo_and_every_unreviewed_lane
 rust commands::tests::two_checkouts_with_the_same_folder_name_do_not_share_a_run_directory
+rust cursor::apply::tests::a_case_folded_agents_md_at_the_root_refuses_cursor_apply
+rust cursor::apply::tests::a_nested_agents_md_refuses_cursor_apply
 rust cursor::apply::tests::a_repository_carrying_cursor_instructions_is_refused
 rust cursor::apply::tests::apply_forces_writes_and_never_asks
+rust cursor::apply::tests::claude_md_alone_does_not_refuse_cursor_apply
 rust cursor::brief_file::tests::a_private_brief_is_removed_on_drop
 rust cursor::catalogue::tests::ignores_noise_rather_than_emptying_the_menu
 rust cursor::catalogue::tests::parses_the_documented_listing_shape
@@ -651,6 +655,8 @@ rust orchestrate::render::tests::annotations::repeating_a_model_does_not_inflate
 rust orchestrate::render::tests::metadata_tests::mixed_scopes_are_not_rendered_as_one_ordinary_run
 rust orchestrate::render::tests::metadata_tests::run_report_calls_out_mixed_revisions
 rust orchestrate::render::tests::metadata_tests::run_report_preserves_usage
+rust orchestrate::render::tests::sanitize_tests::a_moved_grade_reason_cannot_carry_raw_ansi_into_the_report
+rust orchestrate::render::tests::sanitize_tests::already_documented_quotes_cannot_carry_raw_ansi_into_the_report
 rust orchestrate::render::tests::two_models_on_one_lane_is_still_one_lane
 rust orchestrate::tests::a_bare_alias_resolves_to_the_label_a_report_records
 rust orchestrate::tests::a_cancelled_run_names_every_sweep_it_never_reached
