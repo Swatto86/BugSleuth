@@ -15,7 +15,9 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-hook="$root/.git/hooks/pre-push"
+cd "$root"
+hook="$(git rev-parse --git-path hooks/pre-push)"
+mkdir -p "$(dirname "$hook")"
 
 cat > "$hook" <<'HOOK'
 #!/usr/bin/env bash
