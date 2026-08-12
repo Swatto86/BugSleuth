@@ -190,10 +190,8 @@ enabled = true
     /// same join `config_path` uses after reading HOME/USERPROFILE.
     #[test]
     fn the_real_local_config_parses_if_present() {
-        let home = std::env::temp_dir().join(format!(
-            "bugsleuth-kimi-config-{}",
-            std::process::id()
-        ));
+        let home =
+            std::env::temp_dir().join(format!("bugsleuth-kimi-config-{}", std::process::id()));
         let config_dir = home.join(".kimi-code");
         std::fs::create_dir_all(&config_dir).expect("fixture config dir");
         let config = config_dir.join("config.toml");
@@ -206,7 +204,10 @@ provider = "managed:kimi-code"
         )
         .expect("write fixture config");
         let path = config_under(home.clone());
-        assert_eq!(path, config, "config_under must resolve the installer layout");
+        assert_eq!(
+            path, config,
+            "config_under must resolve the installer layout"
+        );
         assert!(path.is_file(), "fixture config was not written at {path:?}");
         let text = std::fs::read_to_string(&path).expect("read config");
         let groups = groups_in(&text);

@@ -187,17 +187,10 @@ async fn a_failing_cli_is_an_error_rather_than_no_findings() {
 /// by the workspace `unsafe_code` lint).
 #[test]
 fn discovery_finds_a_real_installation() {
-    let home = std::env::temp_dir().join(format!(
-        "bugsleuth-kimi-discover-{}",
-        std::process::id()
-    ));
+    let home = std::env::temp_dir().join(format!("bugsleuth-kimi-discover-{}", std::process::id()));
     let bin_dir = home.join(".kimi-code/bin");
     std::fs::create_dir_all(&bin_dir).expect("fixture bin dir");
-    let exe_name = if cfg!(windows) {
-        "kimi.exe"
-    } else {
-        "kimi"
-    };
+    let exe_name = if cfg!(windows) { "kimi.exe" } else { "kimi" };
     let binary = bin_dir.join(exe_name);
     std::fs::write(&binary, b"").expect("fixture binary");
     #[cfg(unix)]
@@ -205,8 +198,8 @@ fn discovery_finds_a_real_installation() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).expect("chmod");
     }
-    let found =
-        discover::resolve_binary_from(Some(home.clone())).expect("fixture install must be discovered");
+    let found = discover::resolve_binary_from(Some(home.clone()))
+        .expect("fixture install must be discovered");
     assert_eq!(found, binary);
     let _ = std::fs::remove_dir_all(&home);
 }
