@@ -36,12 +36,20 @@ fn find_instruction(dir: &Path, root: &Path) -> Option<String> {
     for entry in entries.flatten() {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_lowercase();
-        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+            continue;
+        };
+        let is_link = metadata.file_type().is_symlink() || is_reparse_point(&metadata);
 
         if INSTRUCTION_DIRS.contains(&name.as_str()) {
             return Some(relative(&path, root));
         }
-        if is_dir {
+        if is_link {
+            // Do not walk through outbound links or cycles; an instruction-
+            // named link already returned above.
+            continue;
+        }
+        if metadata.is_dir() {
             if SKIP.contains(&name.as_str()) {
                 continue;
             }
@@ -53,6 +61,20 @@ fn find_instruction(dir: &Path, root: &Path) -> Option<String> {
         }
     }
     None
+}
+
+/// Same mask as bugsleuth-verify's orphan cleanup: junctions are reparse
+/// points and must not be treated as ordinary directories to walk into.
+#[cfg(windows)]
+fn is_reparse_point(metadata: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(not(windows))]
+fn is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
+    false
 }
 
 fn relative(path: &Path, root: &Path) -> String {

@@ -62,6 +62,55 @@ fn a_nested_agents_md_refuses_cursor_apply() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A directory link inside a tree, or `None` when the OS refuses.
+#[cfg(windows)]
+fn link_dir(target: &std::path::Path, at: &std::path::Path) -> Option<()> {
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(at)
+        .arg(target)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .ok()?;
+    status.success().then_some(())
+}
+
+#[cfg(unix)]
+fn link_dir(target: &std::path::Path, at: &std::path::Path) -> Option<()> {
+    std::os::unix::fs::symlink(target, at).ok()
+}
+
+/// Outbound junctions must not be walked: an external `.cursor` is not this
+/// repository's instruction file, and walking a cycle would hang.
+#[test]
+fn outbound_directory_link_is_not_walked_for_instructions() {
+    let dir = scratch("outbound-link");
+    let victim = std::env::temp_dir().join(format!(
+        "bugsleuth-cursor-apply-victim-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&victim);
+    std::fs::create_dir_all(victim.join(".cursor")).expect("victim .cursor");
+    std::fs::write(victim.join(".cursor/keep.txt"), "external").expect("keep");
+    let docs = dir.join("docs");
+    let Some(()) = link_dir(&victim, &docs) else {
+        eprintln!("skipped: this OS would not create a directory link");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&victim);
+        return;
+    };
+
+    assert_eq!(
+        find_instruction(&dir, &dir),
+        None,
+        "walker followed an outbound link into an external .cursor"
+    );
+    assert!(victim.join(".cursor/keep.txt").is_file());
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&victim);
+}
+
 #[test]
 fn a_case_folded_agents_md_at_the_root_refuses_cursor_apply() {
     let dir = scratch("cased-agents");
