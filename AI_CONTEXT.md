@@ -36,6 +36,7 @@ Cursor specs look like `cursor:composer-2.5`. The CLI binary users type is `agen
 
 ## Recent Context & Decisions
 
+- 2026-08-12: Codex repository review is refused at `plan` and removed from default/balanced/deep presets; Codex remains available for apply. UI `canRun` disables matrices that still list `codex:` sweep rows.
 - 2026-08-12: Instruction strip and Cursor `find_instruction` classify entries with `symlink_metadata` + Windows reparse-point check before recurse/delete; instruction-named links are unlinked without following (Windows junctions used to fail `remove_file` with Access Denied).
 - 2026-08-12: Released **0.2.48** — sweep/run share 2700s timeout and Claude 40-turn defaults; triage reasons/acks sanitized with `printable`; Cursor apply refuses nested/case-folded instruction files; inventory write asserts known-present names; verify installs pre-push hook; shared `check-test-inventory.sh`.
 - 2026-08-12: Sweep/run share `DEFAULT_SWEEP_TIMEOUT_SECS` (2700) and `DEFAULT_CLAUDE_MAX_TURNS` (40). Triage `triage_reason`/`acknowledged` pass through `printable` at storage and report render. Cursor apply walks the tree (case-insensitive) for `.cursorrules`/`agents.md`/`cursor.md`/`.cursor`/`.agents`. Inventory write asserts known-present names + refuse large count drops; `check-test-inventory.sh` is the shared gate path; verify installs the pre-push hook via `git rev-parse --git-path`.

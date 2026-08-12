@@ -52,7 +52,7 @@ absorbing them is most of that crate's job:
 | | Schema enforcement | Read-only mechanism | Output |
 |---|---|---|---|
 | Claude | Inline JSON Schema | Tool allowlist | One JSON envelope |
-| Codex | Schema as a **file** | `--sandbox read-only` | Final message to a file |
+| Codex | *(review disabled — apply only)* | apply: `--sandbox workspace-write` | Final message to a file |
 | Kilo | **None** — described in the prompt | **None** — needs a worktree | NDJSON events, messages repeated |
 | Kimi | **None** — described in the prompt | Agent-file allowlist + worktree | Text reply |
 | Cursor (`agent`) | **None** — described in the prompt | `--mode ask` + worktree (no ignore-rules) | Text reply |

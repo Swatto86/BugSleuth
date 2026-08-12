@@ -101,6 +101,7 @@ node both sides are actually being read
 node both themes define the same set of colours
 node checksum fallback excludes and verifies its own manifest
 node clearing hands focus off before activityChanged disables its opener
+node codex cannot be scheduled for repository review
 node dark theme meets WCAG AA everywhere the UI uses it
 node declining an available update clears the running status
 node editing a model refreshes its row action labels
@@ -693,6 +694,7 @@ rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
 rust plan::tests::every_provider_runs_at_most_one_sweep_per_batch
 rust plan::tests::every_vendor_prefix_is_recognised
 rust plan::tests::kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to
+rust plan::tests::plan_refuses_codex_repository_review
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
 rust process::descendant_tests::ordinary_run_isolates_the_process_group

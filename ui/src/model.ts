@@ -333,6 +333,7 @@ export function canRun(settings: Settings, catalogue: Catalogue): boolean {
     !settings.models.every(
       (model) =>
         model.id.trim() !== "" &&
+        vendorOf(model.id) !== "codex" &&
         vendorCliPresent(model.id, catalogue) &&
         effortIsValid(model.id, model.effort, catalogue) &&
         (!model.use_agents || supportsAgents(model.id)) &&

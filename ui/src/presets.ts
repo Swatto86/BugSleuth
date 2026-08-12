@@ -22,11 +22,10 @@ export function preset(name: Preset): ModelSetting[] {
       // One vendor, every lane. Fewest invocations that still reviews everything.
       return [{ id: "haiku", lanes: [...LANES], effort: "", passes: 1 }];
     case "deep":
-      // Every vendor on every lane it can do. Kilo is excluded from nothing here
-      // because sweeping is the one thing it does as well as the others.
+      // Claude on every lane, Kilo doubled on the two where a second view
+      // pays for itself. Codex is apply-only and is not scheduled for review.
       return [
         { id: "opus", lanes: [...LANES], effort: "", passes: 1 },
-        { id: "codex:", lanes: [...LANES], effort: "", passes: 1 },
         {
           id: "kilo:",
           lanes: ["correctness", "security"],
@@ -36,15 +35,7 @@ export function preset(name: Preset): ModelSetting[] {
       ];
     case "balanced":
     default:
-      return [
-        { id: "sonnet", lanes: [...LANES], effort: "", passes: 1 },
-        {
-          id: "codex:",
-          lanes: ["correctness", "security"],
-          effort: "",
-          passes: 1,
-        },
-      ];
+      return [{ id: "sonnet", lanes: [...LANES], effort: "", passes: 1 }];
   }
 }
 

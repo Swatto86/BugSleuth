@@ -206,6 +206,11 @@ pub fn plan(config: &Config) -> Result<Plan> {
         let model_id = canonical_spec(&model.id);
         check_effort(&model_id, model.effort.trim())?;
         let vendor = vendor_of(&model_id);
+        if vendor == "codex" {
+            anyhow::bail!(
+                "model `{model_id}` cannot run a repository review: Codex review is disabled because its read-only sandbox is not repository-bounded; remove it from the sweep matrix (Codex can still be used to apply fixes)"
+            );
+        }
         let claude_model = model_id.strip_prefix("claude:").unwrap_or(&model_id);
         if model.use_agents
             && vendor == "claude"

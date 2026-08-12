@@ -123,10 +123,24 @@ fn a_fully_covered_run_reports_no_gaps() {
 }
 
 #[test]
+fn plan_refuses_codex_repository_review() {
+    let refused = plan(&with_effort("codex:gpt-5.6-codex", ""));
+    let message = refused.map(|_| ()).unwrap_err().to_string();
+    assert!(
+        message.contains("repository review"),
+        "must name the disabled capability: {message}"
+    );
+    assert!(
+        message.contains("disabled") || message.contains("not repository-bounded"),
+        "must say why Codex cannot review: {message}"
+    );
+}
+
+#[test]
 fn two_models_on_one_lane_is_two_units_because_that_is_the_point() {
     let plan = plan(&config(&[
         ("sonnet", &["correctness"]),
-        ("codex:", &["correctness"]),
+        ("kilo:", &["correctness"]),
     ]))
     .unwrap_or_else(|e| panic!("plan failed: {e}"));
     assert_eq!(plan.units.len(), 2);
@@ -157,7 +171,7 @@ fn every_provider_runs_at_most_one_sweep_per_batch() {
     // Different providers may overlap, but one provider must stay serial.
     let plan = plan(&config(&[
         ("sonnet", &["security", "ux"]),
-        ("codex:model", &["security", "ux"]),
+        ("kimi:model", &["security", "ux"]),
         ("kilo:model", &["security", "ux"]),
     ]))
     .unwrap_or_else(|e| panic!("plan failed: {e}"));
@@ -173,7 +187,7 @@ fn every_provider_runs_at_most_one_sweep_per_batch() {
 fn batching_runs_every_unit_exactly_once() {
     let plan = plan(&config(&[
         ("sonnet", &["correctness", "security", "ux"]),
-        ("codex:", &["correctness"]),
+        ("kilo:", &["correctness"]),
     ]))
     .unwrap_or_else(|e| panic!("plan failed: {e}"));
 

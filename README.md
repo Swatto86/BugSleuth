@@ -154,10 +154,11 @@ upstream. Both are off until you turn them on, and neither is part of a review.
 These are the ones worth knowing, because they are why it can be pointed at a
 repository you care about:
 
-- **A review cannot modify the code it reviews.** Codex runs under
-  `--sandbox read-only`; Claude runs with an explicit tool allowlist and no write
-  tools. Kilo has neither, so its sweeps run in a disposable git worktree — the
-  adapter's input type makes the unsafe call impossible to write.
+- **A review cannot modify the code it reviews.** Claude runs with an explicit
+  tool allowlist and no write tools. Kilo has neither, so its sweeps run in a
+  disposable git worktree — the adapter's input type makes the unsafe call
+  impossible to write. Codex is not used for repository review (its read-only
+  sandbox is not repository-bounded); it remains available to apply fixes.
 - **The reviewed repository cannot alter its own review.** Every vendor runs with
   its customizations disabled, so a repository's own hooks, agent config or rules
   are not loaded.

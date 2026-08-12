@@ -118,8 +118,8 @@ fn one_pass() -> usize {
 }
 
 impl Default for Settings {
-    /// The shipped default is the "Balanced" preset: every lane covered, and
-    /// the two vendors that can be run read-only doubled up on correctness.
+    /// The shipped default is the "Balanced" preset: every lane covered by a
+    /// model that can actually review. Codex is apply-only and is not scheduled.
     ///
     /// Every lane has a model on purpose. A lane with nobody assigned is
     /// reported as unswept, which is correct but is a bad thing to hand someone
@@ -128,30 +128,20 @@ impl Default for Settings {
         Self {
             repo: String::new(),
             scope: String::new(),
-            models: vec![
-                ModelSetting {
-                    id: "sonnet".into(),
-                    effort: String::new(),
-                    use_agents: false,
-                    passes: 1,
-                    extra: BTreeMap::new(),
-                    lanes: vec![
-                        "correctness".into(),
-                        "security".into(),
-                        "contract".into(),
-                        "ux".into(),
-                        "gate".into(),
-                    ],
-                },
-                ModelSetting {
-                    id: "codex:".into(),
-                    lanes: vec!["correctness".into(), "security".into()],
-                    effort: String::new(),
-                    use_agents: false,
-                    passes: 1,
-                    extra: BTreeMap::new(),
-                },
-            ],
+            models: vec![ModelSetting {
+                id: "sonnet".into(),
+                effort: String::new(),
+                use_agents: false,
+                passes: 1,
+                extra: BTreeMap::new(),
+                lanes: vec![
+                    "correctness".into(),
+                    "security".into(),
+                    "contract".into(),
+                    "ux".into(),
+                    "gate".into(),
+                ],
+            }],
             theme: "system".into(),
             reuse_completed: true,
             triage_model: cheapest(),

@@ -60,6 +60,28 @@ test("a run needs both a repository and at least one sweep", () => {
   );
 });
 
+test("codex cannot be scheduled for repository review", () => {
+  // Mirrors plan::plan: Codex apply still works, but a sweep matrix that
+  // includes it must not look runnable — the backend refuses before any lane.
+  assert.equal(
+    canRun(
+      {
+        ...base,
+        repo: "C:/x",
+        models: [row("codex:", ["correctness"])],
+      },
+      {},
+    ),
+    false,
+  );
+  for (const name of ["balanced", "deep"] as const) {
+    assert.ok(
+      preset(name).every((model) => !model.id.startsWith("codex:")),
+      `${name} still ships a Codex review row`,
+    );
+  }
+});
+
 test("a blank row makes the configuration unrunnable, exactly like the engine", () => {
   const base = {
     scope: "",
