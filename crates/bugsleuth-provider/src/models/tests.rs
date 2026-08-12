@@ -239,8 +239,58 @@ async fn claude_effort_is_rejected_when_the_model_cannot_apply_it() {
     assert!(validate_effort("claude", "haiku", "high").await.is_err());
 }
 
+#[test]
+fn cli_installed_rejects_unknown_vendors() {
+    assert!(!cli_installed("no-such-vendor"));
+    assert!(!cli_installed(""));
+}
+
+#[tokio::test]
+async fn available_checks_install_before_inventing_a_catalogue() {
+    // Unknown names are the always-missing case every machine can exercise —
+    // Claude and Codex used to return fixed aliases with no install check.
+    assert!(!cli_installed("no-such-vendor"));
+    assert!(
+        matches!(
+            available("no-such-vendor").await,
+            Err(ProviderError::NotFound { .. })
+        ),
+        "an unknown vendor must not invent a catalogue"
+    );
+    for vendor in VENDORS {
+        if cli_installed(vendor) {
+            continue;
+        }
+        assert!(
+            available(vendor).await.is_err(),
+            "{vendor} offered models without a CLI on PATH"
+        );
+    }
+}
+
+#[test]
+fn available_consults_cli_installed_before_any_catalogue() {
+    // A check that only runs when a CLI is missing is vacuous on a fully
+    // equipped machine. The production gate must still be present in source.
+    let source = include_str!("../models.rs");
+    let fn_start = source
+        .find("pub async fn available")
+        .expect("available() is gone");
+    let body = &source[fn_start..];
+    let match_arm = body
+        .find("match vendor")
+        .expect("available() no longer dispatches by vendor");
+    let gate = body[..match_arm]
+        .find("cli_installed(vendor)")
+        .expect("available() no longer refuses a missing CLI before building a catalogue");
+    assert!(gate < match_arm);
+}
+
 #[tokio::test]
 async fn claude_catalogue_offers_the_documented_fable_alias() {
+    if !cli_installed("claude") {
+        return;
+    }
     let catalogue = available("claude").await.expect("fixed Claude catalogue");
     let models: Vec<&str> = catalogue
         .groups

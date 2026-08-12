@@ -28,6 +28,12 @@ pub struct VendorModels {
     /// answer for it: most of its models take none, and some take
     /// `instant`/`thinking` rather than a ladder.
     pub efforts_by_model: BTreeMap<String, Vec<String>>,
+    /// Whether this vendor's CLI is on the machine.
+    ///
+    /// Checked before any catalogue fetch or sign-in probe. The UI only offers
+    /// vendors where this is true; a missing CLI stays visible in the status
+    /// pills so the user can see why it is absent from the menus.
+    pub installed: bool,
     /// Why this vendor's list is empty, when it is. Carried per vendor so one
     /// missing CLI does not blank the other two.
     pub error: Option<String>,
@@ -37,11 +43,23 @@ pub struct VendorModels {
 ///
 /// Never fails as a whole: a vendor that cannot be asked comes back with an
 /// empty list and the reason, because a dropdown that silently offers nothing
-/// looks identical to a vendor with no models.
+/// looks identical to a vendor with no models. Vendors whose CLI is not
+/// installed are marked `installed: false` without being probed further.
 #[tauri::command]
 pub async fn available_models() -> Vec<VendorModels> {
     let mut out = Vec::with_capacity(VENDORS.len());
     for vendor in VENDORS {
+        if !models::cli_installed(vendor) {
+            out.push(VendorModels {
+                vendor: vendor.to_string(),
+                groups: Vec::new(),
+                efforts: Vec::new(),
+                efforts_by_model: BTreeMap::new(),
+                installed: false,
+                error: Some(missing_cli_reason(vendor)),
+            });
+            continue;
+        }
         let (catalogue, error) = match models::available(vendor).await {
             // An empty list with nothing said is the failure this module's note
             // warns about: it looks identical to a vendor with no models. Kimi
@@ -61,10 +79,30 @@ pub async fn available_models() -> Vec<VendorModels> {
                 .map(|e| (*e).to_string())
                 .collect(),
             efforts_by_model: catalogue.efforts_by_model,
+            installed: true,
             error,
         });
     }
     out
+}
+
+/// Why a vendor is absent from the menus, in words that say what to install.
+fn missing_cli_reason(vendor: &str) -> String {
+    match vendor {
+        "claude" => {
+            "Claude Code CLI not found. Install with `npm install -g @anthropic-ai/claude-code`."
+                .into()
+        }
+        "codex" => {
+            "Codex CLI not found. Install the Codex CLI and sign in with `codex login`.".into()
+        }
+        "kilo" => "Kilo CLI not found. Install the Kilo CLI to use it here.".into(),
+        "kimi" => "Kimi Code CLI not found. Install it and run `kimi` then /login.".into(),
+        "cursor" => {
+            "Cursor Agent CLI (`agent`) not found. Install it and run `agent login`.".into()
+        }
+        other => format!("{other} CLI not found"),
+    }
 }
 
 /// Why a vendor offers nothing, in words that say what to do about it.
@@ -129,5 +167,32 @@ mod tests {
                 "{vendor} is listed as accepting no effort but does not say so"
             );
         }
+    }
+
+    #[test]
+    fn missing_cli_reasons_name_every_known_vendor() {
+        for vendor in VENDORS {
+            let reason = missing_cli_reason(vendor);
+            assert!(
+                reason.to_ascii_lowercase().contains("not found"),
+                "{vendor}: {reason}"
+            );
+        }
+    }
+
+    #[test]
+    fn catalogue_checks_install_before_asking_a_cli() {
+        let source = include_str!("catalogue.rs");
+        let fn_start = source
+            .find("pub async fn available_models")
+            .expect("available_models is gone");
+        let body = &source[fn_start..];
+        let fetch = body
+            .find("models::available")
+            .expect("available_models no longer fetches catalogues");
+        let gate = body[..fetch]
+            .find("cli_installed")
+            .expect("available_models no longer skips a missing CLI before fetching");
+        assert!(gate < fetch);
     }
 }

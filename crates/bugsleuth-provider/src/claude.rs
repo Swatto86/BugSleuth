@@ -238,6 +238,15 @@ pub(super) async fn invoke_once(run: Run<'_>) -> Result<ResultEnvelope, Provider
     envelope::parse(stdout)
 }
 
+/// Where the Claude Code CLI lives, if it is installed.
+///
+/// Exposed for the model catalogue and install checks, which need the binary
+/// without wanting anything else this module does.
+#[must_use]
+pub fn binary_path() -> Option<std::path::PathBuf> {
+    resolve_binary()
+}
+
 /// Check that the CLI exists and can run, returning its version.
 ///
 /// Cheap and free: `--version` starts no model. This exists because the

@@ -28,7 +28,27 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::error::ProviderError;
-use crate::{codex, cursor, kilo, kimi, process};
+use crate::{claude, codex, cursor, kilo, kimi, process};
+
+/// Vendors the desktop and CLI know about, in menu order.
+pub const VENDORS: &[&str] = &["claude", "codex", "kilo", "kimi", "cursor"];
+
+/// Whether this vendor's CLI is on the machine, without starting it.
+///
+/// Cheaper than `--version` and cheaper than a catalogue fetch: PATH / known
+/// install locations only. Menus and sign-in checks consult this first so a
+/// missing CLI is never offered or probed as if it were usable.
+#[must_use]
+pub fn cli_installed(vendor: &str) -> bool {
+    match vendor {
+        "claude" => claude::binary_path().is_some(),
+        "codex" => codex::binary_path().is_some(),
+        "kilo" => kilo::binary_path().is_some(),
+        "kimi" => kimi::binary_path().is_some(),
+        "cursor" => cursor::binary_path().is_some(),
+        _ => false,
+    }
+}
 
 /// A named set of models shown together.
 ///
@@ -106,9 +126,14 @@ const CODEX_MODELS: &[&str] = &["gpt-5.6-codex", "gpt-5.6-sol"];
 
 /// Models to offer for a vendor, and what each one can be asked to do.
 ///
-/// Only Kilo costs anything to ask, and asking it starts no model — `kilo
-/// models` reads a cached catalogue.
+/// Refuses when the CLI is not installed — a fixed list for a missing binary
+/// is how Claude and Codex used to appear usable on machines that cannot run
+/// them. Only Kilo costs anything to ask once the binary is present, and
+/// asking it starts no model — `kilo models` reads a cached catalogue.
 pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
+    if !cli_installed(vendor) {
+        return Err(not_installed(vendor));
+    }
     match vendor {
         "claude" => Ok(claude_models()),
         "codex" => Ok(codex_models().await),
@@ -122,10 +147,40 @@ pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
     }
 }
 
+fn not_installed(vendor: &str) -> ProviderError {
+    match vendor {
+        "claude" => ProviderError::NotFound {
+            vendor: "claude",
+            hint: "Install it with `npm install -g @anthropic-ai/claude-code` and sign in by running `claude` once.".into(),
+        },
+        "codex" => ProviderError::NotFound {
+            vendor: "codex",
+            hint: "Install the Codex CLI and sign in with `codex login`.".into(),
+        },
+        "kilo" => ProviderError::NotFound {
+            vendor: "kilo",
+            hint: "Install the Kilo CLI to list its models.".into(),
+        },
+        "kimi" => ProviderError::NotFound {
+            vendor: "kimi",
+            hint: "Install the Kimi Code CLI and sign in with `/login`.".into(),
+        },
+        "cursor" => ProviderError::NotFound {
+            vendor: "cursor",
+            hint: "Install the Cursor Agent CLI (`agent`) and run `agent login`.".into(),
+        },
+        _ => ProviderError::NotFound {
+            vendor: "unknown",
+            hint: format!("no model list for vendor {vendor:?}"),
+        },
+    }
+}
+
 async fn cursor_models() -> Result<VendorCatalogue, ProviderError> {
     let ids = cursor::list_model_ids().await;
     if ids.is_empty() {
-        // CLI missing, timed out, or unparseable — keep a typed-in default.
+        // Binary is present (caller checked) but the list was empty, timed out,
+        // or unparseable — keep a typed-in default rather than blanking the box.
         return Ok(fixed("Cursor", &["auto"]));
     }
     Ok(VendorCatalogue {
@@ -159,10 +214,11 @@ fn fixed(label: &str, models: &[&str]) -> VendorCatalogue {
 
 /// Ask Codex for its catalogue, falling back to the known ids.
 ///
-/// Never fails: a missing CLI, a timeout or an unparseable response all leave
-/// the fallback list, because a menu that empties itself when a command fails
-/// looks identical to a vendor with no models. What is lost in that case is the
-/// per-model effort detail, which is why the fallback is the smaller claim.
+/// Never fails once the CLI is present: a timeout or an unparseable response
+/// leaves the fallback list, because a menu that empties itself when a command
+/// fails looks identical to a vendor with no models. What is lost in that case
+/// is the per-model effort detail, which is why the fallback is the smaller claim.
+/// Missing CLI is refused by [`available`] before this runs.
 async fn codex_models() -> VendorCatalogue {
     let Some(binary) = codex::binary_path() else {
         return fixed("Codex", CODEX_MODELS);

@@ -14,9 +14,9 @@
 //! prompt, a timeout, and a report of exactly what came back.
 //!
 //! Deliberately **at Run, not at launch**. A desktop run checks each provider it
-//! selected exactly once before starting any lane; the manual check still covers
-//! all three. That spends only the calls needed to prevent a much costlier
-//! partial run.
+//! selected exactly once before starting any lane; the manual check covers every
+//! *installed* vendor. That spends only the calls needed to prevent a much
+//! costlier partial run.
 
 use std::path::Path;
 use std::time::Duration;
@@ -98,26 +98,62 @@ fn answer_from(
     Ok(answer(&out.stdout))
 }
 
-/// Ask every vendor for one word, concurrently.
+/// Ask every installed vendor for one word, concurrently.
 ///
-/// Concurrent because these are independent processes and a person is waiting:
-/// three sequential timeouts is three minutes of spinner to learn what one
-/// minute can tell you.
+/// Vendors whose CLI is not on the machine are omitted — there is nothing to
+/// ask, and including them as failures made "Check sign-in" look like a broken
+/// install check. Concurrent because these are independent processes and a
+/// person is waiting: sequential timeouts stack for no gain.
 pub async fn check_all() -> Vec<(&'static str, SignIn)> {
+    use crate::models::cli_installed;
+
+    let wants_claude = cli_installed("claude");
+    let wants_codex = cli_installed("codex");
+    let wants_kilo = cli_installed("kilo");
+    let wants_kimi = cli_installed("kimi");
+    let wants_cursor = cli_installed("cursor");
+
     let (claude, codex, kilo, kimi, cursor) = tokio::join!(
-        crate::claude::signin(None),
-        crate::codex::signin(),
-        crate::kilo::signin(),
-        crate::kimi::signin(),
-        crate::cursor::signin()
+        async {
+            if wants_claude {
+                Some(("claude", crate::claude::signin(None).await))
+            } else {
+                None
+            }
+        },
+        async {
+            if wants_codex {
+                Some(("codex", crate::codex::signin().await))
+            } else {
+                None
+            }
+        },
+        async {
+            if wants_kilo {
+                Some(("kilo", crate::kilo::signin().await))
+            } else {
+                None
+            }
+        },
+        async {
+            if wants_kimi {
+                Some(("kimi", crate::kimi::signin().await))
+            } else {
+                None
+            }
+        },
+        async {
+            if wants_cursor {
+                Some(("cursor", crate::cursor::signin().await))
+            } else {
+                None
+            }
+        },
     );
-    vec![
-        ("claude", claude),
-        ("codex", codex),
-        ("kilo", kilo),
-        ("kimi", kimi),
-        ("cursor", cursor),
-    ]
+    [claude, codex, kilo, kimi, cursor]
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
 /// Run one CLI's smallest invocation and read what happened.
@@ -311,5 +347,18 @@ mod tests {
         );
         assert_eq!(out, SignIn::TimedOut(60));
         assert!(out.describe("claude").contains("sweep would hang"));
+    }
+
+    #[test]
+    fn check_all_skips_vendors_without_a_cli() {
+        let source = include_str!("signin.rs");
+        let fn_start = source
+            .find("pub async fn check_all")
+            .expect("check_all is gone");
+        let body = &source[fn_start..];
+        assert!(
+            body.contains("cli_installed"),
+            "check_all no longer skips a missing CLI before spending a model call"
+        );
     }
 }

@@ -9,7 +9,6 @@
 import {
   LANES,
   LANE_TITLES,
-  VENDORS,
   joinId,
   splitId,
   supportsAgents,
@@ -19,6 +18,7 @@ import {
   type ModelSetting,
   type Vendor,
 } from "./model";
+import { offeredVendors } from "./cli-offer.ts";
 
 export interface VendorStatus {
   name: string;
@@ -80,6 +80,8 @@ export interface VendorModels {
   efforts: string[];
   /** Efforts a particular model accepts, for vendors where it is per model. */
   efforts_by_model: Record<string, string[] | undefined>;
+  /** Whether this vendor's CLI is installed on the machine. */
+  installed: boolean;
   error: string | null;
 }
 
@@ -115,7 +117,7 @@ export function matrixRows(
     // Rebuilding the table replaces every element, so keyboard focus lands
     // on <body>. These keys let the caller put it back where it was.
     vendorSelect.dataset["focusKey"] = `vendor-${index}`;
-    for (const name of VENDORS) {
+    for (const name of offeredVendors(catalogue, vendor)) {
       vendorSelect.append(option(name, name, name === vendor));
     }
     vendorSelect.addEventListener("change", () => {

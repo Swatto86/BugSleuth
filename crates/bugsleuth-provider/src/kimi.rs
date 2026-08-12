@@ -172,6 +172,15 @@ fn build_args(spec: &KimiSweep<'_>, brief: &brief_file::BriefFile) -> Vec<String
     args
 }
 
+/// Where the Kimi Code CLI lives, if it is installed.
+///
+/// Exposed for the model catalogue and install checks, which need the binary
+/// without wanting anything else this module does.
+#[must_use]
+pub fn binary_path() -> Option<std::path::PathBuf> {
+    discover::resolve_binary()
+}
+
 /// Whether the CLI can be started at all, and which version answered.
 ///
 /// The counterpart to [`signin`], and the weaker of the two: every one of these

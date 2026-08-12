@@ -17,7 +17,6 @@ import { listen } from "@tauri-apps/api/event";
 
 import { confirmDialog } from "./dialog";
 import {
-  VENDORS,
   applyStatus,
   effortIsValid,
   joinId,
@@ -26,6 +25,7 @@ import {
   type Settings,
   type Vendor,
 } from "./model";
+import { offeredVendors, vendorCliPresent } from "./cli-offer.ts";
 import { effortPicker, modelPicker, option } from "./pickers";
 import type { Catalogue } from "./view";
 
@@ -78,35 +78,27 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
   // the app would be the only recovery.
   let completionEventsReady = false;
 
-  for (const name of VENDORS) {
-    ui.vendor.append(option(name, name, false));
-  }
-
   /** Draw the provider, model and effort controls from the stored settings. */
   const draw = (): void => {
-    // Which of the two controls this redraw replaces holds focus, if either.
-    // An apply runs for hours with these enabled, and its completion handler
-    // calls draw(): replacing the element containing focus drops focus to
-    // <body> in WebView2, so a keyboard user waiting in the model box was
-    // returned to the top of the application when the apply finished. Only
-    // these two containers are considered — Status, Stop, the vendor selector
-    // and the publish checkboxes are not replaced and must not be disturbed.
+    // Replacing a focused picker drops focus to <body> in WebView2 — restore it.
     const focused = document.activeElement;
     const focusKey =
       focused instanceof HTMLElement &&
       (ui.model.contains(focused) || ui.effort.contains(focused))
         ? focused.dataset["focusKey"]
         : undefined;
-    // Read through `deps.settings()` every time, never captured into a handler.
-    // The window replaces its settings object once, when the stored ones load,
-    // and a closure holding the old one would write to an object nothing reads.
+    // Always read live settings: boot replaces the object once after load.
     const stored = deps.settings().apply_model;
-    // `splitId("")` answers Claude, which is also what typing a bare model name
-    // into the box would mean — so that is what the provider control has to
-    // show. Setting it to "" left the control blank with no option matching,
-    // and choosing "claude" from the list made it go blank again: the stored
-    // spec for a Claude model with no name *is* the empty string.
-    ui.vendor.value = splitId(stored).vendor;
+    const selected = splitId(stored).vendor;
+    ui.vendor.replaceChildren(
+      ...offeredVendors(deps.catalogue(), selected).map((name) =>
+        option(name, name, name === selected),
+      ),
+    );
+    ui.vendor.value = selected;
+    if (ui.vendor.value !== selected && ui.vendor.options.length > 0) {
+      ui.vendor.selectedIndex = 0;
+    }
     ui.model.replaceChildren(
       modelPicker({
         key: "apply-model",
@@ -211,19 +203,23 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
       live.apply_effort,
       deps.catalogue(),
     );
+    const cliPresent = vendorCliPresent(live.apply_model, deps.catalogue());
     ui.button.disabled =
       !completionEventsReady ||
       applying ||
       deps.busy() ||
       !chosen ||
-      !validEffort;
+      !validEffort ||
+      !cliPresent;
     ui.button.title = !completionEventsReady
       ? "Applying is unavailable until its result listener is ready."
       : !chosen
         ? "Choose a provider and model first."
-        : validEffort
-          ? "Run the fix prompt against this repository, editing files in place."
-          : "This model does not accept the stored effort; choose Default first.";
+        : !cliPresent
+          ? "This provider's CLI is not installed on this machine."
+          : validEffort
+            ? "Run the fix prompt against this repository, editing files in place."
+            : "This model does not accept the stored effort; choose Default first.";
   };
 
   ui.vendor.addEventListener("change", () => {

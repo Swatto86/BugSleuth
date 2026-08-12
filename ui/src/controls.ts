@@ -162,6 +162,10 @@ export function bindControls(deps: ControlDeps): void {
     )
       .then((results) => {
         ui.vendors.replaceChildren(...signinPills(results));
+        if (results.length === 0) {
+          deps.setStatus("No provider CLIs are installed", "error");
+          return;
+        }
         const working = results.filter((r) => r.available).length;
         deps.setStatus(
           `${working} of ${results.length} vendors answered`,

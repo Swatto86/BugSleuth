@@ -6,6 +6,7 @@
  */
 
 import type { Catalogue } from "./view";
+import { vendorCliPresent } from "./cli-offer.ts";
 
 /**
  * The most passes a model may request.
@@ -332,6 +333,7 @@ export function canRun(settings: Settings, catalogue: Catalogue): boolean {
     !settings.models.every(
       (model) =>
         model.id.trim() !== "" &&
+        vendorCliPresent(model.id, catalogue) &&
         effortIsValid(model.id, model.effort, catalogue) &&
         (!model.use_agents || supportsAgents(model.id)) &&
         (!model.use_agents ||

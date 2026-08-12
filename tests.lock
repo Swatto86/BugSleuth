@@ -1,4 +1,5 @@
 platform windows
+node Run refuses a model whose CLI is not installed
 node Tab with focus outside the dialog's buttons re-enters the trap
 node a bare Claude model never gains a redundant prefix
 node a bare and a prefixed Claude model on one lane count as a single unit
@@ -138,6 +139,7 @@ node lane titles match the engine's own names, including UX
 node light theme meets WCAG AA everywhere the UI uses it
 node long-running actions wait for their completion listeners
 node manual sign-in cannot be overwritten by startup preflight
+node menus only offer vendors whose CLI is installed
 node names are joined the way English does
 node no CSS rule styles a class nothing uses
 node no call into Rust can fail without the user being told
@@ -318,6 +320,8 @@ rust cancel::tests::nothing_is_cancelled_until_it_is_asked_for
 rust cancel::tests::one_stop_wakes_every_waiter
 rust cancel::tests::stopping_twice_is_harmless
 rust catalogue::tests::a_vendor_answers_about_effort_either_for_the_cli_or_for_each_model
+rust catalogue::tests::catalogue_checks_install_before_asking_a_cli
+rust catalogue::tests::missing_cli_reasons_name_every_known_vendor
 rust caveats::tests::every_report_renderer_uses_the_shared_caveats
 rust caveats::tests::nothing_is_said_at_all_when_no_sweeps_ran
 rust caveats::tests::the_caution_fires_for_a_kilo_vendor_and_not_for_a_model_merely_named_one
@@ -587,9 +591,12 @@ rust models::kilo_catalogue::tests::unknown_effort_names_sort_after_known_ones_r
 rust models::tests::a_failed_codex_listing_uses_the_fallback
 rust models::tests::a_failed_kilo_listing_is_an_error_not_an_empty_catalogue
 rust models::tests::a_kilo_model_billed_to_your_own_plan_is_not_filed_under_the_subscription
+rust models::tests::available_checks_install_before_inventing_a_catalogue
+rust models::tests::available_consults_cli_installed_before_any_catalogue
 rust models::tests::claude_catalogue_offers_the_documented_fable_alias
 rust models::tests::claude_effort_is_recorded_per_model
 rust models::tests::claude_effort_is_rejected_when_the_model_cannot_apply_it
+rust models::tests::cli_installed_rejects_unknown_vendors
 rust models::tests::effort_not_supported_by_codex_model_is_rejected
 rust models::tests::efforts_are_recorded_per_model_and_only_where_the_model_has_any
 rust one_defect_anchored_five_lines_apart_by_two_vendors_still_merges
@@ -714,6 +721,7 @@ rust signin::tests::a_failure_keeps_the_reason_the_vendor_gave
 rust signin::tests::a_signal_exit_code_is_a_failed_probe
 rust signin::tests::a_timeout_says_what_it_means_for_a_real_run
 rust signin::tests::an_empty_answer_is_neither_a_pass_nor_a_failure
+rust signin::tests::check_all_skips_vendors_without_a_cli
 rust signin::tests::only_a_real_answer_counts_as_signed_in
 rust signin::tests::sign_in_failures_redact_credentials
 rust similarity::tests::a_longer_description_never_scores_worse_for_saying_more

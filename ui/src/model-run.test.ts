@@ -20,6 +20,7 @@ import {
   supportsAgents,
   usesUltracode,
 } from "./model.ts";
+import { offeredVendors, vendorCliPresent } from "./cli-offer.ts";
 import type { Catalogue } from "./view.ts";
 
 const base = {
@@ -197,6 +198,7 @@ test("an effort the model does not accept blocks the action", () => {
     claude: {
       vendor: "claude",
       error: "",
+      installed: true,
       groups: [],
       efforts: [],
       efforts_by_model: { haiku: [], sonnet: ["high", "low"] },
@@ -234,4 +236,72 @@ test("an effort the model does not accept blocks the action", () => {
   // With no catalogue at all, backend validation stays authoritative rather
   // than every configured action being disabled for the session.
   assert.equal(effortIsValid("haiku", "high", {}), true);
+});
+
+test("menus only offer vendors whose CLI is installed", () => {
+  const catalogue: Catalogue = {
+    claude: {
+      vendor: "claude",
+      installed: true,
+      error: null,
+      groups: [],
+      efforts: [],
+      efforts_by_model: {},
+    },
+    codex: {
+      vendor: "codex",
+      installed: false,
+      error: "Codex CLI not found",
+      groups: [],
+      efforts: [],
+      efforts_by_model: {},
+    },
+    kilo: {
+      vendor: "kilo",
+      installed: true,
+      error: null,
+      groups: [],
+      efforts: [],
+      efforts_by_model: {},
+    },
+  };
+  assert.deepEqual(offeredVendors(catalogue), ["claude", "kilo"]);
+  // A stale saved vendor stays visible so the user can switch away from it.
+  assert.deepEqual(offeredVendors(catalogue, "codex"), [
+    "claude",
+    "kilo",
+    "codex",
+  ]);
+  // Before the catalogue loads, every known vendor stays offered.
+  assert.ok(offeredVendors({}).includes("cursor"));
+});
+
+test("Run refuses a model whose CLI is not installed", () => {
+  const catalogue: Catalogue = {
+    claude: {
+      vendor: "claude",
+      installed: false,
+      error: "not found",
+      groups: [{ label: "Claude", models: ["haiku"] }],
+      efforts: [],
+      efforts_by_model: {},
+    },
+  };
+  assert.equal(vendorCliPresent("haiku", catalogue), false);
+  assert.equal(
+    canRun(
+      {
+        ...base,
+        repo: "C:/x",
+        models: [
+          { id: "haiku", lanes: ["correctness"], effort: "", passes: 1 },
+        ],
+      },
+      catalogue,
+    ),
+    false,
+    "Run stayed enabled for a provider whose CLI is not on the machine",
+  );
+  // Empty catalogue (still loading) must not block.
+  assert.equal(vendorCliPresent("haiku", {}), true);
 });
