@@ -1,0 +1,60 @@
+# Produce a fresh tests.lock.<platform> on each OS.
+#
+# The verify gate compares against a per-platform inventory. Regenerating those
+# files needs the OS they name, so this workflow is the way to refresh them
+# without a local matrix of machines.
+name: test-inventory
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: test-inventory-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  inventory:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            lock: tests.lock.windows
+          - os: ubuntu-latest
+            lock: tests.lock.linux
+          - os: macos-latest
+            lock: tests.lock.macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: inventory-${{ matrix.os }}
+
+      - name: Linux system dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev
+
+      - name: Write inventory
+        shell: bash
+        run: ./scripts/test-inventory.sh "${{ matrix.lock }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.lock }}
+          path: ${{ matrix.lock }}
