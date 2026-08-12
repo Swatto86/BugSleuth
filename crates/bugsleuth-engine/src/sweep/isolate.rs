@@ -110,6 +110,21 @@ fn strip_in(dir: &Path, root: &Path, removed: &mut Vec<String>) -> std::io::Resu
             continue;
         }
 
+        if INSTRUCTION_FILES.contains(&name.as_str()) {
+            if is_link {
+                // Remove the link only — never the target.
+                if std::fs::remove_file(&path).is_err() {
+                    std::fs::remove_dir(&path)?;
+                }
+            } else if metadata.is_dir() {
+                std::fs::remove_dir_all(&path)?;
+            } else {
+                std::fs::remove_file(&path)?;
+            }
+            removed.push(relative(&path, root));
+            continue;
+        }
+
         if is_link {
             continue;
         }
@@ -119,9 +134,6 @@ fn strip_in(dir: &Path, root: &Path, removed: &mut Vec<String>) -> std::io::Resu
                 continue;
             }
             strip_in(&path, root, removed)?;
-        } else if INSTRUCTION_FILES.contains(&name.as_str()) {
-            std::fs::remove_file(&path)?;
-            removed.push(relative(&path, root));
         }
     }
     Ok(())
