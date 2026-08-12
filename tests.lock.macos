@@ -1,3 +1,4 @@
+platform macos
 node a bare and a prefixed Claude model on one lane count as a single unit
 node a bare Claude model never gains a redundant prefix
 node a bare voided call is not handled
@@ -216,7 +217,6 @@ node two models on one lane is two sweeps, because that is the point
 node unknown lane names are ignored rather than counted
 node vendor parsing matches the engine, including bare and colon-containing names
 node writes stay blocked when saved settings failed to load
-platform macos
 rust agreement_counts_distinct_vendors
 rust anchor::tests::a_directory_link_out_of_the_repository_is_refused
 rust anchor::tests::a_snippet_occurring_twice_anchors_to_the_occurrence_nearest_the_claim
