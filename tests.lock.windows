@@ -428,6 +428,7 @@ rust cursor::apply::tests::a_nested_agents_md_refuses_cursor_apply
 rust cursor::apply::tests::a_repository_carrying_cursor_instructions_is_refused
 rust cursor::apply::tests::apply_forces_writes_and_never_asks
 rust cursor::apply::tests::claude_md_alone_does_not_refuse_cursor_apply
+rust cursor::apply::tests::outbound_directory_link_is_not_walked_for_instructions
 rust cursor::brief_file::tests::a_private_brief_is_removed_on_drop
 rust cursor::catalogue::tests::ignores_noise_rather_than_emptying_the_menu
 rust cursor::catalogue::tests::parses_the_documented_listing_shape
@@ -750,8 +751,10 @@ rust sweep::isolate::tests::an_instruction_directory_name_is_removed_regardless_
 rust sweep::isolate::tests::each_vendors_own_instruction_file_is_stripped
 rust sweep::isolate::tests::external_skill_directories_go_whole
 rust sweep::isolate::tests::instruction_files_go_and_code_stays
+rust sweep::isolate::tests::instruction_named_directory_link_is_removed_without_touching_its_target
 rust sweep::isolate::tests::kilo_project_control_files_are_removed
 rust sweep::isolate::tests::matching_ignores_case_because_windows_does
+rust sweep::isolate::tests::outbound_directory_link_is_not_followed_for_deletion
 rust sweep::isolate::tests::the_git_directory_is_never_touched
 rust sweep::isolation_tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
 rust sweep::isolation_tests::kilo_does_not_silently_omit_submodule_contents
