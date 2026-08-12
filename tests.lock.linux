@@ -58,6 +58,7 @@ node a sweep that found nothing is not confusable with one that never ran
 node agent and single-agent prompts are distinct sweeps
 node agents are available for Claude and Codex but not Kilo Ask
 node an apply that changed nothing does not claim to have applied anything
+node an available update clears the checking status before the install confirmation
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
@@ -418,6 +419,7 @@ rust commands::tests::an_empty_repository_path_is_refused_with_something_actiona
 rust commands::tests::settings_map_onto_the_engine_config_without_losing_lanes
 rust commands::tests::the_fix_prompt_carries_the_repo_and_every_unreviewed_lane
 rust commands::tests::two_checkouts_with_the_same_folder_name_do_not_share_a_run_directory
+rust cursor::apply::tests::a_repository_carrying_cursor_instructions_is_refused
 rust cursor::apply::tests::apply_forces_writes_and_never_asks
 rust cursor::brief_file::tests::a_private_brief_is_removed_on_drop
 rust cursor::catalogue::tests::ignores_noise_rather_than_emptying_the_menu
