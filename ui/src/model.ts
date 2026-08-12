@@ -59,7 +59,7 @@ export interface ModelSetting {
 }
 
 /** The vendors that can be picked, in the order they are offered. */
-export const VENDORS = ["claude", "codex", "kilo", "kimi"] as const;
+export const VENDORS = ["claude", "codex", "kilo", "kimi", "cursor"] as const;
 export type Vendor = (typeof VENDORS)[number];
 
 /**
@@ -241,7 +241,7 @@ export function vendorOf(modelId: string): string {
 }
 
 /** Whether BugSleuth's read-only invocation of this provider can delegate. */
-export const CANNOT_DELEGATE = ["kilo", "kimi"] as const;
+export const CANNOT_DELEGATE = ["kilo", "kimi", "cursor"] as const;
 
 /**
  * Whether this vendor can be asked to split a lane across subagents.

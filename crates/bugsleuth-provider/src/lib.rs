@@ -17,6 +17,7 @@
 
 pub mod claude;
 pub mod codex;
+pub mod cursor;
 mod error;
 mod find;
 mod json;

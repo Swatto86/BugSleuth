@@ -2,15 +2,21 @@
 
 use bugsleuth_provider::process::redact_secrets;
 use bugsleuth_provider::signin::SignIn;
-use bugsleuth_provider::{claude, codex, kilo, kimi};
+use bugsleuth_provider::{claude, codex, cursor, kilo, kimi};
 
 use super::Vendor;
 
 pub(super) fn vendors_for(models: &[String]) -> Vec<Vendor> {
-    [Vendor::Claude, Vendor::Codex, Vendor::Kilo, Vendor::Kimi]
-        .into_iter()
-        .filter(|vendor| models.iter().any(|model| Vendor::parse(model).0 == *vendor))
-        .collect()
+    [
+        Vendor::Claude,
+        Vendor::Codex,
+        Vendor::Kilo,
+        Vendor::Kimi,
+        Vendor::Cursor,
+    ]
+    .into_iter()
+    .filter(|vendor| models.iter().any(|model| Vendor::parse(model).0 == *vendor))
+    .collect()
 }
 
 pub(super) fn kilo_permission_error() -> Option<String> {
@@ -53,7 +59,7 @@ pub(super) fn summarize(checks: Vec<(Vendor, SignIn)>) -> Result<(), String> {
 
 /// The distinct routes a plan will actually invoke for one vendor.
 ///
-/// Kilo and Kimi both authenticate per route rather than per vendor, so
+/// Kilo, Kimi and Cursor authenticate per model rather than per vendor, so
 /// reducing the plan to "wants this vendor" and asking the configured default
 /// tests an invocation the run was never going to make. Deduplicated because
 /// several lanes commonly share one model, and each check costs a real call.
@@ -81,10 +87,11 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
     let wants_codex = vendors.contains(&Vendor::Codex);
     let wants_kilo = vendors.contains(&Vendor::Kilo);
     let wants_kimi = vendors.contains(&Vendor::Kimi);
+    let wants_cursor = vendors.contains(&Vendor::Cursor);
     let kilo_error = wants_kilo.then(kilo_permission_error).flatten();
     let check_kilo = wants_kilo && kilo_error.is_none();
 
-    let (claude_result, codex_result, kilo_result, kimi_result) = tokio::join!(
+    let (claude_result, codex_result, kilo_result, kimi_result, cursor_result) = tokio::join!(
         async {
             if wants_claude {
                 Some((Vendor::Claude, claude::signin(None).await))
@@ -125,6 +132,15 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
                 }
             }
             results
+        },
+        async {
+            let mut results = Vec::new();
+            if wants_cursor {
+                for (model, _) in routes_for(Vendor::Cursor, units) {
+                    results.push((Vendor::Cursor, cursor::signin_for(&model, None).await));
+                }
+            }
+            results
         }
     );
 
@@ -134,6 +150,7 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
             .flatten()
             .chain(kilo_result)
             .chain(kimi_result)
+            .chain(cursor_result)
             .collect(),
         kilo_error.into_iter().collect(),
     )

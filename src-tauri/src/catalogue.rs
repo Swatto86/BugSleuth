@@ -10,7 +10,7 @@ use bugsleuth_engine::models::{self, ModelGroup};
 use serde::Serialize;
 
 /// Vendors offered in the model dropdown, in the order they appear.
-const VENDORS: [&str; 4] = ["claude", "codex", "kilo", "kimi"];
+const VENDORS: [&str; 5] = ["claude", "codex", "kilo", "kimi", "cursor"];
 
 /// One vendor's menu.
 #[derive(Serialize)]
@@ -77,6 +77,11 @@ fn empty_list_reason(vendor: &str) -> String {
             "run `kimi` then /login, or type an alias by hand — the box accepts one."
         )
         .to_string(),
+        "cursor" => concat!(
+            "No models returned by `agent models`. Install the Cursor Agent CLI, run ",
+            "`agent login`, or type a model id by hand — the box accepts one."
+        )
+        .to_string(),
         other => format!("{other} returned no models"),
     }
 }
@@ -101,7 +106,7 @@ mod tests {
         // its control can do is refuse. `efforts_for` says so explicitly rather
         // than leaving it unknown, and that is what makes the refusal happen —
         // an unknown vendor is waved through on the assumption it knows best.
-        const NO_EFFORT: [&str; 1] = ["kimi"];
+        const NO_EFFORT: [&str; 2] = ["kimi", "cursor"];
 
         // What must never happen is a vendor with none of the three, which
         // would render a control that silently does nothing.

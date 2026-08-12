@@ -249,3 +249,15 @@ fn an_effort_is_refused_for_a_vendor_that_has_no_such_flag() {
     assert!(error.to_string().contains("kimi"), "{error}");
     assert!(super::check_effort("kimi:kimi-code/k3", "").is_ok());
 }
+
+#[test]
+fn cursor_vendor_and_effort_rules() {
+    assert_eq!(super::vendor_of("cursor:composer-2.5"), "cursor");
+    assert_eq!(
+        super::canonical_spec("cursor:composer-2.5"),
+        "cursor:composer-2.5"
+    );
+    let error = super::check_effort("cursor:composer-2.5", "high").expect_err("no effort flag");
+    assert!(error.to_string().contains("cursor"), "{error}");
+    assert!(super::check_effort("cursor:composer-2.5", "").is_ok());
+}

@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::error::ProviderError;
-use crate::{codex, kilo, kimi, process};
+use crate::{codex, cursor, kilo, kimi, process};
 
 /// A named set of models shown together.
 ///
@@ -114,11 +114,27 @@ pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
         "codex" => Ok(codex_models().await),
         "kilo" => kilo_models().await,
         "kimi" => Ok(kimi_models()),
+        "cursor" => cursor_models().await,
         _ => Err(ProviderError::NotFound {
             vendor: "unknown",
             hint: format!("no model list for vendor {vendor:?}"),
         }),
     }
+}
+
+async fn cursor_models() -> Result<VendorCatalogue, ProviderError> {
+    let ids = cursor::list_model_ids().await;
+    if ids.is_empty() {
+        // CLI missing, timed out, or unparseable — keep a typed-in default.
+        return Ok(fixed("Cursor", &["auto"]));
+    }
+    Ok(VendorCatalogue {
+        groups: vec![ModelGroup {
+            label: "Cursor".to_string(),
+            models: ids,
+        }],
+        efforts_by_model: BTreeMap::new(),
+    })
 }
 
 /// Kimi's menu, read from the CLI's own configuration.

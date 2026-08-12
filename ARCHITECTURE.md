@@ -2,7 +2,7 @@
 
 Living document. Code is ground truth; correct this when they diverge.
 
-**Last updated:** 1 August 2026.
+**Last updated:** 12 August 2026.
 
 ## The constraint everything follows from
 
@@ -54,6 +54,8 @@ absorbing them is most of that crate's job:
 | Claude | Inline JSON Schema | Tool allowlist | One JSON envelope |
 | Codex | Schema as a **file** | `--sandbox read-only` | Final message to a file |
 | Kilo | **None** — described in the prompt | **None** — needs a worktree | NDJSON events, messages repeated |
+| Kimi | **None** — described in the prompt | Agent-file allowlist + worktree | Text reply |
+| Cursor (`agent`) | **None** — described in the prompt | `--mode ask` + worktree (no ignore-rules) | Text reply |
 
 Three consequences worth knowing:
 
@@ -203,6 +205,7 @@ a shell, so none of it is a sandbox in the sense that word usually carries:
   and is not something BugSleuth can observe from outside.
 - **Kimi** is confined by its agent file, whose `tools` list is an allowlist;
   omitting it would allow every tool, including the ones that spawn subagents.
+- **Cursor** runs without `--mode ask` and with `--force`, so print mode may write; there is no tighter per-invocation write allowlist BugSleuth can pass.
 - **Kilo** has no per-invocation limit at all — its permissions come from the
   machine's own config. So an apply is refused outright when the repository
   ships Kilo configuration of its own, because a `kilo.jsonc` in the working
@@ -232,3 +235,6 @@ it is the only invocation that has to write.
 No PRs or CI integration. No persistence beyond
 per-sweep JSON files — `--resume` reads those rather than a database, which is
 the smallest thing that makes a dead run recoverable.
+
+
+

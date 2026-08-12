@@ -275,11 +275,12 @@ fn credits_a_tool(line: &str) -> bool {
     // Names, and the domains they sign from: a trailer reading
     // `Assistant <noreply@anthropic.com>` names no tool the first half of this
     // list would catch, and it is the same attribution.
-    const TOOLS: [&str; 11] = [
+    const TOOLS: [&str; 12] = [
         "claude",
         "codex",
         "kilo",
         "kimi",
+        "cursor",
         "copilot",
         "chatgpt",
         "gemini",

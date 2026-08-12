@@ -23,6 +23,7 @@ pub(crate) fn support(vendor: Vendor, _model: &str) -> Result<&'static str, &'st
         ),
         Vendor::Kilo => Err("Kilo's read-only Ask agent cannot delegate"),
         Vendor::Kimi => Err("Kimi has no subagent mode BugSleuth can ask for"),
+        Vendor::Cursor => Err("Cursor Ask mode has no subagent mode BugSleuth can ask for"),
     }
 }
 
@@ -34,11 +35,17 @@ pub(crate) fn support(vendor: Vendor, _model: &str) -> Result<&'static str, &'st
 /// and no compiler spans them.
 #[must_use]
 pub fn cannot_delegate() -> Vec<&'static str> {
-    [Vendor::Claude, Vendor::Codex, Vendor::Kilo, Vendor::Kimi]
-        .into_iter()
-        .filter(|vendor| support(*vendor, "").is_err())
-        .map(Vendor::label)
-        .collect()
+    [
+        Vendor::Claude,
+        Vendor::Codex,
+        Vendor::Kilo,
+        Vendor::Kimi,
+        Vendor::Cursor,
+    ]
+    .into_iter()
+    .filter(|vendor| support(*vendor, "").is_err())
+    .map(Vendor::label)
+    .collect()
 }
 
 #[cfg(test)]
@@ -48,7 +55,13 @@ mod tests {
     /// Every vendor answers, and the two halves cannot both be missing.
     #[test]
     fn every_vendor_either_delegates_or_says_why_not() {
-        for vendor in [Vendor::Claude, Vendor::Codex, Vendor::Kilo, Vendor::Kimi] {
+        for vendor in [
+            Vendor::Claude,
+            Vendor::Codex,
+            Vendor::Kilo,
+            Vendor::Kimi,
+            Vendor::Cursor,
+        ] {
             match support(vendor, "") {
                 Ok(instruction) => assert!(
                     instruction.contains("subagent") || instruction.contains("Explore"),
@@ -68,7 +81,7 @@ mod tests {
     #[test]
     fn the_refusing_vendors_are_derived_from_the_same_answer() {
         let refusing = cannot_delegate();
-        assert_eq!(refusing, ["kilo", "kimi"], "{refusing:?}");
+        assert_eq!(refusing, ["kilo", "kimi", "cursor"], "{refusing:?}");
         assert!(support(Vendor::Claude, "").is_ok());
         assert!(support(Vendor::Codex, "").is_ok());
     }

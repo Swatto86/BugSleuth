@@ -4,6 +4,7 @@ mod agents;
 mod isolate;
 mod precheck;
 mod revision;
+mod vendor;
 mod verify;
 
 use std::path::Path;
@@ -13,6 +14,7 @@ use anyhow::Result;
 use bugsleuth_domain::{Lane, ModelId, RawFinding};
 use bugsleuth_provider::claude::{self, ClaudeSweep};
 use bugsleuth_provider::codex::{self, CodexSweep};
+use bugsleuth_provider::cursor::{self, CursorSweep};
 use bugsleuth_provider::kilo::{self, KiloSweep};
 use bugsleuth_provider::kimi::{self, KimiSweep};
 use bugsleuth_provider::process::redact_secrets;
@@ -26,75 +28,7 @@ pub(crate) use agents::support as agent_support;
 pub use precheck::selected as precheck_selected;
 pub(crate) use revision::clean_revision;
 use revision::reviewed_commit;
-
-/// Which CLI to run, and which model within it.
-///
-/// A plain enum because the supported provider set is closed and small.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Vendor {
-    Claude,
-    Codex,
-    Kilo,
-    /// Moonshot's Kimi Code CLI. Present because a Kimi subscription reaches
-    /// models a bring-your-own-key route does not, and only the native CLI can
-    /// use that session.
-    Kimi,
-}
-
-impl Vendor {
-    /// Read a `vendor:model` spec such as `codex:gpt-5.6-codex`. A bare name
-    /// means Claude, which keeps the common case short.
-    pub fn parse(spec: &str) -> (Vendor, &str) {
-        match spec.split_once(':') {
-            Some(("codex", model)) => (Vendor::Codex, model),
-            Some(("claude", model)) => (Vendor::Claude, model),
-            Some(("kilo", model)) => (Vendor::Kilo, model),
-            Some(("kimi", model)) => (Vendor::Kimi, model),
-            _ => (Vendor::Claude, spec),
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Vendor::Claude => "claude",
-            Vendor::Codex => "codex",
-            Vendor::Kilo => "kilo",
-            Vendor::Kimi => "kimi",
-        }
-    }
-
-    /// Whether the CLI can be handed a JSON Schema it will actually enforce.
-    /// Kilo cannot, so its brief has to describe the shape in words instead.
-    pub fn enforces_schema(self) -> bool {
-        !matches!(self, Vendor::Kilo | Vendor::Kimi)
-    }
-
-    /// Whether a sweep by this vendor must run in a throwaway checkout rather
-    /// than against the repository itself.
-    ///
-    /// True only for Kilo, and not by preference. Codex takes `--sandbox
-    /// read-only` and Claude takes a tool allowlist, so neither can write. Kilo
-    /// has no per-invocation equivalent — its permissions come from the user's
-    /// own global config — so the only way to guarantee a review cannot modify
-    /// the code it is reviewing is to give it a copy.
-    pub fn needs_isolation(self) -> bool {
-        matches!(self, Vendor::Kilo | Vendor::Kimi)
-    }
-}
-
-/// The `vendor:model` a spec resolves to, exactly as a report records it.
-///
-/// One function, because the label was being built in one place and compared
-/// against a raw config string in another. A unit configured as `sonnet`
-/// produced a report saying `claude:sonnet`, and the equality test between them
-/// was never true — so a cancelled run counted every finished sweep as still
-/// outstanding and told the reader that lanes it had already swept were not
-/// reached.
-#[must_use]
-pub fn resolved_label(spec: &str) -> String {
-    let (vendor, model) = Vendor::parse(spec);
-    format!("{}:{model}", vendor.label())
-}
+pub use vendor::{Vendor, resolved_label};
 
 pub struct Request<'a> {
     pub repo: &'a Path,
@@ -173,6 +107,15 @@ async fn invoke_vendor(
         // send a value its CLI rejects. `plan::check_effort` refuses the
         // combination before a sweep is paid for.
         Vendor::Kimi => kimi::sweep(KimiSweep {
+            worktree: reviewed,
+            model,
+            brief,
+            timeout: request.timeout,
+            binary: request.binary,
+        })
+        .await
+        .map(|r| (r.findings.findings, None, false, None)),
+        Vendor::Cursor => cursor::sweep(CursorSweep {
             worktree: reviewed,
             model,
             brief,
@@ -326,17 +269,19 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
 /// that is installed but not signed in. The desktop's selected-provider check
 /// proves that.
 pub async fn probe_all() -> Vec<(&'static str, Result<String, String>)> {
-    let (claude, codex, kilo, kimi) = tokio::join!(
+    let (claude, codex, kilo, kimi, cursor) = tokio::join!(
         claude::probe(),
         codex::probe(),
         kilo::probe(),
-        kimi::probe()
+        kimi::probe(),
+        cursor::probe()
     );
     vec![
         ("claude", claude.map_err(|e| e.to_string())),
         ("codex", codex.map_err(|e| e.to_string())),
         ("kilo", kilo.map_err(|e| e.to_string())),
         ("kimi", kimi.map_err(|e| e.to_string())),
+        ("cursor", cursor.map_err(|e| e.to_string())),
     ]
 }
 
@@ -378,6 +323,10 @@ pub async fn preflight() -> Result<()> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "sweep/vendor_tests.rs"]
+mod vendor_tests;
 
 #[cfg(test)]
 mod isolation_tests;

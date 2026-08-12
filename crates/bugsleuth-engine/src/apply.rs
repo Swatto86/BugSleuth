@@ -302,6 +302,16 @@ async fn run_provider(
             )
             .await
         }
+        Vendor::Cursor => {
+            bugsleuth_provider::cursor::apply(
+                request.repo,
+                model,
+                request.effort,
+                request.prompt,
+                request.timeout,
+            )
+            .await
+        }
     }
 }
 

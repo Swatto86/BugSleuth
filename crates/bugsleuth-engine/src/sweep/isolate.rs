@@ -36,6 +36,7 @@ const INSTRUCTION_FILES: &[&str] = &[
     "claude.md",
     "kilo.md",
     "kimi.md",
+    "cursor.md",
     "kilo.json",
     "kilo.jsonc",
     "opencode.json",
@@ -366,16 +367,16 @@ mod tests {
     #[test]
     fn each_vendors_own_instruction_file_is_stripped() {
         let root = scratch("per-vendor");
-        for name in ["CLAUDE.md", "KILO.md", "KIMI.md", "AGENTS.md"] {
+        for name in ["CLAUDE.md", "KILO.md", "KIMI.md", "CURSOR.md", "AGENTS.md"] {
             write(&root, name, "standing orders from the reviewed repository");
         }
         let removed = strip_agent_instructions(&root).expect("strip instructions");
         assert_eq!(
             removed.len(),
-            4,
+            5,
             "a vendor's own instruction file survived: {removed:?}"
         );
-        for name in ["CLAUDE.md", "KILO.md", "KIMI.md", "AGENTS.md"] {
+        for name in ["CLAUDE.md", "KILO.md", "KIMI.md", "CURSOR.md", "AGENTS.md"] {
             assert!(!root.join(name).exists(), "{name} was left behind");
         }
     }

@@ -104,17 +104,19 @@ fn answer_from(
 /// three sequential timeouts is three minutes of spinner to learn what one
 /// minute can tell you.
 pub async fn check_all() -> Vec<(&'static str, SignIn)> {
-    let (claude, codex, kilo, kimi) = tokio::join!(
+    let (claude, codex, kilo, kimi, cursor) = tokio::join!(
         crate::claude::signin(None),
         crate::codex::signin(),
         crate::kilo::signin(),
-        crate::kimi::signin()
+        crate::kimi::signin(),
+        crate::cursor::signin()
     );
     vec![
         ("claude", claude),
         ("codex", codex),
         ("kilo", kilo),
         ("kimi", kimi),
+        ("cursor", cursor),
     ]
 }
 

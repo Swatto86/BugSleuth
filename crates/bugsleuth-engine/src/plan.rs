@@ -155,7 +155,7 @@ pub fn check_effort(id: &str, effort: &str) -> Result<()> {
 /// the enum this mirrors.
 fn vendor_of(model: &str) -> String {
     match model.split_once(':') {
-        Some((vendor, _)) if matches!(vendor, "claude" | "codex" | "kilo" | "kimi") => {
+        Some((vendor, _)) if matches!(vendor, "claude" | "codex" | "kilo" | "kimi" | "cursor") => {
             vendor.to_string()
         }
         _ => "claude".to_string(),
@@ -175,7 +175,7 @@ pub fn canonical_spec(spec: &str) -> String {
     match spec.split_once(':') {
         Some(("claude", model)) if !model.trim().is_empty() => model.trim().to_string(),
         Some(("claude", _)) => "claude:".to_string(),
-        Some((vendor, model)) if matches!(vendor, "codex" | "kilo" | "kimi") => {
+        Some((vendor, model)) if matches!(vendor, "codex" | "kilo" | "kimi" | "cursor") => {
             format!("{vendor}:{}", model.trim())
         }
         _ => spec.to_string(),
