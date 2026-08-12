@@ -5,9 +5,9 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   type Settings,
   batchCount,
-  canRun,
   isShippedConfiguration,
   preset,
+  runBlockReason,
   supportsAgents,
   usesUltracode,
   unitCount,
@@ -80,10 +80,11 @@ function applyTheme(theme: Settings["theme"]): void {
 // ── Rendering ───────────────────────────────────────────────────────────────
 
 function renderPlanSummary(): void {
+  const blocked = runBlockReason(settings, catalogue);
   const units = unitCount(settings.models);
   const rounds = batchCount(settings.models);
   const summary =
-    units === 0
+    units === 0 || blocked
       ? ""
       : `${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`;
   if (ui.planSummary.textContent !== summary)
@@ -91,9 +92,23 @@ function renderPlanSummary(): void {
   const busy = isRunning() || isApplying() || isClearing() || isUpdating();
   // The completion listener too: without it a started run never finishes as
   // far as this window is concerned, and every action stays blocked.
-  ui.run.disabled = !runEventsReady() || busy || !canRun(settings, catalogue);
+  ui.run.disabled = !runEventsReady() || busy || blocked !== null;
+  ui.run.title = busy
+    ? "A review or other operation is already in progress."
+    : !runEventsReady()
+      ? "Run is unavailable until its result listener is ready."
+      : (blocked ?? "Run a review of the chosen repository.");
+  if (blocked) {
+    ui.run.setAttribute("aria-describedby", "uncovered-warning");
+  } else {
+    ui.run.removeAttribute("aria-describedby");
+  }
   ui.clearSaved.disabled = busy;
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
+  if (blocked && !busy && ui.uncovered.classList.contains("hidden")) {
+    ui.uncovered.classList.remove("hidden");
+    ui.uncovered.textContent = blocked;
+  }
 }
 
 function render(): void {

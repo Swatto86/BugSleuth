@@ -6,7 +6,6 @@
  */
 
 import type { Catalogue } from "./view";
-import { vendorCliPresent } from "./cli-offer.ts";
 
 /**
  * The most passes a model may request.
@@ -321,36 +320,6 @@ export function effortIsValid(
   return vendor === "claude";
 }
 
-/** Whether a configuration could run at all. */
-export function canRun(settings: Settings, catalogue: Catalogue): boolean {
-  if (settings.repo.trim().length === 0) return false;
-  // Mirrors plan::plan: a blank model id or an unknown lane makes the whole
-  // configuration unrunnable, not a row to be ignored. The engine refuses such
-  // a configuration outright, so the button must not promise a run the backend
-  // will reject with "a configured model has an empty id".
-  if (
-    settings.models.length === 0 ||
-    !settings.models.every(
-      (model) =>
-        model.id.trim() !== "" &&
-        vendorOf(model.id) !== "codex" &&
-        vendorCliPresent(model.id, catalogue) &&
-        effortIsValid(model.id, model.effort, catalogue) &&
-        (!model.use_agents || supportsAgents(model.id)) &&
-        (!model.use_agents ||
-          !usesUltracode(model.id) ||
-          model.effort.trim() === "") &&
-        model.lanes.every((lane) =>
-          (LANES as readonly string[]).includes(lane),
-        ) &&
-        (model.passes ?? 1) <= MAX_PASSES,
-    )
-  ) {
-    return false;
-  }
-  return unitCount(settings.models) > 0;
-}
-
 /**
  * What the status line says once an apply is over.
  *
@@ -372,8 +341,9 @@ export function applyStatus(ok: boolean, changed: number): string {
 
 // The shipped presets and the whole-matrix equality check live in ./presets to
 // keep this file under the line cap, and are re-exported so callers still import
-// them from "./model".
+// them from "./model". The run gate lives in ./run-gate for the same reason.
 export { preset, isShippedConfiguration, type Preset } from "./presets.ts";
+export { canRun, runBlockReason } from "./run-gate.ts";
 
 /** Toggle one lane for one model, returning a new list. */
 export function toggleLane(

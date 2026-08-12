@@ -17,10 +17,15 @@ import {
   effortIsValid,
   passChoices,
   preset,
+  runBlockReason,
   supportsAgents,
   usesUltracode,
 } from "./model.ts";
-import { offeredVendors, vendorCliPresent } from "./cli-offer.ts";
+import {
+  offeredSweepVendors,
+  offeredVendors,
+  vendorCliPresent,
+} from "./cli-offer.ts";
 import type { Catalogue } from "./view.ts";
 
 const base = {
@@ -53,10 +58,18 @@ test("a run needs both a repository and at least one sweep", () => {
     canRun({ ...base, repo: "", models: preset("balanced") }, {}),
     false,
   );
+  assert.match(
+    runBlockReason({ ...base, repo: "", models: preset("balanced") }, {}) ?? "",
+    /repository/i,
+  );
   assert.equal(canRun({ ...base, repo: "C:/x", models: [] }, {}), false);
   assert.equal(
     canRun({ ...base, repo: "C:/x", models: preset("balanced") }, {}),
     true,
+  );
+  assert.equal(
+    runBlockReason({ ...base, repo: "C:/x", models: preset("balanced") }, {}),
+    null,
   );
 });
 
@@ -73,6 +86,17 @@ test("codex cannot be scheduled for repository review", () => {
       {},
     ),
     false,
+  );
+  assert.match(
+    runBlockReason(
+      {
+        ...base,
+        repo: "C:/x",
+        models: [row("codex:", ["correctness"])],
+      },
+      {},
+    ) ?? "",
+    /Codex/,
   );
   for (const name of ["balanced", "deep"] as const) {
     assert.ok(
@@ -104,6 +128,17 @@ test("a blank row makes the configuration unrunnable, exactly like the engine", 
     ),
     false,
     "Run must not be enabled with a half-typed row",
+  );
+  assert.match(
+    runBlockReason(
+      {
+        ...base,
+        repo: "C:/x",
+        models: [row("sonnet", ["correctness"]), row("  ", [])],
+      },
+      {},
+    ) ?? "",
+    /empty row|model id/,
   );
   assert.equal(
     canRun(
@@ -294,6 +329,22 @@ test("menus only offer vendors whose CLI is installed", () => {
     "kilo",
     "codex",
   ]);
+  assert.ok(
+    !offeredSweepVendors(catalogue).includes("codex"),
+    "new sweep rows must not offer Codex",
+  );
+  assert.ok(
+    offeredVendors(catalogue, "codex").includes("codex"),
+    "Apply must still be able to select Codex",
+  );
+  assert.ok(
+    !offeredSweepVendors({}).includes("codex"),
+    "Codex stays off new sweep rows even before the catalogue loads",
+  );
+  assert.ok(
+    offeredSweepVendors(catalogue, "codex").includes("codex"),
+    "a saved Codex sweep row must remain visible so it can be changed",
+  );
   // Before the catalogue loads, every known vendor stays offered.
   assert.ok(offeredVendors({}).includes("cursor"));
 });

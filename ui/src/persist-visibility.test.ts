@@ -92,6 +92,21 @@ test("the plan cost is announced only when it changes", () => {
     "unchanged plan costs are rewritten and announced again",
   );
   assert.match(text, /planSummary\.textContent = summary/);
+  assert.match(
+    text,
+    /runBlockReason/,
+    "Run is still disabled from a boolean with no reason",
+  );
+  assert.match(
+    text,
+    /ui\.run\.title/,
+    "the Run button has no title explaining why it is disabled",
+  );
+  assert.match(
+    text,
+    /uncovered-warning|ui\.uncovered/,
+    "a blocked run is not surfaced in the uncovered-warning live region",
+  );
 });
 
 test("flushing writes the latest pending settings exactly once", async () => {
