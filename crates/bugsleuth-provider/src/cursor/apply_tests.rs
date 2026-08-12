@@ -68,10 +68,7 @@ fn a_case_folded_agents_md_at_the_root_refuses_cursor_apply() {
     // Distinct from AGENTS.md on case-sensitive filesystems; Windows folds.
     std::fs::write(dir.join("Agents.md"), "Standing orders.").expect("plant");
     let shown = refuse(&dir);
-    assert!(
-        shown.to_lowercase().contains("agents.md"),
-        "{shown}"
-    );
+    assert!(shown.to_lowercase().contains("agents.md"), "{shown}");
     assert!(shown.contains("apply is unavailable"), "{shown}");
     let _ = std::fs::remove_dir_all(&dir);
 }

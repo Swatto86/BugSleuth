@@ -262,9 +262,7 @@ impl RunReport {
                 let why = cluster
                     .triage_reason
                     .as_deref()
-                    .map(|reason| {
-                        format!(" — {}", bugsleuth_domain::printable(reason))
-                    })
+                    .map(|reason| format!(" — {}", bugsleuth_domain::printable(reason)))
                     .unwrap_or_default();
                 out.push_str(&format!(
                     "     re-graded: the model that found it said {}{why}\n",
@@ -299,9 +297,7 @@ fn already_documented(known: &[&bugsleuth_judge::Ranked]) -> String {
             finding.title,
             finding.anchor.file,
             finding.anchor.line,
-            bugsleuth_domain::printable(
-                entry.cluster.acknowledged.as_deref().unwrap_or_default()
-            ),
+            bugsleuth_domain::printable(entry.cluster.acknowledged.as_deref().unwrap_or_default()),
         ));
     }
     out

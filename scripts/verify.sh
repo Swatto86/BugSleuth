@@ -23,18 +23,6 @@ say() { printf '\n== %s ==\n' "$1"; }
 say "pre-push hook"
 bash "$root/scripts/install-hooks.sh"
 
-# One stable name per operating system, so a version bump is not a new platform.
-# `uname -s` under Git Bash carries the Windows build number, and using it raw
-# meant a routine OS update would read as a different platform and quietly
-# switch a check off.
-platform() {
-  case "$(uname -s)" in
-    MINGW*|MSYS*|CYGWIN*) echo windows ;;
-    Darwin) echo macos ;;
-    *) echo linux ;;
-  esac
-}
-
 say "rust fmt"
 cargo fmt --all -- --check
 
