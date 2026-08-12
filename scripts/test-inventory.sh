@@ -69,6 +69,38 @@ if [ "$rust_count" -lt 100 ] || [ "$node_count" -lt 20 ]; then
   exit 1
 fi
 
+# Count floors are not completeness. A broken sed that still yields ≥20 node
+# names would overwrite the lock and leave verify green while real tests go
+# untracked. Assert known-present members that exist on every platform today.
+if ! printf '%s\n' "$node" | grep -Fxq 'node the scans find things at all, so a passing run means something'; then
+  echo "refusing to write $out: known node test missing from scan" >&2
+  echo "Fix the scan, not the threshold." >&2
+  exit 1
+fi
+if ! printf '%s\n' "$rust" | grep -Fxq 'rust agreement_counts_distinct_vendors'; then
+  echo "refusing to write $out: known rust test missing from scan" >&2
+  echo "Fix the scan, not the threshold." >&2
+  exit 1
+fi
+
+# Refuse a write that drops far below the live lock for this platform. A
+# partial scan that still clears the floors and known-present names must not
+# shrink the locked suite silently.
+if [ -f "$out" ]; then
+  prev_rust=$(grep -c '^rust ' "$out" || true)
+  prev_node=$(grep -c '^node ' "$out" || true)
+  if [ "$prev_rust" -gt 0 ] && [ "$rust_count" -lt $((prev_rust * 90 / 100)) ]; then
+    echo "refusing to write $out: rust count dropped from $prev_rust to $rust_count (>10%)." >&2
+    echo "Fix the scan, not the threshold." >&2
+    exit 1
+  fi
+  if [ "$prev_node" -gt 0 ] && [ "$node_count" -lt $((prev_node * 90 / 100)) ]; then
+    echo "refusing to write $out: node count dropped from $prev_node to $node_count (>10%)." >&2
+    echo "Fix the scan, not the threshold." >&2
+    exit 1
+  fi
+fi
+
 {
   # Which platform this was taken on. Kept as a header so a lock file opened by
   # hand still says which OS produced it; the gate selects the file by
