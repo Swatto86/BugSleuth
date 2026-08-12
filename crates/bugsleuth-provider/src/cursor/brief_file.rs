@@ -31,12 +31,25 @@ pub(super) struct BriefFile {
 
 impl BriefFile {
     /// Write the brief into an existing workspace directory.
+    ///
+    /// Staged to a sibling first and renamed in, so a failed write cannot
+    /// leave a truncated `__bugsleuth_brief.md` in a real repository (apply
+    /// writes here) or destroy a previous leftover handoff.
     pub(super) fn write_in(workspace: &Path, brief: &str) -> Result<Self, ProviderError> {
         let path = workspace.join(BRIEF_NAME);
-        std::fs::write(&path, brief).map_err(|error| ProviderError::Scratch {
+        let scratch = |error: std::io::Error| ProviderError::Scratch {
             vendor: super::VENDOR,
             detail: format!("could not write the review brief: {error}"),
-        })?;
+        };
+        let staged = workspace.join(format!(".{BRIEF_NAME}.{}-writing", std::process::id()));
+        if let Err(error) = std::fs::write(&staged, brief) {
+            let _ = std::fs::remove_file(&staged);
+            return Err(scratch(error));
+        }
+        if let Err(error) = std::fs::rename(&staged, &path) {
+            let _ = std::fs::remove_file(&staged);
+            return Err(scratch(error));
+        }
         Ok(Self {
             path,
             owned_dir: None,
@@ -137,6 +150,57 @@ mod tests {
         assert!(
             !workspace.exists(),
             "drop must remove the private workspace"
+        );
+    }
+
+    #[test]
+    fn a_failed_write_in_does_not_leave_a_truncated_brief() {
+        let dir =
+            std::env::temp_dir().join(format!("bugsleuth-cursor-write-in-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let path = dir.join(BRIEF_NAME);
+        // Block the destination with a directory so rename cannot replace it
+        // after a successful stage write. Staging debris must still be cleaned.
+        std::fs::create_dir(&path).expect("block target");
+        std::fs::write(path.join("kept.txt"), "PREVIOUS GOOD").expect("seed");
+        let err = match BriefFile::write_in(&dir, "replacement") {
+            Ok(_) => panic!("must fail"),
+            Err(error) => error,
+        };
+        assert!(err.to_string().contains("could not write"));
+        assert_eq!(
+            std::fs::read_to_string(path.join("kept.txt")).expect("read"),
+            "PREVIOUS GOOD",
+            "a failed write destroyed what blocked the destination"
+        );
+        assert!(
+            std::fs::read_dir(&dir)
+                .expect("list")
+                .flatten()
+                .all(|e| !e.file_name().to_string_lossy().contains("writing")),
+            "staging debris left behind"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_in_replaces_through_a_staging_file_not_an_in_place_truncate() {
+        // Guards the destroy-before-commit rule: the implementation must stage
+        // then rename. A direct fs::write on BRIEF_NAME would truncate first.
+        let source = include_str!("brief_file.rs");
+        let write_in = source
+            .split("fn write_in(")
+            .nth(1)
+            .and_then(|rest| rest.split("fn private(").next())
+            .expect("write_in body");
+        assert!(
+            write_in.contains("-writing") && write_in.contains("rename"),
+            "write_in must stage then rename rather than truncate BRIEF_NAME in place"
+        );
+        assert!(
+            !write_in.contains("fs::write(&path") && !write_in.contains("std::fs::write(&path"),
+            "write_in must not truncate the destination before the write succeeds"
         );
     }
 }

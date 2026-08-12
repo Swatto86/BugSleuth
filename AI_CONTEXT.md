@@ -36,6 +36,7 @@ Cursor specs look like `cursor:composer-2.5`. The CLI binary users type is `agen
 
 ## Recent Context & Decisions
 
+- 2026-08-12: Cursor `BriefFile::write_in` stages then renames so a failed write cannot truncate `__bugsleuth_brief.md` in a real repository.
 - 2026-08-12: Cursor apply `build_args` pins `--workspace` to the repository (same as sweeps); cwd alone is not the documented headless workspace bound.
 - 2026-08-12: Codex repository review is refused at `plan` and removed from default/balanced/deep presets; Codex remains available for apply. UI `canRun` disables matrices that still list `codex:` sweep rows.
 - 2026-08-12: Instruction strip and Cursor `find_instruction` classify entries with `symlink_metadata` + Windows reparse-point check before recurse/delete; instruction-named links are unlinked without following (Windows junctions used to fail `remove_file` with Access Denied).
