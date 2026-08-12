@@ -108,7 +108,7 @@ test("an available update clears the checking status before the install confirma
     confirms.length >= 1,
     "confirmDialog is no longer called from update.ts",
   );
-  const confirm = confirms[0];
+  const confirm = confirms[0]!;
 
   const statusCalls = callsTo(update, "setStatus").filter(
     (call) =>
