@@ -19,6 +19,11 @@ use clap::{Parser, Subcommand};
 /// inside `run`.
 pub(crate) const DEFAULT_SWEEP_TIMEOUT_SECS: u64 = 2700;
 
+/// Claude turn ceiling when `--max-turns` is omitted. Shared by `sweep` and
+/// `run` so a single-lane Claude review is not killed sooner than the identical
+/// unit inside a multi-lane run.
+pub(crate) const DEFAULT_CLAUDE_MAX_TURNS: u32 = 40;
+
 #[derive(Parser)]
 #[command(
     name = "bugsleuth",
@@ -171,15 +176,8 @@ mod tests {
     fn sweep_and_run_default_to_the_same_timeout() {
         let sweep = Cli::try_parse_from(["bugsleuth", "sweep", "--repo", ".", "--lane", "ux"])
             .expect("parse sweep");
-        let run = Cli::try_parse_from([
-            "bugsleuth",
-            "run",
-            "--repo",
-            ".",
-            "--config",
-            "x.json",
-        ])
-        .expect("parse run");
+        let run = Cli::try_parse_from(["bugsleuth", "run", "--repo", ".", "--config", "x.json"])
+            .expect("parse run");
         let Command::Sweep(s) = sweep.command else {
             panic!("expected sweep");
         };

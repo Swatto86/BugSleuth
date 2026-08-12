@@ -11,7 +11,7 @@ use bugsleuth_engine::{merge, orchestrate, plan, report, sweep};
 use clap::Parser;
 
 use args::{api_key, claude_turn_budget, real_path, sweep_start_message, validate_api_key_target};
-use cli::{Cli, Command, JudgeArgs, RunArgs, SweepArgs};
+use cli::{Cli, Command, DEFAULT_CLAUDE_MAX_TURNS, JudgeArgs, RunArgs, SweepArgs};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -29,7 +29,7 @@ async fn run_all(args: RunArgs) -> Result<()> {
         .units
         .iter()
         .any(|unit| matches!(sweep::Vendor::parse(&unit.model).0, sweep::Vendor::Claude));
-    let max_turns = claude_turn_budget(args.max_turns, uses_claude, 40)?;
+    let max_turns = claude_turn_budget(args.max_turns, uses_claude, DEFAULT_CLAUDE_MAX_TURNS)?;
     // Triage is a Claude call, so a plan of Codex and Kilo units with a triage
     // model configured still has somewhere to spend the key.
     validate_api_key_target(
@@ -169,7 +169,7 @@ wrote {}",
 
 async fn run_sweep(args: SweepArgs) -> Result<()> {
     let uses_claude = matches!(sweep::Vendor::parse(&args.model).0, sweep::Vendor::Claude);
-    let max_turns = claude_turn_budget(args.max_turns, uses_claude, 30)?;
+    let max_turns = claude_turn_budget(args.max_turns, uses_claude, DEFAULT_CLAUDE_MAX_TURNS)?;
     // Before `api_key` reads the environment, so the refusal names the real
     // problem rather than complaining that an irrelevant variable is unset.
     validate_api_key_target(args.use_api_key, uses_claude)?;
@@ -274,9 +274,17 @@ mod tests {
 
     #[test]
     fn a_claude_turn_budget_defaults_and_applies_when_claude_is_present() {
-        assert_eq!(super::claude_turn_budget(None, false, 30).unwrap(), 30);
-        assert_eq!(super::claude_turn_budget(Some(7), true, 40).unwrap(), 7);
-        assert!(super::claude_turn_budget(Some(1), false, 30).is_err());
+        assert_eq!(
+            super::claude_turn_budget(None, false, super::DEFAULT_CLAUDE_MAX_TURNS).unwrap(),
+            super::DEFAULT_CLAUDE_MAX_TURNS
+        );
+        assert_eq!(
+            super::claude_turn_budget(Some(7), true, super::DEFAULT_CLAUDE_MAX_TURNS).unwrap(),
+            7
+        );
+        assert!(
+            super::claude_turn_budget(Some(1), false, super::DEFAULT_CLAUDE_MAX_TURNS).is_err()
+        );
     }
 
     #[test]
