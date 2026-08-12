@@ -36,6 +36,7 @@ Cursor specs look like `cursor:composer-2.5`. The CLI binary users type is `agen
 
 ## Recent Context & Decisions
 
+- 2026-08-12: Sweep/run share `DEFAULT_SWEEP_TIMEOUT_SECS` (2700) and `DEFAULT_CLAUDE_MAX_TURNS` (40). Triage `triage_reason`/`acknowledged` pass through `printable` at storage and report render. Cursor apply walks the tree (case-insensitive) for `.cursorrules`/`agents.md`/`cursor.md`/`.cursor`/`.agents`. Inventory write asserts known-present names + refuse large count drops; `check-test-inventory.sh` is the shared gate path; verify installs the pre-push hook via `git rev-parse --git-path`.
 - 2026-08-12: Released **0.2.47** — Cursor apply refuses repos that ship `.cursorrules`/`AGENTS.md`/`.cursor`/`.agents` (no ignore-rules flag); hermetic Kimi catalogue/discovery tests; `verify.sh` runs `test-verify-lock.sh`; update UI clears checking spinner before install confirm.
 - 2026-08-12: Released **0.2.46** — bound embedded JSON brace recovery; per-platform `tests.lock.*` so linux/macos no longer skip the missing-test gate.
 - 2026-08-12: Test inventory gate uses `tests.lock.$(platform)` (windows/linux/macos) instead of one shared `tests.lock` that skipped comparison on non-recording OSes. Refresh via `scripts/test-inventory.sh` or `.github/workflows/test-inventory.yml`.
