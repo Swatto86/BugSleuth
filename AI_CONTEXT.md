@@ -36,6 +36,7 @@ Cursor specs look like `cursor:composer-2.5`. The CLI binary users type is `agen
 
 ## Recent Context & Decisions
 
+- 2026-08-12: Released **0.2.46** — bound embedded JSON brace recovery; per-platform `tests.lock.*` so linux/macos no longer skip the missing-test gate.
 - 2026-08-12: Test inventory gate uses `tests.lock.$(platform)` (windows/linux/macos) instead of one shared `tests.lock` that skipped comparison on non-recording OSes. Refresh via `scripts/test-inventory.sh` or `.github/workflows/test-inventory.yml`.
 - 2026-08-12: `parse_embedded` bounds brace-start recovery (`MAX_BRACE_STARTS` / `MAX_EMBEDDED_CHARS`) so brace-heavy model replies cannot burn unbounded CPU.
 - 2026-08-12: Provider menus and Check sign-in gate on a cheap local CLI install check (`models::cli_installed` / each vendor's `binary_path`) before catalogue fetches or model probes. Dropdowns only offer installed vendors (plus a stale saved selection so it can be changed); uninstalled CLIs still appear as status pills.
