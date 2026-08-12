@@ -170,6 +170,9 @@ if [ -n "$added" ]; then
 fi
 echo "no test has gone missing OK ($(($(wc -l < "$lock") - 1)) recorded)"
 
+say "test inventory regression"
+./scripts/test-verify-lock.sh
+
 say "file sizes"
 # 400 lines is the hard cap. Generated, vendored and lock files are exempt.
 hard=400
