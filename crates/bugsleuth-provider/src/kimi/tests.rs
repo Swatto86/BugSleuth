@@ -180,28 +180,35 @@ async fn a_failing_cli_is_an_error_rather_than_no_findings() {
 
 /// Discovery finds the CLI where its own installer puts it.
 ///
-/// Measured against a real install: the official installer writes
-/// `~/.kimi-code/bin/kimi.exe` and does not necessarily put it on PATH, so a
-/// discovery that only searched PATH reported freshly-installed software as
-/// missing. Skips when no Kimi is installed rather than asserting on a machine
-/// that has nothing to find.
+/// Measured against the official installer's layout: `~/.kimi-code/bin/kimi`
+/// (or `kimi.exe` on Windows). A host-dependent skip left CI green while the
+/// candidate list in `discover` could be deleted; a fixture home through
+/// `resolve_binary_from` keeps the gate honest without env mutation (forbidden
+/// by the workspace `unsafe_code` lint).
 #[test]
 fn discovery_finds_a_real_installation() {
-    let home = std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(PathBuf::from);
-    let Some(installed) = home
-        .map(|home| home.join(".kimi-code/bin"))
-        .filter(|dir| dir.is_dir())
-    else {
-        eprintln!("skipped: no Kimi Code installation on this machine");
-        return;
+    let home = std::env::temp_dir().join(format!(
+        "bugsleuth-kimi-discover-{}",
+        std::process::id()
+    ));
+    let bin_dir = home.join(".kimi-code/bin");
+    std::fs::create_dir_all(&bin_dir).expect("fixture bin dir");
+    let exe_name = if cfg!(windows) {
+        "kimi.exe"
+    } else {
+        "kimi"
     };
-    let found = discover::resolve_binary().expect("an installed Kimi CLI was not found");
-    assert!(
-        found.starts_with(&installed) || found.is_file(),
-        "discovery returned {found:?}, which is not the installed binary"
-    );
+    let binary = bin_dir.join(exe_name);
+    std::fs::write(&binary, b"").expect("fixture binary");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+    let found =
+        discover::resolve_binary_from(Some(home.clone())).expect("fixture install must be discovered");
+    assert_eq!(found, binary);
+    let _ = std::fs::remove_dir_all(&home);
 }
 
 /// The reply is extracted from the CLI's real output, banner and all.

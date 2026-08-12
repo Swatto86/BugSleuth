@@ -18,7 +18,11 @@ pub(super) fn resolve_binary() -> Option<PathBuf> {
     let home = std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))
         .map(PathBuf::from);
+    resolve_binary_from(home)
+}
 
+/// Look for the installer layout under `home`, then fall back to PATH.
+pub(super) fn resolve_binary_from(home: Option<PathBuf>) -> Option<PathBuf> {
     if let Some(home) = home {
         let candidates = [
             // The official installer's own layout, native executable first.
