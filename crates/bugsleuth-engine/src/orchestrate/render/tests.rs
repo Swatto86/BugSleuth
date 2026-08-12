@@ -207,3 +207,6 @@ mod annotations;
 
 #[path = "metadata_tests.rs"]
 mod metadata_tests;
+
+#[path = "sanitize_tests.rs"]
+mod sanitize_tests;

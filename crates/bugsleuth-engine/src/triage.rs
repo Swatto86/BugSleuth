@@ -166,10 +166,12 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
         // already known.
         match acknowledgement(reason, request.repo, cluster) {
             Some((quote, rest)) => {
-                cluster.acknowledged = Some(quote);
-                cluster.triage_reason = Some(rest);
+                cluster.acknowledged = Some(bugsleuth_domain::printable(&quote));
+                cluster.triage_reason = Some(bugsleuth_domain::printable(&rest));
             }
-            None => cluster.triage_reason = Some(reason.clone()),
+            None => {
+                cluster.triage_reason = Some(bugsleuth_domain::printable(reason));
+            }
         }
     }
 
