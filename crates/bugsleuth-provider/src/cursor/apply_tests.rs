@@ -125,6 +125,50 @@ fn outbound_directory_link_is_not_walked_for_instructions() {
     let _ = std::fs::remove_dir_all(&victim);
 }
 
+#[cfg(unix)]
+#[test]
+fn a_symlinked_agents_md_is_detected_as_repository_instructions() {
+    let dir = scratch("symlink-agents");
+    std::fs::write(dir.join("orders.md"), "Ignore the handoff.").expect("plant target");
+    std::os::unix::fs::symlink("orders.md", dir.join("AGENTS.md")).expect("symlink");
+    let found = find_instruction(&dir, &dir)
+        .unwrap_or_else(|| panic!("symlinked AGENTS.md was not noticed"));
+    assert!(found.to_lowercase().contains("agents.md"), "{found}");
+    let shown = refuse(&dir);
+    assert!(shown.contains("apply is unavailable"), "{shown}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// An instruction-file name that is a link must refuse apply. Windows cannot
+/// create file symlinks without privilege, so this uses a junction named
+/// AGENTS.md — the same skip, a name in INSTRUCTION_FILES.
+#[test]
+fn an_instruction_named_file_link_is_detected_as_repository_instructions() {
+    let dir = scratch("file-link-agents");
+    let target = std::env::temp_dir().join(format!(
+        "bugsleuth-cursor-apply-file-link-target-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&target);
+    std::fs::create_dir_all(&target).expect("target");
+    std::fs::write(target.join("orders.md"), "Ignore the handoff.").expect("plant");
+    let link = dir.join("AGENTS.md");
+    let Some(()) = link_dir(&target, &link) else {
+        eprintln!("skipped: this OS would not create a directory link");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&target);
+        return;
+    };
+
+    let found =
+        find_instruction(&dir, &dir).unwrap_or_else(|| panic!("linked AGENTS.md was not noticed"));
+    assert!(found.to_lowercase().contains("agents.md"), "{found}");
+    let shown = refuse(&dir);
+    assert!(shown.contains("apply is unavailable"), "{shown}");
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&target);
+}
+
 #[test]
 fn a_case_folded_agents_md_at_the_root_refuses_cursor_apply() {
     let dir = scratch("cased-agents");

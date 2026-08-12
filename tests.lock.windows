@@ -428,6 +428,7 @@ rust commands::tests::two_checkouts_with_the_same_folder_name_do_not_share_a_run
 rust cursor::apply::tests::a_case_folded_agents_md_at_the_root_refuses_cursor_apply
 rust cursor::apply::tests::a_nested_agents_md_refuses_cursor_apply
 rust cursor::apply::tests::a_repository_carrying_cursor_instructions_is_refused
+rust cursor::apply::tests::an_instruction_named_file_link_is_detected_as_repository_instructions
 rust cursor::apply::tests::apply_forces_writes_and_never_asks
 rust cursor::apply::tests::claude_md_alone_does_not_refuse_cursor_apply
 rust cursor::apply::tests::outbound_directory_link_is_not_walked_for_instructions

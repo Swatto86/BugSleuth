@@ -41,12 +41,11 @@ fn find_instruction(dir: &Path, root: &Path) -> Option<String> {
         };
         let is_link = metadata.file_type().is_symlink() || is_reparse_point(&metadata);
 
-        if INSTRUCTION_DIRS.contains(&name.as_str()) {
+        if INSTRUCTION_DIRS.contains(&name.as_str()) || INSTRUCTION_FILES.contains(&name.as_str()) {
             return Some(relative(&path, root));
         }
         if is_link {
-            // Do not walk through outbound links or cycles; an instruction-
-            // named link already returned above.
+            // Do not walk through outbound links or cycles.
             continue;
         }
         if metadata.is_dir() {
@@ -56,8 +55,6 @@ fn find_instruction(dir: &Path, root: &Path) -> Option<String> {
             if let Some(found) = find_instruction(&path, root) {
                 return Some(found);
             }
-        } else if INSTRUCTION_FILES.contains(&name.as_str()) {
-            return Some(relative(&path, root));
         }
     }
     None
