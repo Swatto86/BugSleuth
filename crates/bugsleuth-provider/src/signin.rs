@@ -356,9 +356,15 @@ mod tests {
             .find("pub async fn check_all")
             .expect("check_all is gone");
         let body = &source[fn_start..];
-        assert!(
-            body.contains("cli_installed"),
-            "check_all no longer skips a missing CLI before spending a model call"
-        );
+        let code = body
+            .split_once("#[cfg(test)]")
+            .map_or(body, |(before, _)| before);
+        let probe = code
+            .find("crate::claude::signin")
+            .expect("check_all no longer probes a vendor");
+        let gate = code[..probe]
+            .find("cli_installed")
+            .expect("check_all no longer skips a missing CLI before spending a model call");
+        assert!(gate < probe);
     }
 }
