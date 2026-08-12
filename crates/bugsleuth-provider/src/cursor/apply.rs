@@ -110,7 +110,7 @@ pub async fn apply(
     // apply. Removed on drop so a finished apply does not leave the handoff
     // behind; a killed apply may leave it, which `git status` will show.
     let handoff = brief_file::BriefFile::write_in(repo, prompt)?;
-    let args = build_args(&launch.prefix, handoff.path(), model);
+    let args = build_args(&launch.prefix, repo, handoff.path(), model);
 
     let output = process::run(Invocation {
         binary: &launch.binary.to_string_lossy(),
@@ -138,7 +138,7 @@ pub async fn apply(
     Ok(report.to_string())
 }
 
-fn build_args(prefix: &[String], handoff: &Path, model: &str) -> Vec<String> {
+fn build_args(prefix: &[String], workspace: &Path, handoff: &Path, model: &str) -> Vec<String> {
     let mut args = prefix.to_vec();
     args.extend([
         "-p".into(),
@@ -147,6 +147,8 @@ fn build_args(prefix: &[String], handoff: &Path, model: &str) -> Vec<String> {
         "--output-format".into(),
         "text".into(),
     ]);
+    args.push("--workspace".into());
+    args.push(workspace.to_string_lossy().into_owned());
 
     let model = model.trim();
     if !model.is_empty() {

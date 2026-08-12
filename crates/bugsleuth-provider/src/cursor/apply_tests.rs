@@ -4,11 +4,25 @@ use super::*;
 
 #[test]
 fn apply_forces_writes_and_never_asks() {
-    let args = build_args(&[], Path::new("__bugsleuth_brief.md"), "composer-2.5");
+    let workspace = Path::new("C:/repo");
+    let args = build_args(
+        &[],
+        workspace,
+        &workspace.join("__bugsleuth_brief.md"),
+        "composer-2.5",
+    );
     assert!(args.iter().any(|a| a == "-p"));
     assert!(args.iter().any(|a| a == "--force"));
     assert!(args.iter().any(|a| a == "--trust"));
     assert!(!args.iter().any(|a| a == "--mode" || a == "ask"));
+    let ws = args
+        .iter()
+        .position(|a| a == "--workspace")
+        .expect("workspace");
+    assert_eq!(
+        args.get(ws + 1).map(String::as_str),
+        Some(workspace.to_string_lossy().as_ref())
+    );
     let at = args.iter().position(|a| a == "--model").expect("model");
     assert_eq!(args.get(at + 1).map(String::as_str), Some("composer-2.5"));
 }
