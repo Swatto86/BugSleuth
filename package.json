@@ -1,7 +1,7 @@
 {
   "name": "bugsleuth-ui",
   "private": true,
-  "version": "0.2.48",
+  "version": "0.2.49",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -32,4 +32,3 @@
     "serialize-javascript": "7.1.0"
   }
 }
-

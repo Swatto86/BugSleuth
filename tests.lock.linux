@@ -1,8 +1,5 @@
-platform linux
-node Run refuses a model whose CLI is not installed
-node Tab with focus outside the dialog's buttons re-enters the trap
-node a bare Claude model never gains a redundant prefix
 node a bare and a prefixed Claude model on one lane count as a single unit
+node a bare Claude model never gains a redundant prefix
 node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
@@ -101,6 +98,7 @@ node both sides are actually being read
 node both themes define the same set of colours
 node checksum fallback excludes and verifies its own manifest
 node clearing hands focus off before activityChanged disables its opener
+node codex cannot be scheduled for repository review
 node dark theme meets WCAG AA everywhere the UI uses it
 node declining an available update clears the running status
 node editing a model refreshes its row action labels
@@ -142,9 +140,9 @@ node long-running actions wait for their completion listeners
 node manual sign-in cannot be overwritten by startup preflight
 node menus only offer vendors whose CLI is installed
 node names are joined the way English does
-node no CSS rule styles a class nothing uses
 node no call into Rust can fail without the user being told
 node no command is exposed to the page that the page never calls
+node no CSS rule styles a class nothing uses
 node no element asks for a class the stylesheet does not define
 node one vendor doing everything is one round per lane
 node only a complete shipped preset bypasses replacement confirmation
@@ -155,6 +153,7 @@ node release tag matches version embedded in the app
 node removing a configured model row is guarded by a confirmation
 node render redirects focus when the focused row was just removed
 node rounds are driven by the busiest vendor, not the total
+node Run refuses a model whose CLI is not installed
 node run-directory documentation includes the backend path hash
 node safety docs describe the triage exception to lane-relative grades
 node same-provider rounds stay serial
@@ -163,20 +162,20 @@ node splitId agrees with vendorOf on every shape
 node splitting a model spec and rejoining it settles on one spelling
 node starting a run moves focus off the disabled Run button to Stop
 node startup renders do not persist settings back over the saved file
+node system light and explicit light palettes stay identical
+node Tab with focus outside the dialog's buttons re-enters the trap
 node tauri-driver is installed at one reviewed version
-node the Agents header exposes its token-cost explanation to screen readers
-node the E2E build uses the locked local Tauri CLI
-node the E2E harness waits for its driver cleanup and rejects a stale port
-node the E2E run verifies the native driver before spawning it
-node the E2E stop check observes a real provider before and after cancellation
-node the README still promises a single file that runs with nothing installed
-node the README's download table names assets the workflow builds
 node the acceptance journey accounts for the provider pre-check
+node the Agents header exposes its token-cost explanation to screen readers
 node the clear handler disables its button and re-enables it on both outcomes
 node the clear handler shows a running status while the delete is in flight
 node the clearing flag is set before the clear and released on both outcomes
 node the confirmation dialog describes its message to assistive tech
 node the documentation does not point at files that no longer exist
+node the E2E build uses the locked local Tauri CLI
+node the E2E harness waits for its driver cleanup and rejects a stale port
+node the E2E run verifies the native driver before spawning it
+node the E2E stop check observes a real provider before and after cancellation
 node the finding cards allow text selection
 node the frontend actually calls into Rust, so this test is not vacuous
 node the live E2E review replaces saved configuration deterministically
@@ -185,6 +184,8 @@ node the plan cost is announced only when it changes
 node the precise scan sees each of the three ways a class is set
 node the preset handler guards on the whole configuration, not per row
 node the quit guard consults the clearing state, like the tray does
+node the README still promises a single file that runs with nothing installed
+node the README's download table names assets the workflow builds
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
@@ -195,8 +196,8 @@ node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
-node the release Node setup is pinned to an immutable revision
 node the release checkout is pinned to an immutable revision
+node the release Node setup is pinned to an immutable revision
 node the release publisher is pinned to an immutable revision
 node the release uses the lockfile's Tauri CLI
 node the runbook derives the installer name from Tauri's version
@@ -215,6 +216,7 @@ node two models on one lane is two sweeps, because that is the point
 node unknown lane names are ignored rather than counted
 node vendor parsing matches the engine, including bare and colon-containing names
 node writes stay blocked when saved settings failed to load
+platform linux
 rust agreement_counts_distinct_vendors
 rust anchor::tests::a_directory_link_out_of_the_repository_is_refused
 rust anchor::tests::a_snippet_occurring_twice_anchors_to_the_occurrence_nearest_the_claim
@@ -425,7 +427,10 @@ rust cursor::apply::tests::a_nested_agents_md_refuses_cursor_apply
 rust cursor::apply::tests::a_repository_carrying_cursor_instructions_is_refused
 rust cursor::apply::tests::apply_forces_writes_and_never_asks
 rust cursor::apply::tests::claude_md_alone_does_not_refuse_cursor_apply
+rust cursor::apply::tests::outbound_directory_link_is_not_walked_for_instructions
+rust cursor::brief_file::tests::a_failed_write_in_does_not_leave_a_truncated_brief
 rust cursor::brief_file::tests::a_private_brief_is_removed_on_drop
+rust cursor::brief_file::tests::write_in_replaces_through_a_staging_file_not_an_in_place_truncate
 rust cursor::catalogue::tests::ignores_noise_rather_than_emptying_the_menu
 rust cursor::catalogue::tests::parses_the_documented_listing_shape
 rust cursor::discover::tests::launch_at_requires_both_node_and_index
@@ -610,6 +615,7 @@ rust orchestrate::gaps::tests::a_failed_git_status_is_not_mistaken_for_a_clean_t
 rust orchestrate::gaps::tests::a_panicked_security_sweep_is_named_as_security_not_correctness
 rust orchestrate::gaps::tests::hidden_untracked_files_still_make_the_repository_dirty
 rust orchestrate::gaps::tests::the_unsandboxed_warning_is_about_kilo_not_about_every_isolated_vendor
+rust orchestrate::persist_failure_tests::a_run_whose_completed_sweep_could_not_be_saved_fails_instead_of_swallowing_it
 rust orchestrate::persist::legacy_tests::a_legacy_file_belonging_to_a_different_model_is_not_adopted
 rust orchestrate::persist::legacy_tests::a_report_written_under_the_old_naming_is_still_reused
 rust orchestrate::persist::legacy_tests::every_historical_filename_grammar_is_still_reused
@@ -633,7 +639,6 @@ rust orchestrate::persist::tests::a_truncated_report_is_swept_again_rather_than_
 rust orchestrate::persist::tests::every_sweep_writes_to_its_own_file
 rust orchestrate::persist::tests::nothing_is_reused_unless_resume_was_asked_for
 rust orchestrate::persist::tests::the_legacy_name_does_not_smuggle_a_differently_scoped_sweep_back_in
-rust orchestrate::persist_failure_tests::a_run_whose_completed_sweep_could_not_be_saved_fails_instead_of_swallowing_it
 rust orchestrate::progress::tests::a_failed_sweep_reads_as_a_failure_rather_than_as_zero_findings
 rust orchestrate::render::tests::a_complete_run_says_nothing_about_unswept_lanes
 rust orchestrate::render::tests::a_failed_sweep_is_named_with_its_reason
@@ -687,6 +692,7 @@ rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
 rust plan::tests::every_provider_runs_at_most_one_sweep_per_batch
 rust plan::tests::every_vendor_prefix_is_recognised
 rust plan::tests::kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to
+rust plan::tests::plan_refuses_codex_repository_review
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
 rust process::descendant_tests::a_timeout_on_run_kills_unix_descendants_not_only_the_child
@@ -737,6 +743,7 @@ rust similarity::tests::one_terse_and_one_thorough_account_of_a_defect_still_mer
 rust similarity::tests::stopwords_alone_do_not_make_two_findings_look_alike
 rust similarity::tests::the_same_defect_described_by_two_vendors_scores_high_enough_to_merge
 rust similarity::tests::two_different_defects_in_the_same_function_score_far_lower
+rust sweep_rejects_invalid_effort_before_starting_a_provider
 rust sweep::agents::tests::every_vendor_either_delegates_or_says_why_not
 rust sweep::agents::tests::the_refusing_vendors_are_derived_from_the_same_answer
 rust sweep::isolate::tests::a_repository_cannot_redefine_the_agent_that_reviews_it
@@ -745,8 +752,10 @@ rust sweep::isolate::tests::an_instruction_directory_name_is_removed_regardless_
 rust sweep::isolate::tests::each_vendors_own_instruction_file_is_stripped
 rust sweep::isolate::tests::external_skill_directories_go_whole
 rust sweep::isolate::tests::instruction_files_go_and_code_stays
+rust sweep::isolate::tests::instruction_named_directory_link_is_removed_without_touching_its_target
 rust sweep::isolate::tests::kilo_project_control_files_are_removed
 rust sweep::isolate::tests::matching_ignores_case_because_windows_does
+rust sweep::isolate::tests::outbound_directory_link_is_not_followed_for_deletion
 rust sweep::isolate::tests::symlinked_kilo_directory_is_removed_without_touching_its_target
 rust sweep::isolate::tests::the_git_directory_is_never_touched
 rust sweep::isolation_tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
@@ -771,7 +780,6 @@ rust sweep::vendor_tests::a_cursor_model_selects_cursor_for_the_precheck
 rust sweep::vendor_tests::a_kimi_model_selects_kimi_for_the_precheck
 rust sweep::vendor_tests::cursor_is_selected_by_prefix_and_must_be_isolated
 rust sweep::vendor_tests::kimi_is_selected_by_prefix_and_must_be_isolated
-rust sweep_rejects_invalid_effort_before_starting_a_provider
 rust tests::a_claude_turn_budget_defaults_and_applies_when_claude_is_present
 rust tests::a_non_claude_run_rejects_an_explicit_turn_budget_before_repo_work
 rust tests::a_non_claude_sweep_rejects_an_explicit_turn_budget_before_repo_work
