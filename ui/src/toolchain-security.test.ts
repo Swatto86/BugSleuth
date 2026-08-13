@@ -65,11 +65,34 @@ test("the signature verifier refuses an executable Microsoft did not sign", (t) 
     { stdio: "pipe", windowsHide: true, shell: false },
   );
   fs.rmSync(path.dirname(unsigned), { recursive: true, force: true });
+  assert.equal(checked.error, undefined, checked.error?.message);
   assert.notEqual(
     checked.status,
     0,
     "the verifier accepted an unsigned executable",
   );
+  const diagnostic = checked.stderr?.toString() ?? "";
+  assert.match(diagnostic, /refusing unsigned or invalid executable:/);
+
+  const signed = path.join(
+    process.env.SystemRoot ?? "C:\\Windows",
+    "System32",
+    "where.exe",
+  );
+  const trusted = spawnSync(
+    "pwsh",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-File",
+      path.join(root, "scripts", VERIFIER),
+      "-Path",
+      signed,
+    ],
+    { stdio: "pipe", windowsHide: true, shell: false },
+  );
+  assert.equal(trusted.error, undefined, trusted.error?.message);
+  assert.equal(trusted.status, 0, trusted.stderr?.toString());
 });
 
 test("the E2E run verifies the native driver before spawning it", () => {
