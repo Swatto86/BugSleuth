@@ -40,16 +40,8 @@ pub(super) async fn finish_or_resume(
         return Err(error);
     };
     let original = error.to_string();
-    if let Err(error) = std::fs::remove_file(answer)
-        && error.kind() != std::io::ErrorKind::NotFound
-    {
-        return Err(ProviderError::Recovery {
-            vendor: VENDOR,
-            original,
-            recovery: format!("could not clear the interrupted answer: {error}"),
-        });
-    }
-    let args = resume_args(spec, schema, answer, &session);
+    let recovered_answer = answer.with_file_name("recovered-answer.json");
+    let args = resume_args(spec, schema, &recovered_answer, &session);
     let recovery = process::run(Invocation {
         binary,
         args: &args,
@@ -60,13 +52,17 @@ pub(super) async fn finish_or_resume(
         what: "codex CLI recovery",
     })
     .await;
-    finish(recovery, answer)
-        .map(|answer| (answer, true))
-        .map_err(|recovery| ProviderError::Recovery {
-            vendor: VENDOR,
-            original,
-            recovery: recovery.to_string(),
-        })
+    match finish(recovery, &recovered_answer) {
+        Ok(recovered) => Ok((recovered, true)),
+        Err(recovery) => match std::fs::read_to_string(answer) {
+            Ok(initial) if !initial.trim().is_empty() => Ok((initial, true)),
+            _ => Err(ProviderError::Recovery {
+                vendor: VENDOR,
+                original,
+                recovery: recovery.to_string(),
+            }),
+        },
+    }
 }
 
 fn thread_id(stdout: &str) -> Option<String> {

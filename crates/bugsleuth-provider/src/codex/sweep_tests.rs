@@ -165,6 +165,47 @@ async fn a_timed_out_sweep_resumes_the_thread_reported_by_the_cli() {
 
 #[cfg(windows)]
 #[tokio::test]
+async fn failed_recovery_keeps_a_complete_initial_answer() {
+    let dir = std::env::temp_dir().join(format!("bugsleuth-codex-fallback-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create scratch directory");
+    let stub = dir.join("codex.cmd");
+    std::fs::write(
+        &stub,
+        "@echo off\r\n\
+         echo %* | findstr /c:\"resume codex-thread-fallback\" > nul && exit /b 9\r\n\
+         :args\r\n\
+         if \"%~1\"==\"\" exit /b 2\r\n\
+         if \"%~1\"==\"--output-last-message\" goto answer\r\n\
+         shift\r\n\
+         goto args\r\n\
+         :answer\r\n\
+         >\"%~2\" echo {\"findings\":[]}\r\n\
+         echo {\"type\":\"thread.started\",\"thread_id\":\"codex-thread-fallback\"}\r\n\
+         ping -n 10 127.0.0.1 > nul\r\n\
+         exit /b 1\r\n",
+    )
+    .expect("write CLI stub");
+    let binary = stub.to_string_lossy().into_owned();
+
+    let result = sweep(CodexSweep {
+        repo: &dir,
+        model: "",
+        effort: "",
+        brief: "review",
+        timeout: Duration::from_millis(500),
+        binary: Some(&binary),
+    })
+    .await
+    .expect("the complete initial answer should survive failed recovery");
+
+    assert!(result.findings.findings.is_empty());
+    assert!(result.salvaged);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(windows)]
+#[tokio::test]
 async fn a_transient_failed_turn_resumes_the_thread_reported_by_the_cli() {
     let dir =
         std::env::temp_dir().join(format!("bugsleuth-codex-transient-{}", std::process::id()));

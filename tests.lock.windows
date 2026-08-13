@@ -415,6 +415,7 @@ rust codex::sweep::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blan
 rust codex::sweep::tests::an_invocation_with_no_schema_names_no_schema_file
 rust codex::sweep::tests::cancelled_codex_invocation_removes_scratch
 rust codex::sweep::tests::cleanup_guard_removes_the_directory_on_drop
+rust codex::sweep::tests::failed_recovery_keeps_a_complete_initial_answer
 rust codex::sweep::tests::sweep_sessions_are_persisted_so_a_timeout_can_resume_them
 rust codex::sweep::tests::the_configuration_and_rules_of_the_host_and_the_repo_are_both_ignored
 rust codex::sweep::tests::the_prompt_comes_from_stdin_so_a_long_brief_cannot_overflow_the_command_line
