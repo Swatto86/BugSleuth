@@ -104,8 +104,13 @@ test("the plan cost is announced only when it changes", () => {
   );
   assert.match(
     text,
-    /uncovered-warning|ui\.uncovered/,
-    "a blocked run is not surfaced in the uncovered-warning live region",
+    /ui\.runReason/,
+    "a blocked run is not surfaced in its own live region",
+  );
+  assert.doesNotMatch(
+    text,
+    /ui\.uncovered/,
+    "renderPlanSummary overwrites the independent lane-coverage warning",
   );
 });
 

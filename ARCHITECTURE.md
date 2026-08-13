@@ -133,6 +133,8 @@ The desktop shell adds only what a window needs:
 - **Theme "match system" removes the attribute** rather than resolving it in
   JavaScript, so the app follows the OS live instead of freezing the choice at
   startup.
+- **Coverage warnings and Run's disabled reason use separate live regions**, so
+  one cannot replace the condition a screen-reader user must fix.
 - **The tray icon is a different drawing from the app icon**, not a scaled copy.
   At 16-24px the app icon's legs and highlight collapse into noise; an early
   single-icon version read as an asterisk.

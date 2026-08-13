@@ -32,6 +32,7 @@ const ui = {
   matrixBody: el<HTMLTableSectionElement>("matrix-body"),
   addModel: el<HTMLButtonElement>("add-model"),
   uncovered: el<HTMLDivElement>("uncovered-warning"),
+  runReason: el<HTMLDivElement>("run-block-reason"),
   reuseCompleted: el<HTMLInputElement>("reuse-completed"),
   clearSaved: el<HTMLButtonElement>("clear-saved"),
   triageSeverities: el<HTMLInputElement>("triage-severities"),

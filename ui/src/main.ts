@@ -98,17 +98,20 @@ function renderPlanSummary(): void {
     : !runEventsReady()
       ? "Run is unavailable until its result listener is ready."
       : (blocked ?? "Run a review of the chosen repository.");
-  if (blocked) {
-    ui.run.setAttribute("aria-describedby", "uncovered-warning");
+  const displayedBlockReason = !busy ? (blocked ?? "") : "";
+  if (displayedBlockReason) {
+    ui.runReason.classList.remove("hidden");
+    if (ui.runReason.textContent !== displayedBlockReason) {
+      ui.runReason.textContent = displayedBlockReason;
+    }
+    ui.run.setAttribute("aria-describedby", "run-block-reason");
   } else {
+    ui.runReason.classList.add("hidden");
+    ui.runReason.textContent = "";
     ui.run.removeAttribute("aria-describedby");
   }
   ui.clearSaved.disabled = busy;
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
-  if (blocked && !busy && ui.uncovered.classList.contains("hidden")) {
-    ui.uncovered.classList.remove("hidden");
-    ui.uncovered.textContent = blocked;
-  }
 }
 
 function render(): void {

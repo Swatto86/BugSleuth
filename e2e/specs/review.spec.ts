@@ -88,10 +88,30 @@ describe("BugSleuth desktop app", () => {
   it("warns before a run when a lane has no model", async () => {
     // The app's whole reason to exist over the command line: a lane nobody
     // covers is caught while it is still free to fix.
-    await setLaneSelections("td.lane-cell input[type=checkbox]", []);
+    await $("#repo").setValue(REPO);
+    await configureOneSweep(MODEL);
+    await setLaneSelections(
+      "#matrix-body tr:first-child td.lane-cell input",
+      [],
+    );
     await expect($("#uncovered-warning")).toBeDisplayed();
     await expect($("#uncovered-warning")).toHaveText(/NOT SWEPT/);
     await expect($("#run")).toBeDisabled();
+    await $("#repo").setValue("");
+    // WebDriver's empty setValue uses the native clear command, which WebView2
+    // does not turn into an input event. Dispatch the same event a user edit
+    // sends so the app observes the cleared field.
+    await browser.execute(() => {
+      document
+        .getElementById("repo")
+        ?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    assert.equal(
+      await $("#run").getAttribute("aria-describedby"),
+      "run-block-reason",
+    );
+    await expect($("#run-block-reason")).toHaveText(/repository folder/i);
+    await expect($("#uncovered-warning")).toHaveText(/NOT SWEPT/);
   });
 
   it("confirms before removing a configured model row", async () => {
