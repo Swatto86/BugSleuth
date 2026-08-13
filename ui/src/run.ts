@@ -137,6 +137,7 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
 
   await listen<{
     ok: boolean;
+    complete: boolean;
     /** Whether Stop was pressed, independently of whether a report exists. */
     cancelled: boolean;
     text: string;
@@ -162,16 +163,22 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // report is worth copying.
     if (event.payload.cancelled) {
       deps.setStatus("Review stopped");
-    } else if (event.payload.ok && event.payload.saveError) {
+    } else if (!event.payload.ok) {
+      deps.setStatus("Run failed", "error");
+    } else if (!event.payload.complete && event.payload.saveError) {
+      deps.setStatus(
+        "Review incomplete — some lanes were not swept, and the fix prompts were not completely saved",
+        "error",
+      );
+    } else if (!event.payload.complete) {
+      deps.setStatus("Review incomplete — some lanes were not swept", "error");
+    } else if (event.payload.saveError) {
       deps.setStatus(
         "Finished, but the fix prompts were not completely saved",
         "error",
       );
     } else {
-      deps.setStatus(
-        event.payload.ok ? "Finished" : "Run failed",
-        event.payload.ok ? "" : "error",
-      );
+      deps.setStatus("Finished");
     }
 
     // The prompt is the point of the run, so it is offered the moment there

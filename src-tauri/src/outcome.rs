@@ -54,11 +54,13 @@ pub(crate) fn run_payload(
         Err(error) => {
             return serde_json::json!({
                 "ok": false,
+                "complete": false,
                 "cancelled": cancelled,
                 "text": error.to_string(),
             });
         }
     };
+    let complete = report.gaps.is_empty();
     let mut text = report.to_text();
 
     // The prompt is the thing that gets used, so it is written to disk as well
@@ -98,6 +100,7 @@ pub(crate) fn run_payload(
     }
     serde_json::json!({
         "ok": true,
+        "complete": complete,
         "cancelled": cancelled,
         "text": text,
         "prompt": prompt,
@@ -139,6 +142,7 @@ mod tests {
         assert_eq!(partial["cancelled"], serde_json::json!(true));
         // Still `ok`: a stopped review's partial report is worth copying.
         assert_eq!(partial["ok"], serde_json::json!(true));
+        assert_eq!(partial["complete"], serde_json::json!(true));
 
         let precheck = run_payload(
             Err(anyhow::anyhow!("Provider pre-check stopped")),
@@ -148,6 +152,7 @@ mod tests {
         );
         assert_eq!(precheck["cancelled"], serde_json::json!(true));
         assert_eq!(precheck["ok"], serde_json::json!(false));
+        assert_eq!(precheck["complete"], serde_json::json!(false));
 
         // And a run that really finished is not marked stopped.
         let finished = run_payload(
@@ -163,6 +168,26 @@ mod tests {
             &dir,
         );
         assert_eq!(finished["cancelled"], serde_json::json!(false));
+        assert_eq!(finished["complete"], serde_json::json!(true));
+
+        let incomplete = run_payload(
+            Ok(orchestrate::RunReport {
+                ranked: vec![],
+                triage: Default::default(),
+                swept: vec![],
+                gaps: vec![orchestrate::Gap {
+                    lane: bugsleuth_domain::Lane::Contract,
+                    model: Some("test-model".to_string()),
+                    reason: "rate limited".to_string(),
+                }],
+                cancelled: false,
+            }),
+            false,
+            &dir,
+            &dir,
+        );
+        assert_eq!(incomplete["ok"], serde_json::json!(true));
+        assert_eq!(incomplete["complete"], serde_json::json!(false));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

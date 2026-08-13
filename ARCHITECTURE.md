@@ -143,7 +143,8 @@ These are the ones to protect when changing anything:
 
 - **A lane that did not run is never rendered as a lane that found nothing.**
   Both kinds of hole — no model assigned, and sweep failed — are named with a
-  reason, and either makes the command exit non-zero.
+  reason, and either makes the command exit non-zero or the desktop report the
+  review as incomplete.
 - **Cross-lane severities are compared only after a complete triage pass.**
   That pass grades the merged list against one rubric. If it is disabled,
   fails, or is partial, the report warns that lane-relative grades are not

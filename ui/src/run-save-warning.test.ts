@@ -36,6 +36,10 @@ test("a partly-failed handoff save is surfaced, not swallowed", () => {
     runRs.includes('"saveError"'),
     "the run payload no longer carries saveError, so a failed save is invisible",
   );
+  assert.ok(
+    /"ok": true,\s*"complete": complete,/.test(runRs),
+    "the run payload no longer says whether every lane was swept",
+  );
 
   // Scoped to the run-finished callback. `runTs.includes("saveError")` also
   // matched the payload's own type declaration, so deleting the handling branch
@@ -66,6 +70,7 @@ test("a partly-failed handoff save is surfaced, not swallowed", () => {
   });
   assert.ok(finished, "the run-finished listener is gone");
   let consumesSaveError = false;
+  let consumesComplete = false;
   walk(finished, (node) => {
     if (
       ts.isPropertyAccessExpression(node) &&
@@ -77,9 +82,23 @@ test("a partly-failed handoff save is surfaced, not swallowed", () => {
     ) {
       consumesSaveError = true;
     }
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      node.name.text === "complete" &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "payload" &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === "event"
+    ) {
+      consumesComplete = true;
+    }
   });
   assert.ok(
     consumesSaveError,
     "the run-finished handler no longer consumes event.payload.saveError",
+  );
+  assert.ok(
+    consumesComplete,
+    "the run-finished handler no longer consumes event.payload.complete",
   );
 });

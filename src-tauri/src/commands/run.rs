@@ -117,10 +117,14 @@ pub async fn start_run(
             // as having finished.
             if cancelled {
                 crate::tray::Completion::Stopped
-            } else if payload["ok"].as_bool().unwrap_or(false) {
-                crate::tray::Completion::Succeeded
-            } else {
+            } else if !payload["ok"].as_bool().unwrap_or(false) {
                 crate::tray::Completion::Failed
+            } else if !payload["complete"].as_bool().unwrap_or(false)
+                || !payload["saveError"].is_null()
+            {
+                crate::tray::Completion::Incomplete
+            } else {
+                crate::tray::Completion::Succeeded
             },
         );
         let _ = app.emit("run-finished", payload);

@@ -34,12 +34,11 @@ pub(crate) struct CompletionPlan {
 
 /// How a piece of background work ended.
 ///
-/// Three states, not a boolean. A stopped run is neither a success nor a
-/// failure, and folding it into either meant the same Stop action was announced
-/// as "finished" or "failed" depending only on how far the run had got.
+/// A stopped or incomplete run is neither a success nor a failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Completion {
     Succeeded,
+    Incomplete,
     Stopped,
     Failed,
 }
@@ -55,6 +54,10 @@ pub(crate) fn completion_plan(
         (BackgroundWork::Review, Completion::Succeeded) => {
             ("BugSleuth — review finished", "Your review finished.")
         }
+        (BackgroundWork::Review, Completion::Incomplete) => (
+            "BugSleuth — review incomplete",
+            "The review finished, but some lanes were not swept or its handoff was not completely saved.",
+        ),
         (BackgroundWork::Review, Completion::Stopped) => {
             ("BugSleuth — review stopped", "Your review was stopped.")
         }
@@ -64,6 +67,10 @@ pub(crate) fn completion_plan(
         (BackgroundWork::Apply, Completion::Succeeded) => {
             ("BugSleuth — fixes applied", "The fixes were applied.")
         }
+        (BackgroundWork::Apply, Completion::Incomplete) => (
+            "BugSleuth — apply incomplete",
+            "Applying the fixes did not complete.",
+        ),
         (BackgroundWork::Apply, Completion::Stopped) => (
             "BugSleuth — apply stopped",
             "Applying the fixes was stopped.",
@@ -251,6 +258,26 @@ mod tests {
             assert_ne!(stopped.notification, succeeded.notification);
             assert_ne!(stopped.notification, failed.notification);
         }
+    }
+
+    #[test]
+    fn an_incomplete_review_is_not_announced_as_succeeded() {
+        let succeeded = completion_plan(BackgroundWork::Review, Completion::Succeeded, true);
+        let incomplete = completion_plan(BackgroundWork::Review, Completion::Incomplete, true);
+        assert!(
+            incomplete.tooltip.contains("incomplete"),
+            "{}",
+            incomplete.tooltip
+        );
+        assert!(
+            incomplete
+                .notification
+                .as_ref()
+                .is_some_and(|(_, body)| body.contains("not swept")),
+            "{:?}",
+            incomplete.notification
+        );
+        assert_ne!(incomplete, succeeded);
     }
 
     #[test]
