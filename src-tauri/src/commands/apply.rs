@@ -37,6 +37,18 @@ where
     (report, cancel.stopped())
 }
 
+fn completion_for_apply(cancelled: bool, changed_files: Option<usize>) -> crate::tray::Completion {
+    if cancelled {
+        crate::tray::Completion::Stopped
+    } else {
+        match changed_files {
+            None => crate::tray::Completion::Failed,
+            Some(0) => crate::tray::Completion::NoChanges,
+            Some(_) => crate::tray::Completion::Succeeded,
+        }
+    }
+}
+
 /// Apply the last run's fix prompt with the chosen model.
 ///
 /// Returns immediately; the result arrives as an `apply-finished` event, exactly
@@ -85,32 +97,35 @@ pub async fn apply_fixes(
         // the changed-file and uncertain-publication report.
         let (report, cancelled) = await_engine_apply(request, &cancel).await;
 
-        let payload = match report {
-            Ok(report) => serde_json::json!({
-                "ok": true,
-                "cancelled": cancelled,
-                "text": describe(&report),
-                "changed": report.changed_files,
-            }),
-            Err(error) => serde_json::json!({
-                "ok": false,
-                "cancelled": cancelled,
-                "text": error.to_string(),
-                "changed": Vec::<String>::new(),
-            }),
+        let (payload, changed_files) = match report {
+            Ok(report) => {
+                let changed_files = report.changed_files.len();
+                (
+                    serde_json::json!({
+                        "ok": true,
+                        "cancelled": cancelled,
+                        "text": describe(&report),
+                        "changed": report.changed_files,
+                    }),
+                    Some(changed_files),
+                )
+            }
+            Err(error) => (
+                serde_json::json!({
+                    "ok": false,
+                    "cancelled": cancelled,
+                    "text": error.to_string(),
+                    "changed": Vec::<String>::new(),
+                }),
+                None,
+            ),
         };
         // Applying can run for a long time with the window closed to the tray,
         // so its completion is announced the same way a review's is.
         crate::tray::work_finished(
             &app,
             crate::tray::BackgroundWork::Apply,
-            if cancelled {
-                crate::tray::Completion::Stopped
-            } else if payload["ok"].as_bool().unwrap_or(false) {
-                crate::tray::Completion::Succeeded
-            } else {
-                crate::tray::Completion::Failed
-            },
+            completion_for_apply(cancelled, changed_files),
         );
         let _ = app.emit("apply-finished", payload);
         if let Some(control) = app.try_state::<RunControl>() {
@@ -164,6 +179,26 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn a_successful_apply_that_changed_nothing_is_not_announced_as_applied() {
+        assert_eq!(
+            completion_for_apply(false, Some(0)),
+            crate::tray::Completion::NoChanges
+        );
+        assert_eq!(
+            completion_for_apply(false, Some(1)),
+            crate::tray::Completion::Succeeded
+        );
+        assert_eq!(
+            completion_for_apply(false, None),
+            crate::tray::Completion::Failed
+        );
+        assert_eq!(
+            completion_for_apply(true, Some(1)),
+            crate::tray::Completion::Stopped
+        );
+    }
 
     #[tokio::test]
     async fn apply_cancellation_is_left_to_the_engine() {

@@ -38,6 +38,7 @@ pub(crate) struct CompletionPlan {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Completion {
     Succeeded,
+    NoChanges,
     Incomplete,
     Stopped,
     Failed,
@@ -54,6 +55,10 @@ pub(crate) fn completion_plan(
         (BackgroundWork::Review, Completion::Succeeded) => {
             ("BugSleuth — review finished", "Your review finished.")
         }
+        (BackgroundWork::Review, Completion::NoChanges) => (
+            "BugSleuth — review finished",
+            "The review found no verified defects.",
+        ),
         (BackgroundWork::Review, Completion::Incomplete) => (
             "BugSleuth — review incomplete",
             "The review finished, but some lanes were not swept or its handoff was not completely saved.",
@@ -67,6 +72,10 @@ pub(crate) fn completion_plan(
         (BackgroundWork::Apply, Completion::Succeeded) => {
             ("BugSleuth — fixes applied", "The fixes were applied.")
         }
+        (BackgroundWork::Apply, Completion::NoChanges) => (
+            "BugSleuth — no fixes applied",
+            "The model changed no files.",
+        ),
         (BackgroundWork::Apply, Completion::Incomplete) => (
             "BugSleuth — apply incomplete",
             "Applying the fixes did not complete.",
@@ -238,6 +247,14 @@ mod tests {
         // Apply is distinguished from review, so the notification says which.
         let apply = completion_plan(BackgroundWork::Apply, Completion::Succeeded, true);
         assert_ne!(ok.notification, apply.notification);
+    }
+
+    #[test]
+    fn an_apply_that_changes_nothing_is_not_announced_as_applied() {
+        let applied = completion_plan(BackgroundWork::Apply, Completion::Succeeded, true);
+        let unchanged = completion_plan(BackgroundWork::Apply, Completion::NoChanges, true);
+        assert!(unchanged.tooltip.contains("no fixes applied"));
+        assert_ne!(unchanged, applied);
     }
 
     /// A stopped job is announced as stopped, not as finished or failed.
