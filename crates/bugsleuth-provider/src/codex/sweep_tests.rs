@@ -1,7 +1,9 @@
 //! Tests for the Codex review argv and recovery, in their own file because
 //! the module plus its tests crossed the hard line cap.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(windows)]
+use std::path::PathBuf;
 use std::time::Duration;
 
 use bugsleuth_domain::finding_schema;
