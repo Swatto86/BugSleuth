@@ -9,15 +9,15 @@ mkdir "$scratch/bin"
 
 cat > "$scratch/bin/cargo" <<'EOF'
 #!/usr/bin/env bash
-for i in {1..110}; do printf 'stub_%s: test\n' "$i"; done
 echo 'agreement_counts_distinct_vendors: test'
+for i in {1..5000}; do printf 'stub_%s: test\n' "$i"; done
 [ "${FAIL_TOOL:-}" != cargo ] || { echo 'cargo listing failed' >&2; exit 7; }
 EOF
 
 cat > "$scratch/bin/npm" <<'EOF'
 #!/usr/bin/env bash
-for i in {1..25}; do printf '✔ stub %s (1ms)\n' "$i"; done
 echo '✔ the scans find things at all, so a passing run means something (1ms)'
+for i in {1..5000}; do printf '✔ stub %s (1ms)\n' "$i"; done
 [ "${FAIL_TOOL:-}" != npm ] || { echo 'npm listing failed' >&2; exit 8; }
 EOF
 chmod +x "$scratch/bin/cargo" "$scratch/bin/npm"
@@ -36,4 +36,13 @@ for tool in cargo npm; do
   }
 done
 
-echo "test-inventory-status OK (runner failures stop inventory generation)"
+inventory="$scratch/success.lock"
+if ! PATH="$scratch/bin:$PATH" \
+  bash "$root/scripts/test-inventory.sh" "$inventory" > "$scratch/success.log" 2>&1
+then
+  cat "$scratch/success.log"
+  echo "FAIL: known-present checks rejected complete large runner output"
+  exit 1
+fi
+
+echo "test-inventory-status OK (runner failures stop generation; large output passes)"

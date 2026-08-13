@@ -75,12 +75,12 @@ fi
 # Count floors are not completeness. A broken sed that still yields ≥20 node
 # names would overwrite the lock and leave verify green while real tests go
 # untracked. Assert known-present members that exist on every platform today.
-if ! printf '%s\n' "$node" | grep -Fxq 'node the scans find things at all, so a passing run means something'; then
+if ! grep -Fxq 'node the scans find things at all, so a passing run means something' <<<"$node"; then
   echo "refusing to write $out: known node test missing from scan" >&2
   echo "Fix the scan, not the threshold." >&2
   exit 1
 fi
-if ! printf '%s\n' "$rust" | grep -Fxq 'rust agreement_counts_distinct_vendors'; then
+if ! grep -Fxq 'rust agreement_counts_distinct_vendors' <<<"$rust"; then
   echo "refusing to write $out: known rust test missing from scan" >&2
   echo "Fix the scan, not the threshold." >&2
   exit 1
