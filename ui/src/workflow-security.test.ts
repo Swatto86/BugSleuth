@@ -52,6 +52,31 @@ function actionRef(action: string, source = workflow): string {
   return ref.slice(ref.lastIndexOf("@") + 1);
 }
 
+type WorkflowJob = { permissions?: string | Record<string, string> };
+
+function assertReleasePermissions(source: string): void {
+  const doc = parseYaml(source) as {
+    permissions?: unknown;
+    jobs?: Record<string, WorkflowJob>;
+  };
+  assert.deepEqual(doc.permissions, { contents: "read" });
+  const jobs = doc.jobs ?? {};
+  assert.deepEqual(jobs.publish?.permissions, { contents: "write" });
+  for (const [name, job] of Object.entries(jobs)) {
+    if (name === "publish" || job.permissions === undefined) continue;
+    assert.notEqual(job.permissions, "write-all", `${name} has write-all`);
+    assert.ok(
+      job.permissions !== null &&
+        typeof job.permissions === "object" &&
+        !Array.isArray(job.permissions) &&
+        Object.values(job.permissions).every(
+          (value) => value === "read" || value === "none",
+        ),
+      `${name} has write authority`,
+    );
+  }
+}
+
 test("action references match the complete YAML uses value", () => {
   const revision = "11d5960a326750d5838078e36cf38b85af677262";
   assert.equal(
@@ -73,12 +98,10 @@ test("action references match the complete YAML uses value", () => {
 });
 
 test("only the release publisher receives repository write authority", () => {
-  const permissions = section("permissions", 0);
   const build = section("build", 2);
   const publish = section("publish", 2);
 
-  assert.match(permissions, /^  contents: read$/m);
-  assert.doesNotMatch(build, /contents: write/);
+  assertReleasePermissions(workflow);
   assert.match(
     build,
     /actions\/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02/,
@@ -91,6 +114,21 @@ test("only the release publisher receives repository write authority", () => {
   );
   assert.match(publish, /softprops\/action-gh-release@/);
   assert.equal(workflow.match(/^[ \t]*contents: write$/gm)?.length, 1);
+});
+
+test("write-all cannot hide in a non-publisher job", () => {
+  assert.throws(() =>
+    assertReleasePermissions(`
+permissions:
+  contents: read
+jobs:
+  build:
+    permissions: write-all
+  publish:
+    permissions:
+      contents: write
+`),
+  );
 });
 
 test("the release checkout is pinned to an immutable revision", () => {
