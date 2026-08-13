@@ -170,7 +170,7 @@ fn resolves_inside(repo: &Path, candidate: &Path) -> bool {
 /// normalised, because a finding that needs to escape the repository is not a
 /// finding about the repository.
 fn safe_relative_path(raw: &str) -> Result<PathBuf, Rejection> {
-    let candidate = Path::new(raw.trim().trim_start_matches("./"));
+    let candidate = Path::new(raw);
     let mut out = PathBuf::new();
     for component in candidate.components() {
         match component {

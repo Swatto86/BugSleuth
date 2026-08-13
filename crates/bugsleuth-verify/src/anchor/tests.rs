@@ -70,6 +70,30 @@ fn rejects_a_file_that_does_not_exist() {
 }
 
 #[test]
+fn significant_filename_edge_spaces_are_not_normalized() {
+    assert_eq!(
+        safe_relative_path("src/ leading.rs"),
+        Ok(PathBuf::from("src/ leading.rs"))
+    );
+    assert_eq!(
+        safe_relative_path("src/trailing.rs "),
+        Ok(PathBuf::from("src/trailing.rs "))
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn file_names_with_significant_edge_spaces_survive_verification() {
+    let repo = fixture("file_names_with_significant_edge_spaces_survive_verification");
+    for file in ["src/ leading.rs", "src/trailing.rs "] {
+        std::fs::write(repo.join(file), "fn spaced() {}\n").expect("write spaced file");
+        let anchor = verify_anchor(&repo, &raw(file, 1, "fn spaced() {}"))
+            .unwrap_or_else(|error| panic!("rejected {file:?}: {error}"));
+        assert_eq!(anchor.file, file);
+    }
+}
+
+#[test]
 fn rejects_a_path_that_climbs_out_of_the_repository() {
     let repo = fixture("rejects_a_path_that_climbs_out_of_the_repository");
     let result = verify_anchor(&repo, &raw("../../../etc/passwd", 1, "root"));
