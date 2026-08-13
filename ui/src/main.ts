@@ -93,7 +93,9 @@ function renderPlanSummary(): void {
   const busy = isRunning() || isApplying() || isClearing() || isUpdating();
   // The completion listener too: without it a started run never finishes as
   // far as this window is concerned, and every action stays blocked.
-  ui.run.disabled = !runEventsReady() || busy || blocked !== null;
+  const runDisabled = !runEventsReady() || busy || blocked !== null;
+  if (runDisabled && document.activeElement === ui.run) focusStatus();
+  ui.run.disabled = runDisabled;
   ui.run.title = busy
     ? "A review or other operation is already in progress."
     : !runEventsReady()

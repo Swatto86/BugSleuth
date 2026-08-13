@@ -34,8 +34,9 @@ function handsFocusOffBefore(scope: ts.Node, position: number): boolean {
     if (!ts.isCallExpression(node) || node.getStart() >= position) return;
     const callee = node.expression;
     if (
-      ts.isPropertyAccessExpression(callee) &&
-      callee.name.text === "focusStatus"
+      (ts.isPropertyAccessExpression(callee) &&
+        callee.name.text === "focusStatus") ||
+      (ts.isIdentifier(callee) && callee.text === "focusStatus")
     ) {
       found = true;
     }
@@ -50,6 +51,36 @@ test("starting a run moves focus off the disabled Run button to Stop", () => {
     run.getText(),
     /deps\.stop\.focus\(\)/,
     "startRun never moves focus to Stop, so activating Run drops focus to <body>",
+  );
+});
+
+test("late validation hands focus off before disabling Run", () => {
+  const main = frontendFiles().find((source) => source.fileName === "main.ts");
+  assert.ok(main, "main.ts is no longer a shipped frontend module");
+  let render: ts.FunctionDeclaration | undefined;
+  walk(main, (node) => {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text === "renderPlanSummary"
+    ) {
+      render = node;
+    }
+  });
+  assert.ok(render, "renderPlanSummary was not found");
+  let disableRun: ts.BinaryExpression | undefined;
+  walk(render, (node) => {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      node.left.getText(main) === "ui.run.disabled"
+    ) {
+      disableRun = node;
+    }
+  });
+  assert.ok(disableRun, "ui.run.disabled assignment was not found");
+  assert.ok(
+    handsFocusOffBefore(render, disableRun.getStart(main)),
+    "renderPlanSummary disables focused Run before handing focus off",
   );
 });
 

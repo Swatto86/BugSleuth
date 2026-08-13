@@ -151,6 +151,7 @@ node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node lane titles match the engine's own names, including UX
+node late validation hands focus off before disabling Run
 node light theme meets WCAG AA everywhere the UI uses it
 node long-running actions wait for their completion listeners
 node manual sign-in cannot be overwritten by startup preflight
