@@ -74,18 +74,71 @@ test("the clear handler shows a running status while the delete is in flight", (
 });
 
 test("the clear handler disables its button and re-enables it on both outcomes", () => {
-  const handler = clearHandlerText(actionsSource().source);
+  const source = actionsSource().source;
+  const handler = clearHandlerText(source);
   assert.ok(handler, "ui.clearSaved listener is gone from actions.ts");
   assert.match(
     handler,
     /ui\.clearSaved\.disabled = true/,
     "clear_saved does not disable its button, so it can be triggered again",
   );
-  const reEnableMatches =
-    handler.match(/ui\.clearSaved\.disabled = false/g) ?? [];
-  assert.ok(
-    reEnableMatches.length >= 2,
-    `the button is re-enabled on ${reEnableMatches.length} path(s); it must be ` +
-      "re-enabled on both the success and the failure of clear_saved",
-  );
+
+  const walk = (node: ts.Node, visit: (candidate: ts.Node) => void): void => {
+    visit(node);
+    node.forEachChild((child) => walk(child, visit));
+  };
+  const mentionsClearSaved = (node: ts.Node): boolean => {
+    let found = false;
+    walk(node, (candidate) => {
+      if (
+        ts.isCallExpression(candidate) &&
+        ts.isIdentifier(candidate.expression) &&
+        candidate.expression.text === "invoke" &&
+        candidate.arguments[0] !== undefined &&
+        ts.isStringLiteral(candidate.arguments[0]) &&
+        candidate.arguments[0].text === "clear_saved"
+      ) {
+        found = true;
+      }
+    });
+    return found;
+  };
+  const setsClearSavedEnabled = (node: ts.Node): boolean => {
+    let found = false;
+    walk(node, (candidate) => {
+      if (
+        ts.isBinaryExpression(candidate) &&
+        candidate.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        candidate.left.getText() === "ui.clearSaved.disabled" &&
+        candidate.right.kind === ts.SyntaxKind.FalseKeyword
+      ) {
+        found = true;
+      }
+    });
+    return found;
+  };
+
+  const callbacks = new Map<string, ts.Node>();
+  walk(source, (node) => {
+    if (
+      !ts.isCallExpression(node) ||
+      !ts.isPropertyAccessExpression(node.expression)
+    ) {
+      return;
+    }
+    const name = node.expression.name.text;
+    if (name !== "then" && name !== "catch") return;
+    if (!mentionsClearSaved(node.expression.expression)) return;
+    const callback = node.arguments[0];
+    if (callback) callbacks.set(name, callback);
+  });
+
+  for (const name of ["then", "catch"]) {
+    const callback = callbacks.get(name);
+    assert.ok(callback, `the clear_saved .${name} callback is gone`);
+    assert.ok(
+      setsClearSavedEnabled(callback),
+      `clear_saved ${name} leaves the Clear button disabled`,
+    );
+  }
 });
