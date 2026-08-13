@@ -147,6 +147,53 @@ test("flushing writes the latest pending settings exactly once", async () => {
   );
 });
 
+test("flushing waits for edits made while an earlier save is pending", async () => {
+  const settings: Settings = {
+    repo: "first",
+    scope: "",
+    models: [],
+    theme: "system",
+    reuse_completed: true,
+    triage_model: "haiku",
+    apply_model: "",
+    apply_effort: "",
+    push_after_apply: false,
+    tag_release_after_push: false,
+  };
+  let releaseFirst = (): void => undefined;
+  let releaseSecond = (): void => undefined;
+  const first = new Promise<void>((resolve) => (releaseFirst = resolve));
+  const second = new Promise<void>((resolve) => (releaseSecond = resolve));
+  const saved: string[] = [];
+  const saver = savingSettings({
+    settings: () => settings,
+    setError: () => undefined,
+    save: async (snapshot) => {
+      saved.push(snapshot.repo);
+      await (saved.length === 1 ? first : second);
+    },
+  });
+
+  saver.allowWrites();
+  saver.schedule();
+  const flushing = saver.flush();
+  let settled = false;
+  void flushing.then(() => (settled = true));
+  settings.repo = "second";
+  saver.schedule();
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 450));
+  releaseFirst();
+  for (let attempts = 0; saved.length < 2 && attempts < 100; attempts += 1) {
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 5));
+  }
+  assert.equal(saved.length, 2, "the newer snapshot never started saving");
+  const settledBeforeLatestSave = settled;
+  releaseSecond();
+  assert.equal(await flushing, true);
+  assert.equal(settledBeforeLatestSave, false);
+  assert.deepEqual(saved, ["first", "second"]);
+});
+
 test("quit flushes pending settings before it can invoke exit", () => {
   const source = ts.createSourceFile(
     "actions.ts",
@@ -169,6 +216,8 @@ test("quit flushes pending settings before it can invoke exit", () => {
 
   let flush = -1;
   let quit = -1;
+  let savingStatus = -1;
+  let disableQuit = -1;
   const inspect = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
       const callee = node.expression;
@@ -187,12 +236,40 @@ test("quit flushes pending settings before it can invoke exit", () => {
       ) {
         quit = node.getStart(source);
       }
+      if (
+        ts.isPropertyAccessExpression(callee) &&
+        callee.name.text === "setStatus" &&
+        node.arguments[0] !== undefined &&
+        ts.isStringLiteral(node.arguments[0]) &&
+        node.arguments[0].text === "Saving settings before quitting…" &&
+        node.arguments[1] !== undefined &&
+        ts.isStringLiteral(node.arguments[1]) &&
+        node.arguments[1].text === "running"
+      ) {
+        savingStatus = node.getStart(source);
+      }
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      node.right.kind === ts.SyntaxKind.TrueKeyword &&
+      ts.isPropertyAccessExpression(node.left) &&
+      node.left.getText(source) === "ui.quit.disabled"
+    ) {
+      disableQuit = node.getStart(source);
     }
     node.forEachChild(inspect);
   };
   inspect(requestQuit);
   assert.ok(flush >= 0, "requestQuit never flushes settings");
   assert.ok(quit >= 0, "requestQuit no longer reaches the quit command");
+  assert.ok(savingStatus >= 0, "Quit gives no feedback while settings save");
+  assert.ok(disableQuit >= 0, "Quit stays active while settings save");
+  assert.ok(savingStatus < flush, "Quit waits before showing its saving state");
+  assert.ok(
+    disableQuit < flush,
+    "Quit is disabled only after its save finishes",
+  );
   assert.ok(flush < quit, "requestQuit can exit before its settings flush");
 });
 

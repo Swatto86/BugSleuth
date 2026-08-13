@@ -94,12 +94,17 @@ export function savingSettings(deps: PersistDeps): SettingsSaver {
         void enqueue();
       }, 400);
     },
-    flush: () => {
+    flush: async () => {
       cancelTimer();
       // Reported as "not saved" rather than as a clean flush, so Quit's existing
       // failed-flush confirmation still asks before discarding the edits.
-      if (!writable) return Promise.resolve(!dirty);
-      return dirty ? enqueue() : tail;
+      if (!writable) return !dirty;
+      while (true) {
+        const pending = dirty ? enqueue() : tail;
+        const ok = await pending;
+        cancelTimer();
+        if (!dirty && pending === tail) return ok;
+      }
     },
   };
 }

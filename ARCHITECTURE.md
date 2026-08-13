@@ -129,7 +129,8 @@ The desktop shell adds only what a window needs:
 - **The window starts hidden** with a background matching the dark theme, and
   the frontend reveals it after mounting, so there is no unstyled flash.
 - **Closing hides to the tray**, and `prevent_close` runs before anything
-  fallible. The tray's Quit is the single real exit path.
+  fallible. Both Quit routes drain settings edits to a stable saved snapshot
+  before the process exits.
 - **Theme "match system" removes the attribute** rather than resolving it in
   JavaScript, so the app follows the OS live instead of freezing the choice at
   startup.

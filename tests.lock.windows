@@ -133,6 +133,7 @@ node every platform the release builds for is offered in the README
 node every quit into Rust reports its failure rather than looking broken
 node every shipped preset covers every lane
 node every silent-failure opt-out gives a reason
+node flushing waits for edits made while an earlier save is pending
 node flushing writes the latest pending settings exactly once
 node installing an update disables every operation its restart would interrupt
 node interface fields come back without comments or nesting confusing them

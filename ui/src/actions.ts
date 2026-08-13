@@ -224,6 +224,13 @@ export function bindGuardedActions(deps: ActionDeps): void {
   function requestQuit(acknowledged = false): void {
     if (quitting) return;
     quitting = true;
+    deps.setStatus("Saving settings before quitting…", "running");
+    if (document.activeElement === ui.quit) deps.focusStatus();
+    ui.quit.disabled = true;
+    const abortQuit = (): void => {
+      quitting = false;
+      ui.quit.disabled = false;
+    };
     void (async () => {
       if (!(await deps.flushSettings())) {
         deps.setStatus("Latest settings could not be saved", "error");
@@ -235,7 +242,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
           destructive: true,
         });
         if (!discard) {
-          quitting = false;
+          abortQuit();
           return;
         }
       }
@@ -246,18 +253,19 @@ export function bindGuardedActions(deps: ActionDeps): void {
         !acknowledged &&
         (isRunning() || isApplying() || clearing || deps.updating())
       ) {
-        quitting = false;
+        abortQuit();
         askBeforeQuitting();
         return;
       }
       try {
+        deps.setStatus("Quitting…", "running");
         await invoke("quit");
       } catch (error) {
-        quitting = false;
+        abortQuit();
         deps.setStatus(`Could not quit BugSleuth: ${String(error)}`, "error");
       }
     })().catch((error: unknown) => {
-      quitting = false;
+      abortQuit();
       deps.setStatus(
         `Could not save settings before quitting: ${String(error)}`,
         "error",
