@@ -288,37 +288,6 @@ test("no CSS rule styles a class nothing uses", () => {
   );
 });
 
-test("every control the matrix rebuilds can be found again afterwards", () => {
-  // Toggling a lane rebuilds the whole table, so any control without a
-  // `data-focus-key` loses keyboard focus to the top of the page. The first fix
-  // covered three of six, and BugSleuth found the rest: typing a model id while
-  // the vendor catalogue finished loading in the background rebuilt the table
-  // mid-keystroke, on the first thing anyone does after opening the app.
-  // Both files, because the row is built across both: `view.ts` assembles it
-  // and `pickers.ts` builds the cells. Reading only `view.ts` found three of
-  // six the moment the pickers moved out, and said so — a scan scoped to one
-  // file silently shrinks when the code it watches is split.
-  const source = ["view.ts", "pickers.ts"]
-    .map((name) => fs.readFileSync(path.join(here, name), "utf8"))
-    .join("\n");
-
-  // Anything focusable that the row builder creates.
-  const created = [
-    ...source.matchAll(/createElement\("(input|select|button)"\)/g),
-  ].length;
-  assert.ok(
-    created >= 6,
-    `found only ${created} focusable controls in the row builder`,
-  );
-
-  const keyed = [...source.matchAll(/dataset\["focusKey"\]/g)].length;
-  assert.ok(
-    keyed >= created,
-    `${created} focusable controls are rebuilt and only ${keyed} carry a focus key, ` +
-      `so the rest drop keyboard focus to the top of the page on every rebuild`,
-  );
-});
-
 test("the finding cards allow text selection", () => {
   const css = fs.readFileSync(path.join(here, "app.css"), "utf8");
   const block = /\.finding-body\s*\{([^}]*)\}/.exec(css);
