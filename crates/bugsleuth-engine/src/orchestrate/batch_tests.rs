@@ -5,6 +5,18 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::task::JoinSet;
 
+#[test]
+fn each_sweep_runs_directly_in_the_joinset_that_cancellation_aborts() {
+    let source = include_str!("batch.rs");
+    let code = source
+        .split_once("#[cfg(test)]")
+        .map_or(source, |(before, _)| before);
+    assert!(
+        !code.contains("let inner = tokio::spawn"),
+        "a nested sweep task can finish before its abortable wrapper and lose its result"
+    );
+}
+
 /// A result that becomes ready only after the non-blocking look would have
 /// returned nothing must still reach the parent.
 ///
@@ -41,8 +53,12 @@ async fn a_sweep_that_finishes_during_cancellation_is_still_collected() {
     }
     tokio::task::yield_now().await;
 
-    let mut out = Vec::new();
-    reap_cancelled(&mut tasks, &mut out).await;
+    let out = reap_cancelled(&mut tasks)
+        .await
+        .into_iter()
+        .filter_map(Result::ok)
+        .map(|(_, outcome)| outcome)
+        .collect::<Vec<_>>();
     assert_eq!(
         out,
         [7],
@@ -60,7 +76,7 @@ fn cancellation_awaits_joinset_results_after_abort() {
     let cancel_arm = code
         .split("options.cancel.cancelled()")
         .nth(1)
-        .and_then(|rest| rest.split("joined = tasks.join_next()").next())
+        .and_then(|rest| rest.split("joined = tasks.join_next_with_id()").next())
         .expect("cancellation arm");
     assert!(
         cancel_arm.contains("reap_cancelled"),
@@ -75,7 +91,7 @@ fn cancellation_awaits_joinset_results_after_abort() {
         "reap_cancelled must abort in-flight work before awaiting"
     );
     assert!(
-        code.contains("tasks.join_next().await"),
+        code.contains("tasks.join_next_with_id().await"),
         "reap_cancelled must await JoinSet results so completed sweeps are kept"
     );
 }
@@ -83,32 +99,30 @@ fn cancellation_awaits_joinset_results_after_abort() {
 /// A panic must carry the unit's lane and model out of the JoinSet, not a bare
 /// error string that note_panicked would have to invent a Correctness gap for.
 #[tokio::test]
-async fn a_panicking_inner_sweep_reports_its_own_lane_and_model() {
+async fn a_panicking_sweep_reports_its_own_lane_and_model() {
+    use super::{SweepOutcome, take_joined_result};
     use bugsleuth_domain::Lane;
-    use tokio::task::JoinSet;
+    use std::collections::HashMap;
 
-    let mut tasks: JoinSet<(Lane, String, String)> = JoinSet::new();
+    let mut tasks: JoinSet<SweepOutcome> = JoinSet::new();
     let lane = Lane::Security;
     let model = "claude:sonnet".to_string();
-    tasks.spawn(async move {
-        let lane_for_panic = lane;
-        let model_for_panic = model.clone();
-        let inner = tokio::spawn(async move {
-            panic!("sweep exploded");
-        });
-        let _abort_inner = super::AbortOnDrop(inner.abort_handle());
-        match inner.await {
-            Ok(()) => unreachable!("inner was meant to panic"),
-            Err(error) => (lane_for_panic, model_for_panic, error.to_string()),
-        }
+    let handle = tasks.spawn(async move {
+        panic!("sweep exploded");
     });
+    let mut identities = HashMap::from([(handle.id(), (lane, model))]);
 
-    let joined = tasks.join_next().await.expect("task").expect("outer");
-    assert_eq!(joined.0, Lane::Security);
-    assert_eq!(joined.1, "claude:sonnet");
+    let joined = tasks.join_next_with_id().await.expect("task");
+    let mut completed = Vec::new();
+    let mut panicked = Vec::new();
+    take_joined_result(joined, &mut identities, &mut completed, &mut panicked);
+    assert!(completed.is_empty());
+    assert!(identities.is_empty());
+    assert_eq!(panicked[0].0, Lane::Security);
+    assert_eq!(panicked[0].1, "claude:sonnet");
     assert!(
-        joined.2.contains("panicked") || joined.2.contains("sweep exploded"),
+        panicked[0].2.contains("panicked") || panicked[0].2.contains("sweep exploded"),
         "expected a panic error, got {}",
-        joined.2
+        panicked[0].2
     );
 }
