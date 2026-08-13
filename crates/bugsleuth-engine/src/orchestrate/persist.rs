@@ -12,6 +12,52 @@ use super::RunOptions;
 use crate::plan::Unit;
 use crate::report::{LaneReport, Status};
 
+#[derive(serde::Serialize)]
+struct StoredReportRef<'a> {
+    bugsleuth_review_contract: String,
+    #[serde(flatten)]
+    report: &'a LaneReport,
+}
+
+#[derive(serde::Deserialize)]
+struct StoredReport {
+    #[serde(default)]
+    bugsleuth_review_contract: String,
+    #[serde(flatten)]
+    report: LaneReport,
+}
+
+fn review_contract() -> String {
+    let mut hash = 0xcbf29ce484222325_u64;
+    let mut include = |text: &str| {
+        for byte in text.bytes() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        hash ^= 0xff;
+        hash = hash.wrapping_mul(0x100000001b3);
+    };
+
+    for lane in bugsleuth_domain::Lane::ALL {
+        for scope in [None, Some("__BUGSLEUTH_SCOPE__")] {
+            include(&crate::brief::build(lane, scope, true));
+            include(&crate::brief::build(lane, scope, false));
+            for vendor in [crate::sweep::Vendor::Claude, crate::sweep::Vendor::Codex] {
+                if let Ok(instruction) = crate::sweep::agent_support(vendor, "") {
+                    include(&crate::brief::build_with_agents(
+                        lane,
+                        scope,
+                        vendor.enforces_schema(),
+                        Some(instruction),
+                    ));
+                }
+            }
+        }
+    }
+    include(&serde_json::to_string(&bugsleuth_domain::finding_schema()).unwrap_or_default());
+    format!("{hash:016x}")
+}
+
 /// A previous successful sweep for this unit, if resuming and one exists.
 ///
 /// A file that cannot be read or parsed is treated as absent rather than as an
@@ -65,10 +111,13 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
 /// to a truncated report is to sweep again, not to refuse to start.
 fn read_swept(path: &Path) -> Option<LaneReport> {
     let text = std::fs::read_to_string(path).ok()?;
-    let report: LaneReport = serde_json::from_str(&text).ok()?;
+    let stored: StoredReport = serde_json::from_str(&text).ok()?;
+    if stored.bugsleuth_review_contract != review_contract() {
+        return None;
+    }
     // A failed sweep is retried. The usual reason a run died is a rate limit,
     // which is exactly the case worth attempting again.
-    matches!(report.status, Status::Swept { .. }).then_some(report)
+    matches!(stored.report.status, Status::Swept { .. }).then_some(stored.report)
 }
 
 /// Whether a stored report reviewed the same scope this run is asking about.
@@ -253,7 +302,11 @@ fn safe(text: &str) -> String {
 pub(super) fn write_report(dir: &Path, name: &str, report: &LaneReport) -> Result<()> {
     std::fs::create_dir_all(dir)?;
     let path: PathBuf = dir.join(name);
-    let json = serde_json::to_string_pretty(report)?;
+    let stored = StoredReportRef {
+        bugsleuth_review_contract: review_contract(),
+        report,
+    };
+    let json = serde_json::to_string_pretty(&stored)?;
 
     crate::atomic::write(&path, json)
         .map_err(|e| anyhow::anyhow!("cannot replace {}: {e}", path.display()))?;

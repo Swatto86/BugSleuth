@@ -1,7 +1,7 @@
 //! Tests for the orchestrator, in their own file only because the
 //! orchestrator plus its tests crossed the hard line cap.
 
-use super::super::orchestrate::persist::file_name_for;
+use super::super::orchestrate::persist::{file_name_for, write_report};
 use super::super::orchestrate::*;
 use super::super::plan::{Config, ModelPlan, Unit, plan};
 use bugsleuth_domain::Lane;
@@ -48,8 +48,9 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
             use_agents: false,
             pass: 1,
         };
-        let _ = std::fs::create_dir_all(&dir);
-        let _ = std::fs::write(dir.join(file_name_for(&unit)), report);
+        let report = serde_json::from_str(&report)
+            .unwrap_or_else(|error| panic!("invalid seeded report: {error}"));
+        assert!(write_report(&dir, &file_name_for(&unit), &report).is_ok());
     };
     seed(
         "claude:sonnet",

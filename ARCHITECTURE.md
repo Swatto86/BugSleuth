@@ -242,6 +242,7 @@ it is the only invocation that has to write.
 
 No PRs or CI integration. No persistence beyond
 per-sweep JSON files — `--resume` reads those rather than a database, which is
-the smallest thing that makes a dead run recoverable.
-
+the smallest thing that makes a dead run recoverable. Each file fingerprints
+the briefs and finding schema, so changed review semantics cannot reuse stale
+coverage.
 

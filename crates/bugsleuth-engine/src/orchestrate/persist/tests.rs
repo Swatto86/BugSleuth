@@ -19,6 +19,31 @@ fn a_successful_sweep_is_reused_rather_than_paid_for_twice() {
 }
 
 #[test]
+fn a_report_from_another_review_contract_is_not_reused() {
+    let dir = scratch("review-contract");
+    let path = dir.join(file_name_for(&unit()));
+    let report = lane_report(Status::Swept {
+        turns: Some(3),
+        salvaged: false,
+    });
+    assert!(write_report(&dir, &file_name_for(&unit()), &report).is_ok());
+
+    let mut stored: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    stored["bugsleuth_review_contract"] = "older".into();
+    std::fs::write(&path, serde_json::to_string_pretty(&stored).unwrap()).unwrap();
+    assert!(reusable(&unit(), &options(&dir, true)).is_none());
+
+    stored
+        .as_object_mut()
+        .unwrap()
+        .remove("bugsleuth_review_contract");
+    std::fs::write(&path, serde_json::to_string_pretty(&stored).unwrap()).unwrap();
+    assert!(reusable(&unit(), &options(&dir, true)).is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_failed_sweep_is_retried_not_reused() {
     // The usual reason a run died is a rate limit, which is exactly the case
     // worth attempting again. Reusing it would make the failure permanent.
