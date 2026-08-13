@@ -200,6 +200,33 @@ test("the live E2E review replaces saved configuration deterministically", () =>
     methods.has("isSelected"),
     "lane selection is still toggled blindly",
   );
+
+  let agentControl: ts.VariableDeclaration | undefined;
+  walk(body, (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.initializer &&
+      node.initializer.getText(source).includes(".agent-cell input")
+    ) {
+      agentControl = node;
+    }
+  });
+  if (!agentControl || !ts.isIdentifier(agentControl.name)) {
+    assert.fail("the live review preserves the saved parallel-agents setting");
+  }
+  const agentName = agentControl.name.text;
+  const agentMethods = new Set<string>();
+  walk(body, (node) => {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === agentName
+    ) {
+      agentMethods.add(node.name.text);
+    }
+  });
+  assert.ok(agentMethods.has("isSelected"));
+  assert.ok(agentMethods.has("click"));
 });
 
 test("the E2E stop check observes a real provider before and after cancellation", () => {

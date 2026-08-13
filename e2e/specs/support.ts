@@ -94,6 +94,8 @@ export async function configureOneSweep(modelSpec: string): Promise<void> {
     "#matrix-body tr:first-child td:first-child select",
   ).selectByAttribute("value", vendor);
   await $("#matrix-body tr:first-child td.model-id input").setValue(model);
+  const agents = await $("#matrix-body tr:first-child td.agent-cell input");
+  if (await agents.isSelected()) await agents.click();
   await $(
     '#matrix-body tr:first-child select[aria-label="Effort for row 1"]',
   ).selectByAttribute("value", "");
