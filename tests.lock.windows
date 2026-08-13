@@ -58,6 +58,7 @@ node a save failure is shown in its own region, never gated on a run
 node a single finding is not reported as '1 findings'
 node a stored pass count outside the picker presets remains visible
 node a sweep that found nothing is not confusable with one that never ran
+node action references match the complete YAML uses value
 node agent and single-agent prompts are distinct sweeps
 node agents are available for Claude and Codex but not Kilo Ask
 node an apply that changed nothing does not claim to have applied anything

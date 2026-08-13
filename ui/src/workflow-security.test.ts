@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { parse as parseYaml } from "yaml";
 
 const root = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -31,14 +32,45 @@ function section(name: string, indent: number): string {
   return lines.slice(start, end < 0 ? undefined : end).join("\n");
 }
 
-function actionRef(action: string, source = workflow): string {
-  const escaped = action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const matches = [
-    ...source.matchAll(new RegExp(`${escaped}@([^\\s#]+)`, "g")),
+function usesValues(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(usesValues);
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  return [
+    ...(typeof record.uses === "string" ? [record.uses] : []),
+    ...Object.values(record).flatMap(usesValues),
   ];
-  assert.equal(matches.length, 1, `expected one ${action} use`);
-  return matches[0]![1]!;
 }
+
+function actionRef(action: string, source = workflow): string {
+  const matches = usesValues(parseYaml(source)).filter((ref) => {
+    const at = ref.lastIndexOf("@");
+    return at > 0 && ref.slice(0, at) === action;
+  });
+  assert.equal(matches.length, 1, `expected one ${action} use`);
+  const ref = matches[0]!;
+  return ref.slice(ref.lastIndexOf("@") + 1);
+}
+
+test("action references match the complete YAML uses value", () => {
+  const revision = "11d5960a326750d5838078e36cf38b85af677262";
+  assert.equal(
+    actionRef(
+      "actions/checkout",
+      `steps:\n  - uses: actions/checkout@${revision}`,
+    ),
+    revision,
+  );
+  assert.throws(() =>
+    actionRef(
+      "actions/checkout",
+      `steps:\n  - uses: attacker/actions/checkout@${revision}`,
+    ),
+  );
+  assert.throws(() =>
+    actionRef("actions/checkout", `# uses: actions/checkout@${revision}`),
+  );
+});
 
 test("only the release publisher receives repository write authority", () => {
   const permissions = section("permissions", 0);
