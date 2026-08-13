@@ -21,15 +21,14 @@ use super::RunControl;
 use super::run::{checked_repo, run_output_dir};
 use crate::settings::{self, Settings};
 
-/// What was thrown away, so the window can say something specific.
-///
-/// Only the count. The directory was here too and nothing read it — the window
-/// says "for this repository", which is what the button already promised, and a
-/// field no caller uses is surface with no user.
+/// What was thrown away, so the window can invalidate only that run's prompt.
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Cleared {
     /// Files removed. Zero is a normal answer, not a failure.
     pub removed: usize,
+    /// The prompt invalidated by this delete, whether or not it existed.
+    pub prompt_path: String,
 }
 
 /// Delete every stored sweep and fix prompt for the chosen repository.
@@ -60,6 +59,7 @@ pub async fn clear_saved(
 fn clear(settings: &Settings) -> Result<Cleared, String> {
     let repo = checked_repo(&settings.repo)?;
     let dir = run_output_dir(&repo)?;
+    let prompt_path = dir.join("fix-prompt.md").display().to_string();
 
     // Belt and braces on a delete. `run_output_dir` builds this path itself, so
     // it is already inside the app's own data directory — but a future change to
@@ -76,11 +76,17 @@ fn clear(settings: &Settings) -> Result<Cleared, String> {
 
     let removed = count_files(&dir);
     match std::fs::remove_dir_all(&dir) {
-        Ok(()) => Ok(Cleared { removed }),
+        Ok(()) => Ok(Cleared {
+            removed,
+            prompt_path,
+        }),
         // Nothing stored for this repository yet. Reported as an ordinary zero
         // rather than as an error: "there was nothing to delete" is the same
         // outcome the user asked for.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Cleared { removed: 0 }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Cleared {
+            removed: 0,
+            prompt_path,
+        }),
         Err(error) => Err(format!("could not clear {}: {error}", dir.display())),
     }
 }
@@ -142,6 +148,10 @@ mod tests {
         let cleared = clear(&settings).unwrap_or_else(|e| panic!("{e}"));
 
         assert_eq!(cleared.removed, 3);
+        assert_eq!(
+            cleared.prompt_path,
+            stored.join("fix-prompt.md").display().to_string()
+        );
         assert!(!stored.exists(), "the directory is still there: {stored:?}");
 
         // And again, with nothing left: an ordinary zero, not an error. "There

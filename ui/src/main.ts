@@ -20,6 +20,7 @@ import { savingSettings } from "./persist";
 import {
   type RunDeps,
   currentFixPrompt,
+  currentFixPromptPath,
   currentFixPromptRepo,
   currentRunReport,
   isRunning,
@@ -267,6 +268,7 @@ function bind(): void {
     activityChanged,
     flushSettings: () => settingsSaver.flush(),
     runDeps,
+    currentPromptPath: currentFixPromptPath,
     isShippedConfiguration,
   });
 }

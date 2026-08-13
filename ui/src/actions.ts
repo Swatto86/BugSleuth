@@ -38,6 +38,7 @@ export interface ActionDeps {
   activityChanged: () => void;
   flushSettings: () => Promise<boolean>;
   runDeps: () => RunDeps;
+  currentPromptPath: () => string;
   /** Whether the whole matrix is exactly one shipped preset. */
   isShippedConfiguration: (models: Settings["models"]) => boolean;
 }
@@ -119,18 +120,17 @@ export function bindGuardedActions(deps: ActionDeps): void {
       if (document.activeElement === ui.clearSaved) deps.focusStatus();
       deps.activityChanged();
       ui.clearSaved.disabled = true;
-      invoke<{ removed: number }>("clear_saved", {
+      invoke<{ removed: number; promptPath: string }>("clear_saved", {
         settings: deps.settings(),
       })
         .then((cleared) => {
           clearing = false;
           deps.activityChanged();
           ui.clearSaved.disabled = false;
-          // The prompt this panel would apply has just been deleted, so the
-          // button would fail with "run a review first". Offering a control
-          // that cannot work is the defect this app exists to find.
-          ui.applyPanel.classList.add("hidden");
-          ui.promptPath.classList.add("hidden");
+          if (cleared.promptPath === deps.currentPromptPath()) {
+            ui.applyPanel.classList.add("hidden");
+            ui.promptPath.classList.add("hidden");
+          }
           deps.setStatus(
             cleared.removed === 0
               ? "Nothing was stored for this repository — the next run starts fresh either way"

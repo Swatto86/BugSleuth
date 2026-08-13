@@ -43,9 +43,11 @@ let activeRunRepo = "";
 let currentReport = "";
 let fixPrompt = "";
 let fixPromptRepo = "";
+let fixPromptPath = "";
 export const currentRunReport = (): string => currentReport;
 export const currentFixPrompt = (): string => fixPrompt;
 export const currentFixPromptRepo = (): string => fixPromptRepo;
+export const currentFixPromptPath = (): string => fixPromptPath;
 
 export async function startRun(deps: RunDeps): Promise<void> {
   activeRunRepo = deps.settings().repo.trim();
@@ -190,9 +192,10 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     deps.copyPrompt.classList.toggle("hidden", fixPrompt === "");
     // Applying reads the prompt Rust wrote to disk, so it is offered only when
     // this run actually produced one.
-    deps.applyPanel.classList.toggle("hidden", !event.payload.promptPath);
-    const path = event.payload.promptPath;
-    deps.promptPath.classList.toggle("hidden", !path);
+    const path = event.payload.promptPath ?? "";
+    fixPromptPath = path;
+    deps.applyPanel.classList.toggle("hidden", path === "");
+    deps.promptPath.classList.toggle("hidden", path === "");
     deps.promptPath.textContent = path ? `Also saved to ${path}` : "";
     if (document.activeElement === deps.stop) deps.focusStatus();
     deps.renderPlanSummary();
