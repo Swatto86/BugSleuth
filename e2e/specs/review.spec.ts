@@ -175,7 +175,6 @@ describe("BugSleuth desktop app", () => {
 
   it("runs a real review and writes the result to disk", async function () {
     // A real model on a real repository. Slow by nature.
-    this.timeout(15 * 60_000);
     const existing = runsDir();
     if (existing !== undefined)
       fs.rmSync(existing, { recursive: true, force: true });
@@ -188,14 +187,22 @@ describe("BugSleuth desktop app", () => {
     await expect($("#run")).toBeEnabled();
     await $("#run").click();
 
-    await browser.waitUntil(
-      async () => (await $("#status").getText()).startsWith("Finished"),
-      {
-        timeout: 14 * 60_000,
-        interval: 2_000,
-        timeoutMsg: `run never finished; last status: ${await $("#status").getText()}`,
-      },
-    );
+    let lastStatus = "";
+    await browser
+      .waitUntil(
+        async () => {
+          lastStatus = await $("#status").getText();
+          return lastStatus.startsWith("Finished");
+        },
+        {
+          timeout: 14 * 60_000,
+          interval: 2_000,
+          timeoutMsg: "run never finished",
+        },
+      )
+      .catch((error: unknown) => {
+        throw new Error(`${String(error)}; last status: ${lastStatus}`);
+      });
     assert.equal(
       await browser.execute(() => document.activeElement?.id),
       "status",

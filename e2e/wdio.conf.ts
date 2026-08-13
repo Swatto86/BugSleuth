@@ -153,9 +153,9 @@ export const config: WebdriverIO.Config = {
     ui: "bdd",
     // A Tauri window plus a WebView2 cold start is not fast, and one spec runs
     // a *real* review — a genuine model call against a real repository, which
-    // this project documents as taking minutes. 120s passed it sometimes and
-    // failed it others, which is the worst kind of test.
-    timeout: 420_000,
+    // has its own 14-minute wait. WebdriverIO wraps each test at this timeout,
+    // so changing the timeout inside the test does not extend the outer guard.
+    timeout: 15 * 60_000,
   },
 
   // tauri-driver listens here and proxies to msedgedriver.

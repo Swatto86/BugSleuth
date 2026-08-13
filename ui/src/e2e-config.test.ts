@@ -47,6 +47,21 @@ test("the E2E harness waits for its driver cleanup and rejects a stale port", ()
         ts.isPropertyAssignment(property) &&
         property.name.getText(source) === name,
     );
+  const mochaOpts = hook("mochaOpts");
+  assert.ok(
+    mochaOpts && ts.isObjectLiteralExpression(mochaOpts.initializer),
+    "the E2E Mocha options were not found",
+  );
+  const timeout = mochaOpts.initializer.properties.find(
+    (property): property is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(property) &&
+      property.name.getText(source) === "timeout",
+  );
+  assert.equal(
+    timeout?.initializer.getText(source),
+    "15 * 60_000",
+    "the runner timeout cannot cover the real review's 14-minute wait",
+  );
   const onPrepare = hook("onPrepare");
   const onComplete = hook("onComplete");
   assert.ok(onPrepare, "the E2E onPrepare hook was not found");
