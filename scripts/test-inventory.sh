@@ -32,12 +32,12 @@ platform() {
 out="${1:-tests.lock.$(platform)}"
 
 
-# `|| true` on both, deliberately. Under `set -euo pipefail` a `grep` that
-# matches nothing exits 1 and kills this script *without printing anything* —
-# which is what happened on one CI runner, and cost a round-trip to learn
-# nothing. An empty result is the guard's business below, and the guard says
-# which half came back empty.
-rust_raw=$(cargo test --workspace -- --list 2>/dev/null || true)
+# Preserve the runner's complete output for diagnostics, but never parse a
+# partial listing as success when the runner itself failed.
+if ! rust_raw=$(cargo test --workspace -- --list 2>&1); then
+  printf '%s\n' "$rust_raw" >&2
+  exit 1
+fi
 rust=$(printf '%s\n' "$rust_raw" | sed -n 's/: test$//p' | sed 's/^/rust /' || true)
 
 # Node chooses its reporter by whether stdout is a terminal: `spec` for a
@@ -46,7 +46,10 @@ rust=$(printf '%s\n' "$rust_raw" | sed -n 's/: test$//p' | sed 's/^/rust /' || t
 # frontend tests. `package.json` now names the reporter, which is the one place
 # the test command lives — passing a flag here instead would be the same
 # command written down twice, and they would drift.
-node_raw=$(npm test --silent 2>&1 || true)
+if ! node_raw=$(npm test --silent 2>&1); then
+  printf '%s\n' "$node_raw" >&2
+  exit 1
+fi
 # Matched on the trailing duration, not on the reporter's tick: the tick is
 # non-ASCII and its passage through a pipe is one more thing that can differ
 # between platforms for no good reason.

@@ -110,6 +110,7 @@ bash "$root/scripts/check-test-inventory.sh"
 
 say "test inventory regression"
 ./scripts/test-verify-lock.sh
+bash "$root/scripts/test-inventory-status.sh"
 
 say "file sizes"
 # 400 lines is the hard cap. Generated, vendored and lock files are exempt.
