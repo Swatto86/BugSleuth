@@ -90,13 +90,14 @@ async fn output_exactly_at_the_cap_is_complete() {
 async fn overflow_before_timeout_keeps_both_facts() {
     let result = run_at_cap("earlyFINAL", 5, Duration::from_secs(1), true).await;
     let error = result.expect_err("timeout overflow was reported as complete");
-    let ProcessError::OutputTruncated {
-        context, output, ..
+    let ProcessError::Timeout {
+        seconds, output, ..
     } = error
     else {
-        panic!("overflow was hidden by a different error: {error:?}");
+        panic!("timeout was hidden by a different error: {error:?}");
     };
-    assert!(context.contains("timed out after 1s"), "{context}");
+    assert_eq!(seconds, 1);
     assert_eq!(output.code, None);
     assert_eq!(output.stdout, "early");
+    assert!(!output.stdout.contains("FINAL"));
 }

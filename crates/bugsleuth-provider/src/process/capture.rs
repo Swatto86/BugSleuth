@@ -49,6 +49,13 @@ pub(super) fn result(
         stdout: String::from_utf8_lossy(&stdout.bytes).into_owned(),
         stderr: String::from_utf8_lossy(&stderr.bytes).into_owned(),
     };
+    if let Some(seconds) = timeout_seconds {
+        return Err(ProcessError::Timeout {
+            what: what.to_string(),
+            seconds,
+            output,
+        });
+    }
     if stdout_truncated || stderr_truncated {
         let streams = if stdout_truncated && stderr_truncated {
             "stdout and stderr"
@@ -69,12 +76,5 @@ pub(super) fn result(
             output: Box::new(output),
         });
     }
-    match timeout_seconds {
-        Some(seconds) => Err(ProcessError::Timeout {
-            what: what.to_string(),
-            seconds,
-            output,
-        }),
-        None => Ok(output),
-    }
+    Ok(output)
 }
