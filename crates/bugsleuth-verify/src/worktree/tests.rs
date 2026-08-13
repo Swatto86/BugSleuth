@@ -307,6 +307,7 @@ fn a_git_file_pointing_at_another_repository_is_refused_without_touching_it() {
         let _ = std::fs::remove_dir_all(long_path(&attacker));
         return;
     };
+    let victim_head = git(&victim, &["rev-parse", "HEAD"]).expect("read victim HEAD before attack");
 
     // Replace the attacker's own `.git` directory with a file pointing at the
     // victim's git directory. Git reads the victim's HEAD and refs from here.
@@ -325,10 +326,16 @@ fn a_git_file_pointing_at_another_repository_is_refused_without_touching_it() {
 
     // The victim must keep exactly the branches it started with: no
     // `bugsleuth/*` branch was created in it by the refused worktree.
-    let branches = git(&victim, &["branch", "--list", "bugsleuth/*"]).unwrap_or_default();
+    let branches = git(&victim, &["branch", "--list", "bugsleuth/*"])
+        .expect("victim repository became unreadable");
     assert!(
         branches.trim().is_empty(),
         "a branch was created in the victim repository: {branches}"
+    );
+    assert_eq!(
+        git(&victim, &["rev-parse", "HEAD"]).expect("read victim HEAD after refusal"),
+        victim_head,
+        "the refused operation changed the victim HEAD"
     );
 
     let _ = std::fs::remove_dir_all(long_path(&attacker));
