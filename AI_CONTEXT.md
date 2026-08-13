@@ -36,6 +36,7 @@ Cursor specs look like `cursor:composer-2.5`. The CLI binary users type is `agen
 
 ## Recent Context & Decisions
 
+- 2026-08-13: Released **0.2.52** — fixed review/apply cancellation and reporting, hardened path and process-output handling, constrained saved settings, and made verification/release gates fail closed.
 - 2026-08-13: Released **0.2.51** — Codex is a review provider again. The sweep-matrix dropdown lists it whenever the CLI is installed; `plan` accepts `codex:` rows; sweeps run `--sandbox read-only`.
 - 2026-08-13: Codex is a review provider again. The sweep-matrix dropdown lists it whenever the CLI is installed; `plan` accepts `codex:` rows; sweeps run `--sandbox read-only` with `--ignore-rules` / `--ignore-user-config`. Apply still uses `--sandbox workspace-write`.
 - 2026-08-12: Released **0.2.50** — isolated worktrees unlink instruction-named file links; Cursor apply refuses those links; Run explains why it is disabled; an unclosed JSON fence no longer cuts at snippet backticks; check_all's CLI-install scan no longer matches its own test.
