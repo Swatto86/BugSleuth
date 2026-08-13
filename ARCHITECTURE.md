@@ -222,6 +222,9 @@ Beyond that the guarantee is git:
   the commit the repository started on, so a fix the model *committed* still
   counts — `git status` alone would show a clean tree and read as "nothing
   happened".
+- **Stop is reconciled by the engine before the window reports completion.** It
+  kills in-flight work immediately, then preserves changed-file evidence and
+  any uncertain push or tag outcome instead of dropping that result.
 - A sweep and an apply may not overlap, enforced in the shell rather than by
   disabling a button: a review reading the tree while an apply rewrites it
   reports on code that no longer exists.

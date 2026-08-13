@@ -429,6 +429,7 @@ rust commands::apply::report::tests::committed_work_is_reported_as_changed_rathe
 rust commands::apply::report::tests::the_push_outcome_reaches_the_text_the_window_shows
 rust commands::apply::report::tests::uncommitted_work_says_so_because_the_reader_has_to_go_and_look
 rust commands::apply::tests::a_failed_prompt_load_returns_the_state_to_idle
+rust commands::apply::tests::apply_cancellation_is_left_to_the_engine
 rust commands::apply::tests::clearing_cannot_start_between_the_reservation_and_the_prompt_load
 rust commands::apply::tests::the_applying_state_is_taken_before_the_run_directory_is_read
 rust commands::run::control::tests::cancelling_an_apply_stops_its_signal

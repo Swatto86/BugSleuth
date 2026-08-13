@@ -6,8 +6,10 @@
 //! instructions to an agent with write access. The file the run wrote is the
 //! only source that cannot have been substituted on the way.
 
+use std::future::Future;
 use std::time::Duration;
 
+use bugsleuth_engine::cancel::Cancel;
 use tauri::{Emitter, Manager};
 
 use super::RunControl;
@@ -26,6 +28,14 @@ use report::describe;
 /// hitting it means something is wrong rather than that the list was long.
 const APPLY_TIMEOUT: Duration = Duration::from_secs(7200);
 const APPLY_MAX_TURNS: u32 = 300;
+
+async fn await_engine_apply<F, T>(request: F, cancel: &Cancel) -> (T, bool)
+where
+    F: Future<Output = T>,
+{
+    let report = request.await;
+    (report, cancel.stopped())
+}
 
 /// Apply the last run's fix prompt with the chosen model.
 ///
@@ -70,19 +80,10 @@ pub async fn apply_fixes(
             push: settings.push_after_apply,
             tag: settings.tag_release_after_push,
         });
-        // Cancellation is carried out of the select rather than folded into the
-        // error, which made a deliberate Stop indistinguishable from a provider
-        // failure — the apply's `ok: false` said only that there was no report.
-        let (report, cancelled) = tokio::select! {
-            biased;
-            () = cancel.cancelled() => (
-                Err(anyhow::anyhow!(
-                    "the apply was stopped. The model was killed part-way through editing the repository — check `git status` and `git log` to see what it had already changed."
-                )),
-                true,
-            ),
-            report = request => (report, false),
-        };
+        // The engine owns cancellation and reconciles whatever git or the
+        // remote accepted before it returns. Dropping that future here loses
+        // the changed-file and uncertain-publication report.
+        let (report, cancelled) = await_engine_apply(request, &cancel).await;
 
         let payload = match report {
             Ok(report) => serde_json::json!({
@@ -161,6 +162,28 @@ pub fn cancel_apply(control: tauri::State<'_, RunControl>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[tokio::test]
+    async fn apply_cancellation_is_left_to_the_engine() {
+        let cancel = bugsleuth_engine::cancel::Cancel::new();
+        let request_cancel = cancel.clone();
+        let reconciled = Arc::new(AtomicBool::new(false));
+        let request_reconciled = Arc::clone(&reconciled);
+        let request = async move {
+            request_cancel.cancelled().await;
+            request_reconciled.store(true, Ordering::Relaxed);
+            "engine report"
+        };
+        cancel.stop();
+
+        let (report, cancelled) = await_engine_apply(request, &cancel).await;
+
+        assert_eq!(report, "engine report");
+        assert!(reconciled.load(Ordering::Relaxed));
+        assert!(cancelled);
+    }
 
     /// Reserving before loading is what makes the two operations order.
     ///
