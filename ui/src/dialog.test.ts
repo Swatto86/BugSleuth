@@ -32,16 +32,31 @@ test("the confirmation dialog describes its message to assistive tech", () => {
   const confirmDialog = declaration(dialog, "confirmDialog");
   assert.ok(confirmDialog, "confirmDialog() is gone from dialog.ts");
 
-  assert.match(
-    confirmDialog.getText(),
-    /body\.id\s*=/,
-    "the dialog body paragraph has no id for aria-describedby to reference",
-  );
+  let bodyIdAssigned = false;
   // The IDREF's target, not just the attribute's name. Matching bare
   // "aria-describedby" passed a panel described by its own heading, which
   // announces the title twice and never reads the destructive-action warning.
   let describedByBody = false;
   walk(confirmDialog, (node) => {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isPropertyAccessExpression(node.left) &&
+      ts.isIdentifier(node.left.expression) &&
+      node.left.expression.text === "body" &&
+      node.left.name.text === "id" &&
+      ts.isTemplateExpression(node.right)
+    ) {
+      bodyIdAssigned =
+        node.right.head.text === "dialog-message-" &&
+        node.right.templateSpans.some(
+          ({ expression }) =>
+            ts.isPropertyAccessExpression(expression) &&
+            ts.isIdentifier(expression.expression) &&
+            expression.expression.text === "heading" &&
+            expression.name.text === "id",
+        );
+    }
     if (!ts.isCallExpression(node)) return;
     const [attribute, target] = node.arguments;
     describedByBody =
@@ -59,6 +74,10 @@ test("the confirmation dialog describes its message to assistive tech", () => {
         target.expression.text === "body" &&
         target.name.text === "id");
   });
+  assert.ok(
+    bodyIdAssigned,
+    "the dialog body has no nonempty, dynamically unique id",
+  );
   assert.ok(
     describedByBody,
     "the dialog panel is not described by its warning paragraph",
