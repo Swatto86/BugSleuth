@@ -15,12 +15,11 @@ import ts from "typescript";
 
 import { callsTo, frontendFiles, stringArgument, walk } from "./ast.test.ts";
 
-/** The source text of a named property's initializer in a call's object
- * literal argument, or undefined if the call has no such property. */
-function propertyInitializer(
+/** A named property's initializer in a call's object literal argument. */
+function propertyExpression(
   call: ts.CallExpression,
   property: string,
-): string | undefined {
+): ts.Expression | undefined {
   const argument = call.arguments[0];
   if (!argument || !ts.isObjectLiteralExpression(argument)) return undefined;
   for (const member of argument.properties) {
@@ -29,17 +28,53 @@ function propertyInitializer(
       ts.isIdentifier(member.name) &&
       member.name.text === property
     ) {
-      return member.initializer.getText();
+      return member.initializer;
     }
     // A shorthand `{ busy }` names a binding of the same name.
     if (
       ts.isShorthandPropertyAssignment(member) &&
       member.name.text === property
     ) {
-      return member.name.text;
+      return member.name;
     }
   }
   return undefined;
+}
+
+const propertyInitializer = (call: ts.CallExpression, property: string) =>
+  propertyExpression(call, property)?.getText();
+
+function orCalls(expression: ts.Expression): string[] | undefined {
+  while (ts.isParenthesizedExpression(expression))
+    expression = expression.expression;
+  if (
+    ts.isCallExpression(expression) &&
+    ts.isIdentifier(expression.expression) &&
+    expression.arguments.length === 0
+  ) {
+    return [expression.expression.text];
+  }
+  if (
+    ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.BarBarToken
+  ) {
+    const left = orCalls(expression.left);
+    const right = orCalls(expression.right);
+    return left && right ? [...left, ...right] : undefined;
+  }
+  return undefined;
+}
+
+function predicateCalls(
+  call: ts.CallExpression,
+  property: string,
+): string[] | undefined {
+  const initializer = propertyExpression(call, property);
+  return initializer &&
+    ts.isArrowFunction(initializer) &&
+    ts.isExpression(initializer.body)
+    ? orCalls(initializer.body)
+    : undefined;
 }
 
 test("the updater is blocked while a review or an apply is in flight", () => {
@@ -51,20 +86,24 @@ test("the updater is blocked while a review or an apply is in flight", () => {
   assert.ok(calls.length >= 1, "wireUpdate is no longer called from main.ts");
 
   for (const call of calls) {
-    const busy = propertyInitializer(call, "busy");
-    assert.ok(busy, "wireUpdate is called without a busy predicate");
-    assert.match(
-      busy,
-      /isRunning/,
-      `the updater's busy predicate does not consult isRunning: ${busy}`,
-    );
-    assert.match(
-      busy,
-      /isApplying/,
-      `the updater's busy predicate does not consult isApplying, so an install ` +
-        `could restart the process mid-apply: ${busy}`,
+    assert.deepEqual(
+      predicateCalls(call, "busy")?.sort(),
+      ["isApplying", "isClearing", "isRunning"],
+      `the updater's busy predicate is not exactly three ORed activity checks: ${propertyInitializer(call, "busy")}`,
     );
   }
+});
+
+test("the updater busy predicate rejects conjunctions", () => {
+  const source = ts.createSourceFile(
+    "fixture.ts",
+    "wireUpdate({ busy: () => (isRunning() && isApplying()) || isClearing() });",
+    ts.ScriptTarget.ESNext,
+    true,
+  );
+  const call = callsTo(source, "wireUpdate")[0];
+  assert.ok(call, "the malformed fixture did not parse");
+  assert.equal(predicateCalls(call, "busy"), undefined);
 });
 
 test("declining an available update clears the running status", () => {
@@ -136,11 +175,8 @@ test("installing an update disables every operation its restart would interrupt"
   assert.ok(main, "main.ts is no longer a shipped frontend module");
   assert.ok(update, "update.ts is no longer a shipped frontend module");
 
-  const updateCall = callsTo(main, "wireUpdate")[0];
   const applyCall = callsTo(main, "bindApply")[0];
-  assert.ok(updateCall, "wireUpdate is no longer called from main.ts");
   assert.ok(applyCall, "bindApply is no longer called from main.ts");
-  assert.match(propertyInitializer(updateCall, "busy") ?? "", /isClearing/);
   assert.match(propertyInitializer(applyCall, "busy") ?? "", /isUpdating/);
 
   let renderPlanSummary = "";

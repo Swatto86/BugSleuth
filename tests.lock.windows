@@ -219,6 +219,7 @@ node the settings the window writes are the settings Rust reads
 node the signature verifier refuses an executable Microsoft did not sign
 node the two calls this rule was wrong about are classified correctly
 node the two themes are actually different
+node the updater busy predicate rejects conjunctions
 node the updater is blocked while a review or an apply is in flight
 node the verification checkout is pinned to an immutable revision
 node the window and the engine agree on which vendors can delegate
