@@ -18,6 +18,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+import { assertVerificationSucceeded } from "../../e2e/driver-security.ts";
+
 const root = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -27,6 +29,18 @@ const read = (...parts: string[]) =>
   fs.readFileSync(path.join(root, ...parts), "utf8").replace(/\r\n?/g, "\n");
 
 const VERIFIER = "assert-microsoft-signature.ps1";
+
+test("the E2E verifier rejects every unsuccessful process result", () => {
+  assert.doesNotThrow(() => assertVerificationSucceeded({ status: 0 }));
+  assert.throws(() => assertVerificationSucceeded({ status: 1 }));
+  assert.throws(() => assertVerificationSucceeded({ status: null }));
+  assert.throws(() =>
+    assertVerificationSucceeded({
+      status: null,
+      error: new Error("spawn failed"),
+    }),
+  );
+});
 
 /** The setup script's text between two known landmarks, both required. */
 function between(source: string, from: string, to: string): string {

@@ -18,6 +18,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { assertVerificationSucceeded } from "./driver-security.ts";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 
@@ -137,11 +139,7 @@ function assertMicrosoftDriver(driver: string): void {
     ["-NoProfile", "-NonInteractive", "-File", verifier, "-Path", driver],
     { stdio: "pipe", windowsHide: true, shell: false },
   );
-  if (checked.status !== 0) {
-    throw new Error(
-      `EdgeDriver signature validation failed: ${checked.stderr?.toString().trim() ?? checked.error?.message ?? "the verifier did not run"}`,
-    );
-  }
+  assertVerificationSucceeded(checked);
 }
 
 export const config: WebdriverIO.Config = {
