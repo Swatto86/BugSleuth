@@ -112,6 +112,9 @@ say "test inventory regression"
 ./scripts/test-verify-lock.sh
 bash "$root/scripts/test-inventory-status.sh"
 
+say "release checksum propagation"
+bash "$root/scripts/test-release-checksums.sh"
+
 say "file sizes"
 # 400 lines is the hard cap. Generated, vendored and lock files are exempt.
 hard=400

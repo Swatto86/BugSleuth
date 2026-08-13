@@ -150,11 +150,10 @@ test("checksum fallback excludes and verifies its own manifest", () => {
   assert.ok(start >= 0 && end > start, "could not isolate artifact collection");
   const collect = build.slice(start, end);
 
-  assert.match(collect, /sums="SHA256SUMS-\$\{\{ matrix\.suffix \}\}\.txt"/);
-  assert.match(collect, /rm -f "\$sums"/);
-  assert.match(collect, /if command -v sha256sum >\/dev\/null 2>&1; then/);
-  assert.match(collect, /sha256sum -c "\$sums"/);
-  assert.match(collect, /shasum -a 256 -c "\$sums"/);
+  assert.match(
+    collect,
+    /^\s*\.\/scripts\/release-checksums\.sh "\$out" "\$\{\{ matrix\.suffix \}\}"\s*$/m,
+  );
 });
 
 test("the verification checkout is pinned to an immutable revision", () => {

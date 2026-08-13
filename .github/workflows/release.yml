@@ -186,18 +186,7 @@ jobs:
             python -c "import json,sys;json.load(open(sys.argv[1]));print('latest.json is valid JSON')" "$out/latest.json"
           fi
 
-          (
-            cd "$out"
-            sums="SHA256SUMS-${{ matrix.suffix }}.txt"
-            rm -f "$sums"
-            if command -v sha256sum >/dev/null 2>&1; then
-              sha256sum * > "$sums"
-              sha256sum -c "$sums"
-            else
-              shasum -a 256 * > "$sums"
-              shasum -a 256 -c "$sums"
-            fi
-          )
+          ./scripts/release-checksums.sh "$out" "${{ matrix.suffix }}"
           ls -la "$out"
 
       - name: Upload release artifacts
