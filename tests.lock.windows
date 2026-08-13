@@ -194,6 +194,7 @@ node the finding cards allow text selection
 node the frontend actually calls into Rust, so this test is not vacuous
 node the live E2E review replaces saved configuration deterministically
 node the packaged gate cannot download a Tauri CLI
+node the packaged gate still release-builds the libraries and CLI
 node the plan cost is announced only when it changes
 node the precise scan sees each of the three ways a class is set
 node the preset handler guards on the whole configuration, not per row

@@ -149,6 +149,13 @@ test("the packaged gate cannot download a Tauri CLI", () => {
   assert.ok(!script.includes("npx --yes @tauri-apps/cli"));
 });
 
+test("the packaged gate still release-builds the libraries and CLI", () => {
+  const script = read("scripts", "verify.sh");
+  const build = "cargo build --release --workspace --exclude bugsleuth-app";
+  assert.ok(script.includes(`${build}\n\nif [ "$package" = "1" ]; then`));
+  assert.ok(!script.includes('if [ "$package" != "1" ]; then'));
+});
+
 test("the E2E harness waits for its driver cleanup and rejects a stale port", () => {
   const source = e2eConfig();
   assert.equal(

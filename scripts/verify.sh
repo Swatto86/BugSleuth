@@ -139,17 +139,10 @@ if [ "$over" -gt 0 ]; then
 fi
 echo "file sizes OK (none over $hard lines)"
 
-if [ "$package" != "1" ]; then
-  say "release build (libraries and CLI)"
-  # Everything EXCEPT the app crate, exactly as verify.ps1 does: building
-  # bugsleuth-app with plain cargo poisons Tauri's dev-vs-production cache.
-  #
-  # This was missing, and it was not cosmetic. The release workflow collected
-  # a CLI binary that only existed because the Windows gate had built it, so
-  # v0.2.0 published on Windows and failed on Linux and macOS. Two gates that
-  # build different things are two different definitions of green.
-  cargo build --release --workspace --exclude bugsleuth-app
-fi
+say "release build (libraries and CLI)"
+# Everything EXCEPT the app crate: building bugsleuth-app with plain cargo
+# poisons Tauri's dev-vs-production cache.
+cargo build --release --workspace --exclude bugsleuth-app
 
 if [ "$package" = "1" ]; then
   say "packaged build (clean)"
