@@ -17,19 +17,21 @@ import ts from "typescript";
 
 import { frontendFiles, walk } from "./ast.test.ts";
 
-/** The source text of a named `const x = ...` declaration. */
-function declarationText(
+/** A named `const x = (...) => ...` declaration. */
+function declaration(
   source: ts.SourceFile,
   name: string,
-): string | undefined {
-  let found: string | undefined;
+): ts.ArrowFunction | undefined {
+  let found: ts.ArrowFunction | undefined;
   walk(source, (node) => {
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
-      node.name.text === name
+      node.name.text === name &&
+      node.initializer &&
+      ts.isArrowFunction(node.initializer)
     ) {
-      found ??= node.getText();
+      found ??= node.initializer;
     }
   });
   return found;
@@ -42,27 +44,56 @@ test("the window never leaves a release armed while pushing is off", () => {
 
   // Found first, and asserted to exist, so a rename cannot turn every check
   // below into one that passes over nothing.
-  const drawTag = declarationText(apply, "drawTag");
+  const drawTag = declaration(apply, "drawTag");
   assert.ok(drawTag, "apply.ts no longer declares drawTag");
 
-  // The correction itself: with pushing off, the stored setting is cleared
-  // rather than merely displayed as unticked.
-  assert.match(
-    drawTag,
-    /tag_release_after_push = false/,
-    "drawTag no longer disarms the release when pushing is off",
-  );
-  assert.match(
-    drawTag,
-    /disabled = !publishing/,
-    "the tag control is no longer disabled when pushing is off",
+  let guard: ts.IfStatement | undefined;
+  walk(drawTag, (node) => {
+    if (ts.isIfStatement(node)) guard ??= node;
+  });
+  assert.ok(guard, "drawTag no longer guards release disarming");
+  assert.ok(
+    ts.isPrefixUnaryExpression(guard.expression) &&
+      guard.expression.operator === ts.SyntaxKind.ExclamationToken &&
+      ts.isIdentifier(guard.expression.operand) &&
+      guard.expression.operand.text === "publishing",
+    `drawTag disarms under the wrong condition: ${guard.expression.getText(apply)}`,
   );
 
-  // And the checkbox must render from the stored setting, not from a separate
-  // expression that could drift away from what gets sent to Rust.
-  assert.match(
-    drawTag,
-    /checked = live\.tag_release_after_push/,
+  const assignment = (
+    node: ts.Node,
+    left: string,
+  ): ts.BinaryExpression | undefined => {
+    let found: ts.BinaryExpression | undefined;
+    walk(node, (candidate) => {
+      if (
+        ts.isBinaryExpression(candidate) &&
+        candidate.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        candidate.left.getText(apply) === left
+      ) {
+        found ??= candidate;
+      }
+    });
+    return found;
+  };
+  const disarm = assignment(guard.thenStatement, "live.tag_release_after_push");
+  assert.ok(
+    disarm && disarm.right.kind === ts.SyntaxKind.FalseKeyword,
+    "the not-publishing branch no longer disarms the release",
+  );
+
+  const disabled = assignment(drawTag, "ui.tag.disabled");
+  assert.ok(
+    disabled &&
+      ts.isPrefixUnaryExpression(disabled.right) &&
+      disabled.right.operator === ts.SyntaxKind.ExclamationToken &&
+      ts.isIdentifier(disabled.right.operand) &&
+      disabled.right.operand.text === "publishing",
+    "the tag control is no longer disabled when pushing is off",
+  );
+  const checked = assignment(drawTag, "ui.tag.checked");
+  assert.ok(
+    checked && checked.right.getText(apply) === "live.tag_release_after_push",
     "the tag checkbox no longer renders from the stored setting",
   );
 });
