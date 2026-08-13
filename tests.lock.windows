@@ -631,6 +631,7 @@ rust lane::mandates::tests::the_security_mandate_asks_for_the_other_uses_of_a_si
 rust lane::mandates::tests::the_ux_mandate_warns_about_native_keyboard_paths_it_measurably_missed
 rust lane::tests::every_lane_parses_back_from_its_own_slug
 rust limits::prose_tests::no_user_facing_string_carries_stray_indentation
+rust limits::prose_tests::stray_gap_after_intentional_prefix_is_detected
 rust limits::tests::every_limit_is_a_statement_about_method_rather_than_a_hedge
 rust limits::tests::the_list_renders_one_bullet_per_limit
 rust limits::tests::the_unsandboxed_warning_says_what_is_and_is_not_contained

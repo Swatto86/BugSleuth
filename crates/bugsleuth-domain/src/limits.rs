@@ -136,6 +136,25 @@ mod tests {
 
 #[cfg(test)]
 mod prose_tests {
+    fn has_stray_gap(line: &str) -> bool {
+        let trimmed = line.trim_start();
+        trimmed.match_indices("  ").any(|(at, _)| {
+            at > 0
+                && !trimmed[..at].ends_with("\\n")
+                && trimmed[..at].ends_with(|c: char| c.is_ascii_alphanumeric() || c == ',')
+                && trimmed[at..]
+                    .trim_start()
+                    .starts_with(|c: char| c.is_ascii_lowercase())
+                && !trimmed.contains("//")
+        })
+    }
+
+    #[test]
+    fn stray_gap_after_intentional_prefix_is_detected() {
+        let fixture = concat!(r#"out.push_str("  No actionable"#, "  defects", r#");"#);
+        assert!(has_stray_gap(fixture));
+    }
+
     /// No message a user reads carries a run of stray spaces.
     ///
     /// Two did: a cancellation notice printed on every cancelled run, and the
@@ -173,14 +192,7 @@ mod prose_tests {
                 // indentation, and not the aligned `\` continuations rustfmt
                 // itself produces at the end of a line.
                 let trimmed = line.trim_start();
-                if let Some(at) = trimmed.find("  ")
-                    && at > 0
-                    && trimmed[..at].ends_with(|c: char| c.is_ascii_alphanumeric() || c == ',')
-                    && trimmed[at..]
-                        .trim_start()
-                        .starts_with(|c: char| c.is_ascii_lowercase())
-                    && !trimmed.contains("//")
-                {
+                if has_stray_gap(line) {
                     bad.push(format!("{name} line {}: {trimmed}", number + 1));
                 }
             }
