@@ -56,6 +56,13 @@ pub enum ProcessError {
         #[source]
         source: std::io::Error,
     },
+    #[error("failed to read `{what}` {stream}: {source}")]
+    Read {
+        what: String,
+        stream: &'static str,
+        #[source]
+        source: std::io::Error,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -223,17 +230,18 @@ async fn run_inner(
     let mut out = capture::Captured::default();
     let mut err = capture::Captured::default();
     let combined = async {
-        let (status, fed, (), ()) = tokio::join!(
+        let (status, fed, stdout_read, stderr_read) = tokio::join!(
             child.wait(),
             feed,
             capture::read_into(stdout, output_cap, &mut out),
             capture::read_into(stderr, output_cap, &mut err),
         );
-        (status, fed)
+        (status, fed, stdout_read, stderr_read)
     };
 
     match tokio::time::timeout(invocation.timeout, combined).await {
-        Ok((status, fed)) => {
+        Ok((status, fed, stdout_read, stderr_read)) => {
+            capture::check_reads(invocation.what, stdout_read, stderr_read)?;
             let status = status.map_err(|source| ProcessError::Wait {
                 what: invocation.what.to_string(),
                 source,

@@ -763,6 +763,7 @@ rust plan::tests::kilo_cannot_request_agents_its_read_only_ask_agent_cannot_dele
 rust plan::tests::plan_accepts_codex_repository_review
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
+rust process::capture::tests::a_pipe_read_error_is_not_eof
 rust process::descendant_tests::ordinary_run_isolates_the_process_group
 rust process::environment_tests::child_does_not_inherit_unapproved_environment
 rust process::tests::a_descendant_holding_pipes_cannot_outlive_the_deadline
