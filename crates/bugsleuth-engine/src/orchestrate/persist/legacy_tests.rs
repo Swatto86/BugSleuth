@@ -26,7 +26,55 @@ fn a_report_written_under_the_old_naming_is_still_reused() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Every grammar this project has ever written a report under is still read.
+#[test]
+fn an_ambiguous_historical_effort_pass_name_is_not_reused() {
+    let dir = scratch("legacy-effort-pass-collision");
+    let report = lane_report(Status::Swept {
+        turns: Some(2),
+        salvaged: false,
+    });
+    let first_pass = Unit {
+        model: "sonnet".into(),
+        lane: Lane::Correctness,
+        effort: "pass2".into(),
+        use_agents: false,
+        pass: 1,
+    };
+    let second_pass = Unit {
+        effort: String::new(),
+        pass: 2,
+        ..first_pass.clone()
+    };
+    let colliding_name = original_lossy_file_name_for(&first_pass);
+    assert_eq!(colliding_name, original_lossy_file_name_for(&second_pass));
+    assert!(write_report(&dir, &colliding_name, &report).is_ok());
+    assert!(
+        reusable(&second_pass, &options(&dir, true)).is_none(),
+        "an ambiguous first-pass effort was reused as a different pass"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn current_reports_still_resume_nondefault_sweeps() {
+    let dir = scratch("current-nondefault");
+    let report = lane_report(Status::Swept {
+        turns: Some(2),
+        salvaged: false,
+    });
+    let unit = Unit {
+        model: "sonnet".into(),
+        lane: Lane::Correctness,
+        effort: "high".into(),
+        use_agents: true,
+        pass: 2,
+    };
+    assert!(write_report(&dir, &file_name_for(&unit), &report).is_ok());
+    assert!(reusable(&unit, &options(&dir, true)).is_some());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Unambiguous reports from the historical escaping grammar are still read.
 ///
 /// Literal filenames, not the compatibility builders, because a builder that
 /// reconstructs a historical name incorrectly passes a test written against
@@ -34,35 +82,27 @@ fn a_report_written_under_the_old_naming_is_still_reused() {
 /// right now: the reader asked for `security-codex_3a_.json` and then
 /// `security-codex-.json`, found neither, and charged for the sweep again.
 #[test]
-fn every_historical_filename_grammar_is_still_reused() {
-    for (name, model, effort, pass) in [
-        // The escaping before the trailing `_` was added.
-        ("correctness-codex_3a.json", "codex:", "", 1),
-        // The original lossy grammar, with its own effort and pass spelling.
-        ("correctness-sonnet-high-pass2.json", "sonnet", "high", 2),
-        // The lossy grammar after the positional `~` delimiters arrived.
-        ("correctness-sonnet~high~p3.json", "sonnet", "high", 3),
-    ] {
-        let dir = scratch(&format!("historical-{pass}-{}", model.len()));
-        let mut report = lane_report(Status::Swept {
-            turns: Some(2),
-            salvaged: false,
-        });
-        report.model = crate::sweep::resolved_label(model);
-        let unit = Unit {
-            model: model.into(),
-            lane: Lane::Correctness,
-            effort: effort.into(),
-            use_agents: false,
-            pass,
-        };
-        assert!(write_report(&dir, name, &report).is_ok());
-        assert!(
-            reusable(&unit, &options(&dir, true)).is_some(),
-            "a paid sweep stored as {name} was not found, so it would be run again"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
+fn an_unambiguous_historical_filename_is_still_reused() {
+    let dir = scratch("historical-default");
+    let mut report = lane_report(Status::Swept {
+        turns: Some(2),
+        salvaged: false,
+    });
+    report.model = crate::sweep::resolved_label("codex:");
+    let unit = Unit {
+        model: "codex:".into(),
+        lane: Lane::Correctness,
+        effort: String::new(),
+        use_agents: false,
+        pass: 1,
+    };
+    let name = "correctness-codex_3a.json";
+    assert!(write_report(&dir, name, &report).is_ok());
+    assert!(
+        reusable(&unit, &options(&dir, true)).is_some(),
+        "a paid unambiguous sweep stored as {name} was not found"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A colliding legacy name must not let one vendor's report stand in for

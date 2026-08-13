@@ -30,13 +30,12 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
         // old encoding was lossy, which is exactly why it is not trusted to
         // identify anything on its own.
         .or_else(|| {
-            if unit.use_agents {
+            if unit.use_agents || !unit.effort.trim().is_empty() || unit.pass > 1 {
                 return None;
             }
-            // Every grammar, not just the most recent one. The writer changed
-            // twice, and probing only the latest predecessor left reports on
-            // disk right now — `security-codex_3a.json` among them — invisible,
-            // so a resumed run paid for those sweeps a second time.
+            // Historical reports do not record pass, effort, or agent mode, so
+            // only the default first-pass shape is unambiguous enough to reuse.
+            // Every old filename grammar remains readable for that shape.
             historical_file_names_for(unit)
                 .into_iter()
                 .find_map(|name| {
@@ -131,11 +130,10 @@ pub(super) fn file_name_for(unit: &Unit) -> String {
 /// is in this repository right now — unfindable, and a resumed run paid for
 /// those sweeps a second time.
 ///
-/// Only ever read, never written, and never for an agent-enabled unit: all
-/// three predate agent mode. Every candidate is validated against the report's
-/// own recorded lane, model, scope and revision before it is believed, because
-/// two of the three encodings were lossy — they could not tell `codex:a/b` from
-/// `codex:a-b`.
+/// Only ever read, never written. Every candidate is validated against the
+/// report's own recorded lane, model, scope and revision before it is believed,
+/// because two of the three encodings were lossy — they could not tell
+/// `codex:a/b` from `codex:a-b`.
 fn historical_file_names_for(unit: &Unit) -> Vec<String> {
     vec![
         prior_escaped_file_name_for(unit),
