@@ -8,6 +8,7 @@ fn sweep(commit: &str, cached: Option<&str>, scope: Option<&str>, usage: Option<
         commit: Some(commit.into()),
         cache_revision: cached.map(str::to_string),
         scope: scope.map(str::to_string),
+        excluded_paths: vec![],
         usage: usage.map(str::to_string),
         findings: 0,
         rejected: 0,
@@ -80,4 +81,15 @@ fn mixed_scopes_are_not_rendered_as_one_ordinary_run() {
     assert!(text.contains("WARNING"), "{text}");
     assert!(text.contains("different review scopes"), "{text}");
     assert!(!text.contains("scope: src/a"), "{text}");
+}
+
+#[test]
+fn isolation_exclusions_make_coverage_incomplete_and_reach_the_handoff() {
+    let mut sweep = sweep("aaaaaaaa11111111", Some("aaaaaaaa11111111"), None, None);
+    sweep.excluded_paths = vec![".cursor".into()];
+    let report = report(vec![sweep]);
+    let text = report.to_text();
+    assert!(text.contains("Not reviewed because provider isolation removed: .cursor"));
+    assert!(!report.coverage_complete());
+    assert!(report.not_reviewed()[0].contains(".cursor"));
 }

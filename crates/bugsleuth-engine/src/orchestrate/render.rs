@@ -10,6 +10,41 @@ use bugsleuth_domain::{Lane, Severity};
 use super::RunReport;
 
 impl RunReport {
+    /// Every planned sweep or repository path the review did not cover.
+    pub fn not_reviewed(&self) -> Vec<String> {
+        let mut skipped = self
+            .gaps
+            .iter()
+            .map(|gap| {
+                format!(
+                    "{} lane, by {} — {}",
+                    gap.lane,
+                    gap.model.as_deref().unwrap_or("nobody"),
+                    gap.reason
+                )
+            })
+            .collect::<Vec<_>>();
+        for sweep in &self.swept {
+            skipped.extend(sweep.excluded_paths.iter().map(|path| {
+                format!(
+                    "{} — not reviewed in the {} lane by {} because provider isolation removed it",
+                    bugsleuth_domain::printable(path),
+                    sweep.lane,
+                    sweep.model
+                )
+            }));
+        }
+        skipped
+    }
+
+    pub fn coverage_complete(&self) -> bool {
+        self.gaps.is_empty()
+            && self
+                .swept
+                .iter()
+                .all(|sweep| sweep.excluded_paths.is_empty())
+    }
+
     /// How many distinct lanes actually ran.
     fn lanes_swept(&self) -> usize {
         let mut lanes: Vec<Lane> = self.swept.iter().map(|sweep| sweep.lane).collect();
@@ -137,6 +172,10 @@ impl RunReport {
                 sweep.lane.title(),
                 sweep.model,
                 sweep.findings,
+            ));
+            out.push_str(&crate::caveats::isolation_exclusions(
+                &sweep.excluded_paths,
+                "  ",
             ));
         }
         out.push_str(&self.revision_warnings());

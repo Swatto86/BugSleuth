@@ -106,6 +106,7 @@ mod tests {
                 commit: Some("aaaaaaaa".into()),
                 cache_revision: Some("aaaaaaaa".into()),
                 scope: None,
+                excluded_paths: vec![],
                 usage: None,
                 findings: 1,
                 rejected: 0,

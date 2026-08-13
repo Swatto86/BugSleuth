@@ -134,6 +134,20 @@ pub async fn run(request: Request<'_>) -> LaneReport {
     run_with_agents(request, false).await
 }
 
+fn excluded_scope<'a>(scope: &str, excluded_paths: &'a [String]) -> Option<&'a str> {
+    let scope = scope
+        .trim()
+        .replace('\\', "/")
+        .trim_start_matches("./")
+        .trim_matches('/')
+        .to_lowercase();
+    excluded_paths.iter().find_map(|excluded| {
+        let normalized = excluded.trim_matches('/').to_lowercase();
+        (scope == normalized || scope.starts_with(&format!("{normalized}/")))
+            .then_some(excluded.as_str())
+    })
+}
+
 pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> LaneReport {
     // Both halves are used: the vendor picks the adapter, and the model is what
     // that adapter passes to its CLI. Taking only the vendor and handing the
@@ -154,6 +168,7 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
         commit: commit.clone(),
         cache_revision: None,
         scope: request.scope.map(str::to_string),
+        excluded_paths: Vec::new(),
         status: Status::NotSwept { reason },
         findings: vec![],
         rejected: vec![],
@@ -204,11 +219,18 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
         Ok(isolation) => isolation,
         Err(reason) => return not_swept(reason),
     };
+    if let (Some(scope), Some(isolated)) = (request.scope, isolation.as_ref())
+        && let Some(excluded) = excluded_scope(scope, &isolated.excluded_paths)
+    {
+        return not_swept(format!(
+            "requested scope {scope} was not reviewed because provider isolation removed {excluded}"
+        ));
+    }
 
     // Anchors are verified against whatever the model actually read.
     let reviewed = isolation
         .as_ref()
-        .map_or(request.repo, |worktree| worktree.path());
+        .map_or(request.repo, |isolated| isolated.worktree.path());
 
     let outcome = invoke_vendor(vendor, model, reviewed, &request, &brief, use_agents).await;
     // A transient blip — a silent overloaded response, an empty completion, a
@@ -248,6 +270,9 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
         commit,
         cache_revision,
         scope: request.scope.map(str::to_string),
+        excluded_paths: isolation
+            .as_ref()
+            .map_or_else(Vec::new, |isolated| isolated.excluded_paths.clone()),
         status: Status::Swept { turns, salvaged },
         findings,
         rejected,

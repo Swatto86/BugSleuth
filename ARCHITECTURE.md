@@ -62,6 +62,9 @@ Three consequences worth knowing:
 - **Kilo sweeps run in a throwaway git worktree**, because it is the only way to
   guarantee a review cannot modify the code it is reviewing. The adapter takes a
   `worktree`, not a `repo`, so the unsafe call does not compile.
+- **Isolation never hides reduced coverage.** Project instruction paths removed
+  from Kilo, Kimi, and Cursor worktrees are recorded in every report; a scope
+  wholly inside one is refused as not swept.
 - **An interrupted provider run is resumed, not restarted.** The shared runner
   kills timed-out process trees but keeps their partial output. Claude receives
   a session id before launch and enables
@@ -245,4 +248,3 @@ per-sweep JSON files — `--resume` reads those rather than a database, which is
 the smallest thing that makes a dead run recoverable. Each file fingerprints
 the briefs and finding schema, so changed review semantics cannot reuse stale
 coverage.
-

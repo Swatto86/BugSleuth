@@ -45,6 +45,10 @@ pub struct LaneReport {
     /// under a scope, which is the safe direction to be wrong in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
+    /// Repository paths omitted because the provider's isolation treats them as
+    /// instructions rather than reviewable source.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_paths: Vec<String>,
     pub status: Status,
     pub findings: Vec<Finding>,
     /// Findings the model reported that failed anchor verification, with the
@@ -111,6 +115,10 @@ impl LaneReport {
                 if let Some(usage) = &self.usage {
                     out.push_str(&format!("  usage: {usage}\n"));
                 }
+                out.push_str(&crate::caveats::isolation_exclusions(
+                    &self.excluded_paths,
+                    "  ",
+                ));
             }
         }
 
@@ -216,6 +224,7 @@ mod tests {
             commit: None,
             cache_revision: None,
             scope: None,
+            excluded_paths: vec![],
             status: Status::NotSwept {
                 reason: "no model assigned".into(),
             },
@@ -236,6 +245,7 @@ mod tests {
             commit: None,
             cache_revision: None,
             scope: None,
+            excluded_paths: vec![],
             status: Status::Swept {
                 turns: Some(4),
                 salvaged: false,
@@ -255,6 +265,7 @@ mod tests {
             commit: None,
             cache_revision: None,
             scope: None,
+            excluded_paths: vec![],
             status: Status::Swept {
                 turns: Some(4),
                 salvaged: false,
@@ -295,6 +306,7 @@ mod tests {
             commit: None,
             cache_revision: None,
             scope: None,
+            excluded_paths: vec![],
             status: Status::Swept {
                 turns: None,
                 salvaged: false,
@@ -331,6 +343,7 @@ mod salvaged_tests {
             commit: None,
             cache_revision: None,
             scope: None,
+            excluded_paths: vec![],
             status: Status::Swept {
                 turns: Some(30),
                 salvaged,
@@ -354,5 +367,14 @@ mod salvaged_tests {
     fn a_finished_sweep_is_not_labelled_recovered() {
         let text = swept(false).to_text();
         assert!(!text.contains("RECOVERED"), "{text}");
+    }
+
+    #[test]
+    fn isolation_exclusions_are_visible_in_a_standalone_report() {
+        let mut report = swept(false);
+        report.excluded_paths = vec![".cursor".into(), "AGENTS.md".into()];
+        let text = report.to_text();
+        assert!(text.contains("Not reviewed because provider isolation removed"));
+        assert!(text.contains(".cursor, AGENTS.md"));
     }
 }

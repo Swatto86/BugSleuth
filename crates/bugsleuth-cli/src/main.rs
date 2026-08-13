@@ -65,18 +65,7 @@ async fn run_all(args: RunArgs) -> Result<()> {
 
     print!("{}", report.to_text());
     if let Some(dir) = args.prompt_out.as_deref() {
-        let skipped: Vec<String> = report
-            .gaps
-            .iter()
-            .map(|g| {
-                format!(
-                    "{} lane, by {} — {}",
-                    g.lane,
-                    g.model.as_deref().unwrap_or("nobody"),
-                    g.reason
-                )
-            })
-            .collect();
+        let skipped = report.not_reviewed();
         write_prompts(
             dir,
             &repo.display().to_string(),
@@ -86,8 +75,8 @@ async fn run_all(args: RunArgs) -> Result<()> {
         )?;
     }
 
-    // A run with a hole in it must not look like a clean pass to a script.
-    if !report.gaps.is_empty() {
+    // A coverage hole must not look like a clean pass to a script.
+    if !report.coverage_complete() {
         std::process::exit(2);
     }
     Ok(())

@@ -135,6 +135,7 @@ pub struct Swept {
     /// The clean revision this result was pinned to. `None` means unpinned.
     pub cache_revision: Option<String>,
     pub scope: Option<String>,
+    pub excluded_paths: Vec<String>,
     pub usage: Option<String>,
     pub findings: usize,
     /// True when this sweep's answer was recovered and may be partial.
@@ -155,6 +156,7 @@ impl Swept {
             commit: report.commit.clone(),
             cache_revision: report.cache_revision.clone(),
             scope: report.scope.clone(),
+            excluded_paths: report.excluded_paths.clone(),
             usage: report.usage.clone(),
             findings: report.findings.len(),
             rejected: report.rejected.len(),

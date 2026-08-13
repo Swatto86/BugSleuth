@@ -5,20 +5,9 @@
 
 use bugsleuth_engine::orchestrate;
 
-/// Every lane nobody reviewed, as one line each.
+/// Every lane or repository path nobody reviewed, as one line each.
 pub(crate) fn gap_lines(report: &orchestrate::RunReport) -> Vec<String> {
-    report
-        .gaps
-        .iter()
-        .map(|gap| {
-            format!(
-                "{} lane, by {} — {}",
-                gap.lane,
-                gap.model.as_deref().unwrap_or("nobody"),
-                gap.reason
-            )
-        })
-        .collect()
+    report.not_reviewed()
 }
 
 /// The defects as a prompt for a coding agent.
@@ -60,7 +49,7 @@ pub(crate) fn run_payload(
             });
         }
     };
-    let complete = report.gaps.is_empty();
+    let complete = report.coverage_complete();
     let mut text = report.to_text();
 
     // The prompt is the thing that gets used, so it is written to disk as well

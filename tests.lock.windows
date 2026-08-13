@@ -699,6 +699,7 @@ rust orchestrate::render::tests::annotations::a_salvaged_sweep_does_not_read_lik
 rust orchestrate::render::tests::annotations::agreement_is_counted_against_models_not_sweeps
 rust orchestrate::render::tests::annotations::rejected_findings_are_counted_in_the_sweep_line
 rust orchestrate::render::tests::annotations::repeating_a_model_does_not_inflate_the_model_count
+rust orchestrate::render::tests::metadata_tests::isolation_exclusions_make_coverage_incomplete_and_reach_the_handoff
 rust orchestrate::render::tests::metadata_tests::mixed_scopes_are_not_rendered_as_one_ordinary_run
 rust orchestrate::render::tests::metadata_tests::run_report_calls_out_mixed_revisions
 rust orchestrate::render::tests::metadata_tests::run_report_preserves_usage
@@ -758,6 +759,7 @@ rust rank::tests::positions_are_one_based_and_contiguous
 rust rank::tests::severity_decides_the_order
 rust report::salvaged_tests::a_finished_sweep_is_not_labelled_recovered
 rust report::salvaged_tests::a_recovered_sweep_says_so_in_the_standalone_report
+rust report::salvaged_tests::isolation_exclusions_are_visible_in_a_standalone_report
 rust report::tests::a_swept_lane_reports_usage_when_it_is_known
 rust report::tests::a_swept_lane_with_nothing_found_says_so_explicitly
 rust report::tests::an_unswept_lane_is_never_rendered_as_having_no_findings
@@ -800,7 +802,10 @@ rust sweep::isolate::tests::matching_ignores_case_because_windows_does
 rust sweep::isolate::tests::outbound_directory_link_is_not_followed_for_deletion
 rust sweep::isolate::tests::the_git_directory_is_never_touched
 rust sweep::isolation_tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
+rust sweep::isolation_tests::a_scope_removed_by_isolation_is_not_marked_swept
+rust sweep::isolation_tests::broader_isolated_sweeps_report_every_removed_path
 rust sweep::isolation_tests::kilo_does_not_silently_omit_submodule_contents
+rust sweep::isolation_tests::removed_instruction_paths_are_returned_to_the_sweep
 rust sweep::isolation_tests::selected_kilo_model_is_the_one_prechecked
 rust sweep::revision::tests::a_repository_fsmonitor_hook_is_not_run_by_the_revision_probe
 rust sweep::revision::tests::git_is_never_spawned_with_a_visible_console_window

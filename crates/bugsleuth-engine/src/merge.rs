@@ -31,6 +31,8 @@ struct SweepFile {
     /// The requested path restriction, or the whole repository when absent.
     #[serde(default)]
     scope: Option<String>,
+    #[serde(default)]
+    excluded_paths: Vec<String>,
     status: SweepStatus,
     findings: Vec<Finding>,
     /// Merge only needs the count. Keeping entries opaque avoids coupling this
@@ -81,6 +83,7 @@ pub struct Source {
     pub commit: Option<String>,
     pub cache_revision: Option<String>,
     pub usage: Option<String>,
+    pub excluded_paths: Vec<String>,
     /// Whether this sweep was recovered and may be partial. Carried through the
     /// merge because a prefix of a lane's findings must not be presented as the
     /// whole of it.
@@ -132,6 +135,7 @@ pub fn merge(paths: &[PathBuf]) -> Result<Merged> {
                     commit: file.commit,
                     cache_revision: file.cache_revision,
                     usage: file.usage,
+                    excluded_paths: file.excluded_paths,
                     salvaged,
                 });
                 all.extend(file.findings);
@@ -158,6 +162,30 @@ fn read(path: &Path) -> Result<SweepFile> {
     serde_json::from_str(&text).with_context(|| format!("{} is not a sweep report", path.display()))
 }
 
+impl Source {
+    fn coverage_text(&self) -> String {
+        let usage = self
+            .usage
+            .as_deref()
+            .filter(|usage| !usage.trim().is_empty())
+            .map(|usage| format!("; usage: {usage}"))
+            .unwrap_or_default();
+        let mut out = format!(
+            "  swept: {} lane by {} ({} verified, {} rejected; {}{usage})\n",
+            self.lane,
+            self.model,
+            self.findings,
+            self.rejected,
+            crate::caveats::revision(self.commit.as_deref(), self.cache_revision.as_deref()),
+        );
+        out.push_str(&crate::caveats::isolation_exclusions(
+            &self.excluded_paths,
+            "  ",
+        ));
+        out
+    }
+}
+
 impl Merged {
     /// How many distinct models could have found a defect in this lane.
     fn models_on(&self, lane: &str) -> usize {
@@ -178,23 +206,7 @@ impl Merged {
         out.push_str("=== merged report ===\n");
         out.push_str(&format!("  scope: {}\n", scope_label(&self.scope)));
         for source in &self.sources {
-            let usage = source
-                .usage
-                .as_deref()
-                .filter(|usage| !usage.trim().is_empty())
-                .map(|usage| format!("; usage: {usage}"))
-                .unwrap_or_default();
-            out.push_str(&format!(
-                "  swept: {} lane by {} ({} verified, {} rejected; {}{usage})\n",
-                source.lane,
-                source.model,
-                source.findings,
-                source.rejected,
-                crate::caveats::revision(
-                    source.commit.as_deref(),
-                    source.cache_revision.as_deref(),
-                ),
-            ));
+            out.push_str(&source.coverage_text());
         }
         // Learned the expensive way: a set of correct findings was re-graded
         // against a different checkout and condemned as fabricated, because
@@ -308,11 +320,21 @@ impl Merged {
     /// reasonably assume the list is complete.
     #[must_use]
     pub fn to_fix_prompt(&self, repo: &str) -> String {
-        let skipped: Vec<String> = self
+        let mut skipped: Vec<String> = self
             .unswept
             .iter()
             .map(|m| format!("{} lane, by {} — {}", m.lane, m.model, m.reason))
             .collect();
+        for source in &self.sources {
+            skipped.extend(source.excluded_paths.iter().map(|path| {
+                format!(
+                    "{} — not reviewed in the {} lane by {} because provider isolation removed it",
+                    bugsleuth_domain::printable(path),
+                    source.lane,
+                    source.model
+                )
+            }));
+        }
         crate::handoff::prompt(repo, &self.ranked, &skipped, self.sources.len())
     }
 }

@@ -56,6 +56,7 @@ fn rejected_findings_remain_visible_after_merge() {
           "commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "cache_revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           "scope":"src/engine", "usage":"input_tokens=12 output_tokens=3",
+          "excluded_paths":[".cursor"],
           "status":{"state":"swept"}, "findings":[],
           "rejected":[{"future_report_shape":{"reason":"not part of SweepFile schema"}}]
         }"#,
@@ -79,7 +80,11 @@ fn rejected_findings_remain_visible_after_merge() {
     assert!(rendered.contains("input_tokens=12 output_tokens=3"));
     assert!(rendered.contains("revision aaaaaaa, pinned"));
     assert!(rendered.contains("revision bbbbbbb, unpinned"));
+    assert!(rendered.contains("Not reviewed because provider isolation removed: .cursor"));
     assert!(rendered.contains("rejected claims"));
-    assert!(!merged.to_fix_prompt("repo").contains("future_report_shape"));
+    let prompt = merged.to_fix_prompt("repo");
+    assert!(prompt.contains(".cursor"));
+    assert!(prompt.contains("provider isolation removed it"));
+    assert!(!prompt.contains("future_report_shape"));
     let _ = fs::remove_dir_all(dir);
 }

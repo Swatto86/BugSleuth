@@ -25,6 +25,12 @@ use std::path::Path;
 
 use bugsleuth_verify::Worktree;
 
+#[derive(Debug)]
+pub(super) struct IsolatedCheckout {
+    pub(super) worktree: Worktree,
+    pub(super) excluded_paths: Vec<String>,
+}
+
 /// Files a CLI would read as instructions rather than as code.
 ///
 /// Matched by exact name, case-insensitively, anywhere in the tree — nested
@@ -165,7 +171,7 @@ fn relative(path: &Path, root: &Path) -> String {
 ///
 /// `None` for a vendor that reads the working tree directly. For one that must
 /// be isolated, a throwaway worktree that has been shown to be a *complete*
-/// checkout and had the reviewed repository's standing orders taken out of it.
+/// checkout plus the repository paths removed as standing orders.
 ///
 /// Both refusals here are gaps the reader would otherwise never hear about: a
 /// worktree that could not be created, and one whose submodules `git worktree
@@ -174,7 +180,7 @@ fn relative(path: &Path, root: &Path) -> String {
 pub(super) fn checkout_for(
     vendor: super::Vendor,
     repo: &std::path::Path,
-) -> Result<Option<Worktree>, String> {
+) -> Result<Option<IsolatedCheckout>, String> {
     if !vendor.needs_isolation() {
         return Ok(None);
     }
@@ -206,13 +212,16 @@ pub(super) fn checkout_for(
         }
         Ok(false) => {}
     }
-    strip_agent_instructions(worktree.path()).map_err(|error| {
+    let excluded_paths = strip_agent_instructions(worktree.path()).map_err(|error| {
         format!(
             "{}'s throwaway worktree could not be isolated from project instructions: {error}",
             vendor.label()
         )
     })?;
-    Ok(Some(worktree))
+    Ok(Some(IsolatedCheckout {
+        worktree,
+        excluded_paths,
+    }))
 }
 
 #[cfg(test)]

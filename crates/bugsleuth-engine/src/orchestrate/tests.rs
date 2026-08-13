@@ -145,6 +145,7 @@ fn live_sweep_metadata_reaches_the_aggregate_report() {
         commit: Some("1234567890abcdef".into()),
         cache_revision: None,
         scope: Some("src/security".into()),
+        excluded_paths: vec![],
         status: Status::Swept {
             turns: Some(4),
             salvaged: false,

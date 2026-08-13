@@ -87,6 +87,7 @@ fn every_sweep_writes_to_its_own_file() {
         commit: None,
         cache_revision: None,
         scope: None,
+        excluded_paths: vec![],
         status: Status::Swept {
             turns: None,
             salvaged: false,
@@ -147,6 +148,7 @@ pub(super) fn lane_report(status: Status) -> LaneReport {
         // revision is reusable; tests that need otherwise override this.
         cache_revision: Some(head(shared_repo())),
         scope: None,
+        excluded_paths: vec![],
         status,
         findings: vec![],
         rejected: vec![],

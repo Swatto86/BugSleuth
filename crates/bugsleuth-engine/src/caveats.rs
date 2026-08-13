@@ -65,6 +65,20 @@ pub(crate) fn revision(commit: Option<&str>, cached: Option<&str>) -> String {
     }
 }
 
+/// Paths an isolated provider could not review, formatted consistently in
+/// standalone and aggregate reports.
+pub(crate) fn isolation_exclusions(paths: &[String], indent: &str) -> String {
+    if paths.is_empty() {
+        return String::new();
+    }
+    let paths = paths
+        .iter()
+        .map(|path| bugsleuth_domain::printable(path))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{indent}Not reviewed because provider isolation removed: {paths}\n")
+}
+
 fn short_revision(revision: &str) -> String {
     revision.chars().take(7).collect()
 }
@@ -154,6 +168,10 @@ mod tests {
             assert!(
                 source.contains("caveats::salvaged"),
                 "{name} does not say when a sweep was cut short"
+            );
+            assert!(
+                source.contains("caveats::isolation_exclusions"),
+                "{name} hides paths provider isolation removed"
             );
         }
     }
