@@ -77,6 +77,20 @@ function predicateCalls(
     : undefined;
 }
 
+function methodCalls(source: ts.SourceFile, name: string): ts.CallExpression[] {
+  const found: ts.CallExpression[] = [];
+  walk(source, (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === name
+    ) {
+      found.push(node);
+    }
+  });
+  return found;
+}
+
 test("the updater is blocked while a review or an apply is in flight", () => {
   const main = frontendFiles().find((file) => file.fileName === "main.ts");
   assert.ok(main, "main.ts is no longer a shipped frontend module");
@@ -223,4 +237,49 @@ test("installing an update disables every operation its restart would interrupt"
     ),
     "updating is not cleared after install_update rejects",
   );
+});
+
+test("installing an update locks and saves settings before restart", () => {
+  const files = frontendFiles();
+  const main = files.find((file) => file.fileName === "main.ts");
+  const update = files.find((file) => file.fileName === "update.ts");
+  assert.ok(main, "main.ts is no longer a shipped frontend module");
+  assert.ok(update, "update.ts is no longer a shipped frontend module");
+
+  const wiring = callsTo(main, "wireUpdate");
+  assert.equal(wiring.length, 1, "wireUpdate must have one production caller");
+  assert.ok(
+    propertyExpression(wiring[0]!, "flushSettings"),
+    "wireUpdate is not given the settings flush",
+  );
+  assert.ok(
+    propertyExpression(wiring[0]!, "setSettingsLocked"),
+    "wireUpdate is not given the settings lock",
+  );
+
+  const confirm = callsTo(update, "confirmDialog")[0];
+  const install = callsTo(update, "invoke").find(
+    (call) => stringArgument(call) === "install_update",
+  );
+  const flush = methodCalls(update, "flushSettings")[0];
+  const locks = methodCalls(update, "setSettingsLocked");
+  const lock = locks.find(
+    (call) => call.arguments[0]?.kind === ts.SyntaxKind.TrueKeyword,
+  );
+  const unlock = locks.find(
+    (call) => call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword,
+  );
+  assert.ok(confirm, "the install confirmation disappeared");
+  assert.ok(install, "the real install_update invocation disappeared");
+  assert.ok(flush, "settings are not flushed before update restart");
+  assert.ok(lock, "settings controls are not locked during installation");
+  assert.ok(unlock, "settings controls are not unlocked after install failure");
+  assert.ok(
+    ts.isAwaitExpression(flush.parent),
+    "the settings flush is started but not awaited",
+  );
+  assert.ok(confirm.getStart(update) < lock.getStart(update));
+  assert.ok(lock.getStart(update) < flush.getStart(update));
+  assert.ok(flush.getStart(update) < install.getStart(update));
+  assert.ok(install.getStart(update) < unlock.getStart(update));
 });

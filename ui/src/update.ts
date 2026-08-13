@@ -27,6 +27,8 @@ export interface UpdateDeps {
   focusStatus: () => void;
   /** True while work that an install-and-restart would interrupt is in flight. */
   busy: () => boolean;
+  flushSettings: () => Promise<boolean>;
+  setSettingsLocked: (locked: boolean) => void;
   activityChanged: () => void;
 }
 
@@ -84,9 +86,18 @@ export function wireUpdate(deps: UpdateDeps): void {
         }
 
         updating = true;
+        deps.setSettingsLocked(true);
         deps.activityChanged();
-        setStatus(`Installing ${update.version}…`, "running");
+        setStatus("Saving settings before installing…", "running");
         try {
+          if (!(await deps.flushSettings())) {
+            setStatus(
+              `Version ${update.version} was not installed because the latest settings could not be saved`,
+              "error",
+            );
+            return;
+          }
+          setStatus(`Installing ${update.version}…`, "running");
           // Nothing after this resolves: the process is replaced. An error is
           // the only thing that can come back, and it needs its own message —
           // reporting a failed install as "could not check for updates" sends
@@ -107,7 +118,10 @@ export function wireUpdate(deps: UpdateDeps): void {
       .finally(() => {
         const activityChanged = updating;
         updating = false;
-        if (activityChanged) deps.activityChanged();
+        if (activityChanged) {
+          deps.setSettingsLocked(false);
+          deps.activityChanged();
+        }
         button.disabled = false;
         button.textContent = previous;
       });

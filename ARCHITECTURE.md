@@ -129,8 +129,8 @@ The desktop shell adds only what a window needs:
 - **The window starts hidden** with a background matching the dark theme, and
   the frontend reveals it after mounting, so there is no unstyled flash.
 - **Closing hides to the tray**, and `prevent_close` runs before anything
-  fallible. Both Quit routes drain settings edits to a stable saved snapshot
-  before the process exits.
+  fallible. Quit and update-restart boundaries lock and drain settings edits to
+  a stable saved snapshot before the process exits.
 - **Theme "match system" removes the attribute** rather than resolving it in
   JavaScript, so the app follows the OS live instead of freezing the choice at
   startup.
@@ -243,6 +243,5 @@ it is the only invocation that has to write.
 No PRs or CI integration. No persistence beyond
 per-sweep JSON files — `--resume` reads those rather than a database, which is
 the smallest thing that makes a dead run recoverable.
-
 
 

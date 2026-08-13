@@ -246,6 +246,11 @@ function bind(): void {
     setStatus,
     focusStatus,
     busy: () => isRunning() || isApplying() || isClearing(),
+    flushSettings: () => settingsSaver.flush(),
+    setSettingsLocked: (locked) => {
+      ui.main.inert = locked;
+      ui.theme.disabled = locked;
+    },
     activityChanged,
   });
 

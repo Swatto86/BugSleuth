@@ -18,6 +18,7 @@ const el = <T extends HTMLElement>(id: string): T => {
 };
 
 const ui = {
+  main: el<HTMLElement>("main"),
   theme: el<HTMLSelectElement>("theme"),
   vendors: el<HTMLDivElement>("vendors"),
   checkSignin: el<HTMLButtonElement>("check-signin"),

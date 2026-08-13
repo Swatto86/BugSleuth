@@ -136,6 +136,7 @@ node every silent-failure opt-out gives a reason
 node flushing waits for edits made while an earlier save is pending
 node flushing writes the latest pending settings exactly once
 node installing an update disables every operation its restart would interrupt
+node installing an update locks and saves settings before restart
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
