@@ -13,8 +13,10 @@ node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
 node a bare voided call is not handled
+node a bare voided call is not handled
 node a blank row makes the configuration unrunnable, exactly like the engine
 node a cached EdgeDriver is verified before its version is read
+node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
 node a chain ending in .catch is handled, however many statements are inside it
@@ -31,6 +33,7 @@ node a failed catalogue load is told to the user rather than swallowed
 node a lane is spelled the same way in the window as in the engine
 node a model listed twice with different passes counts like the engine: max, not sum
 node a model with no id contributes nothing
+node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
 node a name that does not exist is undefined rather than empty
@@ -69,6 +72,7 @@ node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
+node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
@@ -79,6 +83,8 @@ node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
 node an awaited call in a discarded callback is not handled
+node an awaited call in a discarded callback is not handled
+node an awaited call inside its own try is handled
 node an awaited call inside its own try is handled
 node an awaited call inside its own try is handled
 node an awaited call inside its own try is handled
@@ -116,6 +122,7 @@ node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
 node every arm of a union is read, not just the first
+node every arm of a union is read, not just the first
 node every command the page calls exists in Rust and is exposed
 node every control the matrix rebuilds can be found again afterwards
 node every element the code looks up exists in the markup
@@ -127,6 +134,7 @@ node every shipped preset covers every lane
 node every silent-failure opt-out gives a reason
 node flushing writes the latest pending settings exactly once
 node installing an update disables every operation its restart would interrupt
+node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
 node interface fields come back without comments or nesting confusing them
@@ -187,6 +195,7 @@ node the plan cost is announced only when it changes
 node the precise scan sees each of the three ways a class is set
 node the preset handler guards on the whole configuration, not per row
 node the quit guard consults the clearing state, like the tray does
+node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
 node the real frontend parses, so the checks built on this are not vacuous
