@@ -173,7 +173,7 @@ describe("BugSleuth desktop app", () => {
     });
   });
 
-  it("runs a real review and writes the result to disk", async function () {
+  it("runs a real single-lane review and writes the result to disk", async function () {
     // A real model on a real repository. Slow by nature.
     const existing = runsDir();
     if (existing !== undefined)
@@ -192,7 +192,9 @@ describe("BugSleuth desktop app", () => {
       .waitUntil(
         async () => {
           lastStatus = await $("#status").getText();
-          return lastStatus.startsWith("Finished");
+          // One lane is intentionally cheaper than full coverage, so the
+          // honest successful outcome is incomplete rather than Finished.
+          return lastStatus.startsWith("Review incomplete");
         },
         {
           timeout: 14 * 60_000,

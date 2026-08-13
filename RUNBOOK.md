@@ -47,7 +47,7 @@ looking, not by inference:
 | 3 | Untick a lane's every box | The column head is marked and the banner names that lane as NOT SWEPT |
 | 4 | Set a repository, one model, one lane; Untick **Re-grade every severity** | Footer shows one sweep and one round; Run enables; triage is off so this journey remains one pre-check and one sweep |
 | 5 | **Run review** | The selected-provider pre-check finishes before lane progress streams into the result pane |
-| 6 | Wait for it | Status reaches Finished and findings are listed |
+| 6 | Wait for it | Status reports the review is incomplete because only one lane was swept, and findings are listed |
 | 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>-<16-hex-path-hash>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
 | 7b | Check a finding's `fix` | It has an approach, at least one edit naming a symbol, a verification command, and risks. An empty plan renders as "no fix plan" rather than as nothing |
 | 7c | **Copy fix prompt** | The button appears when the run ends, copies, and briefly says "Copied". The path under it points at a real `fix-prompt.md` in the run directory |

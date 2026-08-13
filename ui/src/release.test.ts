@@ -158,14 +158,28 @@ test("the packaged gate still release-builds the libraries and CLI", () => {
 test("the live E2E review replaces saved configuration deterministically", () => {
   const spec = parse("review.spec.ts", e2eSpec());
   let callsHelper = false;
+  let completionStatus = "";
   walk(spec, (node) => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
       callsHelper ||= node.expression.text === "configureOneSweep";
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "startsWith" &&
+      node.expression.expression.getText(spec) === "lastStatus"
+    ) {
+      completionStatus = node.arguments[0]?.getText(spec) ?? "";
     }
   });
   assert.ok(
     callsHelper,
     "the real review test does not configure its own sweep",
+  );
+  assert.equal(
+    completionStatus,
+    '"Review incomplete"',
+    "the one-lane review waits for a falsely complete status",
   );
 
   const source = parse("support.ts", e2eSupport());
