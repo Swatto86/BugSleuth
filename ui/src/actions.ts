@@ -28,6 +28,7 @@ export interface ActionDeps {
     /** Hidden when the prompt it would apply is deleted. */
     applyPanel: HTMLDivElement;
     promptPath: HTMLParagraphElement;
+    quitListenerError: HTMLSpanElement;
   };
   settings: () => Settings;
   setSettings: (models: Settings["models"]) => void;
@@ -210,10 +211,10 @@ export function bindGuardedActions(deps: ActionDeps): void {
   void listen("confirm-quit", () => {
     askBeforeQuitting();
   }).catch((error: unknown) => {
-    deps.setStatus(
-      `The tray's Quit cannot reach this window: ${String(error)}`,
-      "error",
-    );
+    const message = `The tray's Quit cannot reach this window: ${String(error)}`;
+    ui.quitListenerError.textContent = message;
+    ui.quitListenerError.classList.remove("hidden");
+    deps.setStatus(message, "error");
   });
 
   ui.quit.addEventListener("click", askBeforeQuitting);

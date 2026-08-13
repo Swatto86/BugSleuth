@@ -65,6 +65,33 @@ test("long-running actions wait for their completion listeners", () => {
   assert.match(html, /id="run"[^>]*disabled/);
 });
 
+test("a failed tray-Quit listener leaves a persistent alert", () => {
+  const actions = read("ui", "src", "actions.ts");
+  const html = read("ui", "index.html");
+  const listener = actions.indexOf('listen("confirm-quit"');
+  const failure = actions.indexOf(".catch", listener);
+  const assignment = actions.indexOf(
+    "ui.quitListenerError.textContent = message",
+    failure,
+  );
+  const reveal = actions.indexOf(
+    'ui.quitListenerError.classList.remove("hidden")',
+    failure,
+  );
+
+  assert.ok(listener >= 0, "the confirm-quit listener was not found");
+  assert.ok(
+    failure > listener,
+    "the confirm-quit rejection handler was not found",
+  );
+  assert.ok(
+    assignment > failure,
+    "the listener error is not written to the alert",
+  );
+  assert.ok(reveal > failure, "the listener error alert is not revealed");
+  assert.match(html, /id="quit-listener-error"[^>]*role="alert"/);
+});
+
 /// Readiness has to be redrawn once it changes, on every path.
 ///
 /// Run is disabled in shipped markup and re-enabled by `renderPlanSummary`.

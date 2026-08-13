@@ -30,6 +30,7 @@ node a chain ending in .catch is handled, however many statements are inside it
 node a class built from a prefix counts as used, not as dead style
 node a downloaded EdgeDriver is verified before it is executed
 node a failed catalogue load is told to the user rather than swallowed
+node a failed tray-Quit listener leaves a persistent alert
 node a lane is spelled the same way in the window as in the engine
 node a model listed twice with different passes counts like the engine: max, not sum
 node a model with no id contributes nothing

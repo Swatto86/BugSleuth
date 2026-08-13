@@ -41,6 +41,7 @@ const ui = {
   findings: el<HTMLDivElement>("findings"),
   status: el<HTMLSpanElement>("status"),
   settingsError: el<HTMLSpanElement>("settings-error"),
+  quitListenerError: el<HTMLSpanElement>("quit-listener-error"),
   spinner: el<HTMLSpanElement>("spinner"),
   planSummary: el<HTMLSpanElement>("plan-summary"),
   run: el<HTMLButtonElement>("run"),
