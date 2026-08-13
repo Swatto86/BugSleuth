@@ -5,15 +5,15 @@
 //! somewhere is the system temp area, never inside the repository being
 //! changed: an apply must leave only the fix behind.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::error::ProviderError;
-use crate::process::preview;
+use crate::process::{self, preview};
 
 use super::VENDOR;
 
 /// First error carried by a Codex event, if any.
-pub(super) fn event_error(stdout: &str) -> Option<String> {
+pub(crate) fn event_error(stdout: &str) -> Option<String> {
     stdout.lines().find_map(|line| {
         let event: serde_json::Value = serde_json::from_str(line).ok()?;
         match event["type"].as_str()? {
@@ -21,6 +21,58 @@ pub(super) fn event_error(stdout: &str) -> Option<String> {
             "error" => event["message"].as_str().map(|s| preview(s, 2000)),
             _ => None,
         }
+    })
+}
+
+/// The model's own account, or the CLI's own account of why there isn't one.
+///
+/// Shared by the read-only sweep and the write-capable apply: both read the
+/// final message from a file Codex writes, and both prefer a structured event
+/// on stdout over an empty stderr when that file is missing.
+pub(crate) fn finish(
+    output: Result<crate::process::CliOutput, crate::process::ProcessError>,
+    answer_path: &Path,
+) -> Result<String, ProviderError> {
+    let output = match output {
+        Ok(output) => output,
+        Err(process::ProcessError::OutputTruncated { output, .. }) if output.succeeded() => *output,
+        Err(error) => return Err(error.into()),
+    };
+
+    if !output.succeeded() {
+        let code = output.code.unwrap_or(-1);
+        let message = event_error(&output.stdout)
+            .unwrap_or_else(|| preview(output.stderr.trim(), 2000))
+            .trim()
+            .to_string();
+        return Err(if message.is_empty() {
+            ProviderError::FailedSilently {
+                vendor: VENDOR,
+                code,
+            }
+        } else {
+            ProviderError::Failed {
+                vendor: VENDOR,
+                code,
+                message,
+            }
+        });
+    }
+
+    let answer = std::fs::read_to_string(answer_path).map_err(|e| ProviderError::Envelope {
+        vendor: VENDOR,
+        detail: format!("the CLI wrote no final answer: {e}"),
+    })?;
+    if answer.trim().is_empty() {
+        return Err(ProviderError::Empty(VENDOR));
+    }
+    Ok(answer)
+}
+
+pub(crate) fn write_file(path: &Path, contents: &str) -> Result<(), ProviderError> {
+    std::fs::write(path, contents).map_err(|e| ProviderError::Scratch {
+        vendor: VENDOR,
+        detail: format!("{}: {e}", path.display()),
     })
 }
 
@@ -38,7 +90,7 @@ pub(super) fn event_error(stdout: &str) -> Option<String> {
 /// this a claim rather than a hope: the directory is ours because creating it
 /// is what proved it did not exist. A counter breaks ties within a process and
 /// between processes that share a pid across a reboot.
-pub(super) fn scratch_dir() -> Result<PathBuf, ProviderError> {
+pub(crate) fn scratch_dir() -> Result<PathBuf, ProviderError> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
 
@@ -80,7 +132,7 @@ pub(super) fn scratch_dir() -> Result<PathBuf, ProviderError> {
 /// Removes a directory tree when dropped, so the scratch area is cleaned on a
 /// cancelled future and an early `?` as well as on the normal return. A removal
 /// that fails is best-effort — it must not mask the provider's result.
-pub(super) struct Cleanup(pub(super) PathBuf);
+pub(crate) struct Cleanup(pub(crate) PathBuf);
 
 impl Drop for Cleanup {
     fn drop(&mut self) {

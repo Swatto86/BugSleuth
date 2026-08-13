@@ -18,7 +18,7 @@ import {
   type ModelSetting,
   type Vendor,
 } from "./model";
-import { offeredSweepVendors } from "./cli-offer.ts";
+import { offeredVendors } from "./cli-offer.ts";
 
 export interface VendorStatus {
   name: string;
@@ -117,7 +117,7 @@ export function matrixRows(
     // Rebuilding the table replaces every element, so keyboard focus lands
     // on <body>. These keys let the caller put it back where it was.
     vendorSelect.dataset["focusKey"] = `vendor-${index}`;
-    for (const name of offeredSweepVendors(catalogue, vendor)) {
+    for (const name of offeredVendors(catalogue, vendor)) {
       vendorSelect.append(option(name, name, name === vendor));
     }
     vendorSelect.addEventListener("change", () => {

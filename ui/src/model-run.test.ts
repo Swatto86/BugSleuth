@@ -7,6 +7,7 @@
  */
 
 import { strict as assert } from "node:assert";
+import fs from "node:fs";
 import { test } from "node:test";
 
 import {
@@ -21,11 +22,7 @@ import {
   supportsAgents,
   usesUltracode,
 } from "./model.ts";
-import {
-  offeredSweepVendors,
-  offeredVendors,
-  vendorCliPresent,
-} from "./cli-offer.ts";
+import { offeredVendors, vendorCliPresent } from "./cli-offer.ts";
 import type { Catalogue } from "./view.ts";
 
 const base = {
@@ -73,9 +70,7 @@ test("a run needs both a repository and at least one sweep", () => {
   );
 });
 
-test("codex cannot be scheduled for repository review", () => {
-  // Mirrors plan::plan: Codex apply still works, but a sweep matrix that
-  // includes it must not look runnable — the backend refuses before any lane.
+test("codex can be scheduled for repository review", () => {
   assert.equal(
     canRun(
       {
@@ -85,9 +80,9 @@ test("codex cannot be scheduled for repository review", () => {
       },
       {},
     ),
-    false,
+    true,
   );
-  assert.match(
+  assert.equal(
     runBlockReason(
       {
         ...base,
@@ -95,8 +90,8 @@ test("codex cannot be scheduled for repository review", () => {
         models: [row("codex:", ["correctness"])],
       },
       {},
-    ) ?? "",
-    /Codex/,
+    ),
+    null,
   );
   for (const name of ["balanced", "deep"] as const) {
     assert.ok(
@@ -330,23 +325,32 @@ test("menus only offer vendors whose CLI is installed", () => {
     "codex",
   ]);
   assert.ok(
-    !offeredSweepVendors(catalogue).includes("codex"),
-    "new sweep rows must not offer Codex",
-  );
-  assert.ok(
     offeredVendors(catalogue, "codex").includes("codex"),
-    "Apply must still be able to select Codex",
+    "a stale saved Codex row stays visible so it can be changed",
+  );
+  const withCodex = {
+    ...catalogue,
+    codex: { ...catalogue.codex, installed: true },
+  };
+  assert.ok(
+    offeredVendors(withCodex).includes("codex"),
+    "an installed Codex CLI must appear in the sweep provider list",
   );
   assert.ok(
-    !offeredSweepVendors({}).includes("codex"),
-    "Codex stays off new sweep rows even before the catalogue loads",
-  );
-  assert.ok(
-    offeredSweepVendors(catalogue, "codex").includes("codex"),
-    "a saved Codex sweep row must remain visible so it can be changed",
+    offeredVendors({}).includes("codex"),
+    "Codex stays visible before the catalogue loads rather than vanishing at boot",
   );
   // Before the catalogue loads, every known vendor stays offered.
   assert.ok(offeredVendors({}).includes("cursor"));
+  const view = fs.readFileSync(new URL("./view.ts", import.meta.url), "utf8");
+  assert.ok(
+    view.includes("offeredVendors("),
+    "the sweep matrix must offer providers through offeredVendors",
+  );
+  assert.ok(
+    !view.includes("offeredSweepVendors"),
+    "a second filter would hide an installed provider the status pills still show",
+  );
 });
 
 test("Run refuses a model whose CLI is not installed", () => {

@@ -17,9 +17,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::error::ProviderError;
-use crate::process::{self, Invocation, preview};
+use crate::process::{self, Invocation};
 
-use super::scratch::{Cleanup, event_error, scratch_dir};
+use super::scratch::{Cleanup, finish, scratch_dir};
 use super::{SHARED_FLAGS, VENDOR, not_found};
 
 /// Apply the fixes described in `prompt`, returning the model's own account.
@@ -103,49 +103,6 @@ fn build_args(model: &str, effort: &str, answer: &Path) -> Vec<String> {
     // cannot hit the command-line length limit.
     args.push("-".into());
     args
-}
-
-/// The model's own account, or the CLI's own account of why there isn't one.
-fn finish(
-    output: Result<crate::process::CliOutput, crate::process::ProcessError>,
-    answer_path: &Path,
-) -> Result<String, ProviderError> {
-    let output = match output {
-        Ok(output) => output,
-        Err(process::ProcessError::OutputTruncated { output, .. }) if output.succeeded() => *output,
-        Err(error) => return Err(error.into()),
-    };
-
-    if !output.succeeded() {
-        let code = output.code.unwrap_or(-1);
-        // Codex reports failures as events on stdout as well as on stderr, and
-        // the event usually carries the more useful message.
-        let message = event_error(&output.stdout)
-            .unwrap_or_else(|| preview(output.stderr.trim(), 2000))
-            .trim()
-            .to_string();
-        return Err(if message.is_empty() {
-            ProviderError::FailedSilently {
-                vendor: VENDOR,
-                code,
-            }
-        } else {
-            ProviderError::Failed {
-                vendor: VENDOR,
-                code,
-                message,
-            }
-        });
-    }
-
-    let answer = std::fs::read_to_string(answer_path).map_err(|e| ProviderError::Envelope {
-        vendor: VENDOR,
-        detail: format!("the CLI wrote no final answer: {e}"),
-    })?;
-    if answer.trim().is_empty() {
-        return Err(ProviderError::Empty(VENDOR));
-    }
-    Ok(answer)
 }
 
 #[cfg(test)]

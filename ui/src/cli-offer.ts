@@ -34,22 +34,6 @@ export function offeredVendors(
 }
 
 /**
- * Providers the sweep-matrix menus may offer.
- *
- * Codex can still apply fixes, but it cannot run a repository review. New
- * sweep rows therefore omit it; a saved Codex row stays visible so it can be
- * switched away from.
- */
-export function offeredSweepVendors(
-  catalogue: InstallCatalogue,
-  current?: Vendor,
-): Vendor[] {
-  return offeredVendors(catalogue, current).filter(
-    (name) => name !== "codex" || current === "codex",
-  );
-}
-
-/**
  * Whether this model's vendor CLI is present on the machine.
  *
  * Permissive while the catalogue has not loaded, and permissive when a vendor

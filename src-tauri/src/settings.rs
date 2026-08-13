@@ -118,8 +118,8 @@ fn one_pass() -> usize {
 }
 
 impl Default for Settings {
-    /// The shipped default is the "Balanced" preset: every lane covered by a
-    /// model that can actually review. Codex is apply-only and is not scheduled.
+    /// The shipped default is the "Balanced" preset: every lane covered by one
+    /// model. Codex is available in the matrix but is not the first-run default.
     ///
     /// Every lane has a model on purpose. A lane with nobody assigned is
     /// reported as unswept, which is correct but is a bad thing to hand someone

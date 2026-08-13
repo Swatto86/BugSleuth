@@ -40,9 +40,6 @@ export function runBlockReason(
     if (model.id.trim() === "") {
       return "Every row needs a model id — finish or remove the empty row.";
     }
-    if (vendorOf(model.id) === "codex") {
-      return "Codex cannot run a repository review. Remove it from the matrix or switch that row to another provider. Codex can still apply fixes.";
-    }
     if (!vendorCliPresent(model.id, catalogue)) {
       return `The ${vendorOf(model.id)} CLI is not installed on this machine.`;
     }

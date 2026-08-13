@@ -23,7 +23,7 @@ export function preset(name: Preset): ModelSetting[] {
       return [{ id: "haiku", lanes: [...LANES], effort: "", passes: 1 }];
     case "deep":
       // Claude on every lane, Kilo doubled on the two where a second view
-      // pays for itself. Codex is apply-only and is not scheduled for review.
+      // pays for itself.
       return [
         { id: "opus", lanes: [...LANES], effort: "", passes: 1 },
         {

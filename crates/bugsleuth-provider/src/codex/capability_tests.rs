@@ -1,9 +1,9 @@
 use super::*;
 
 #[tokio::test]
-async fn repository_review_fails_closed_before_launching_codex() {
+async fn repository_review_launches_codex() {
     let dir = std::env::temp_dir().join(format!(
-        "bugsleuth-disabled-codex-review-{}",
+        "bugsleuth-enabled-codex-review-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
@@ -12,12 +12,12 @@ async fn repository_review_fails_closed_before_launching_codex() {
     #[cfg(windows)]
     let (stub, script) = (
         dir.join("codex.cmd"),
-        "@echo off\r\n>launched.txt echo launched\r\nexit /b 9\r\n",
+        "@echo off\r\n>launched.txt echo launched\r\n:args\r\nif \"%~1\"==\"\" exit /b 2\r\nif \"%~1\"==\"--output-last-message\" goto answer\r\nshift\r\ngoto args\r\n:answer\r\n>\"%~2\" echo {\"findings\":[]}\r\nexit /b 0\r\n",
     );
     #[cfg(unix)]
     let (stub, script) = (
         dir.join("codex"),
-        "#!/bin/sh\nprintf launched > launched.txt\nexit 9\n",
+        "#!/bin/sh\nprintf launched > launched.txt\nwhile [ \"$#\" -gt 0 ]; do\n  if [ \"$1\" = \"--output-last-message\" ]; then\n    printf '%s\\n' '{\"findings\":[]}' > \"$2\"\n    exit 0\n  fi\n  shift\ndone\nexit 2\n",
     );
     std::fs::write(&stub, script).expect("write fake Codex CLI");
     #[cfg(unix)]
@@ -40,16 +40,9 @@ async fn repository_review_fails_closed_before_launching_codex() {
     let launched = dir.join("launched.txt").exists();
     let _ = std::fs::remove_dir_all(&dir);
 
-    assert!(!launched, "the disabled review still launched Codex");
+    assert!(launched, "the review never launched Codex: {outcome:?}");
     assert!(
-        matches!(
-            outcome,
-            Err(ProviderError::CapabilityUnavailable {
-                vendor: "codex",
-                capability: "repository review",
-                ..
-            })
-        ),
-        "the review did not return the capability refusal: {outcome:?}"
+        outcome.is_ok(),
+        "the review did not return findings: {outcome:?}"
     );
 }

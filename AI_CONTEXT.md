@@ -36,7 +36,8 @@ Cursor specs look like `cursor:composer-2.5`. The CLI binary users type is `agen
 
 ## Recent Context & Decisions
 
-- 2026-08-12: Released **0.2.50** — isolated worktrees unlink instruction-named file links; Cursor apply refuses those links; Run explains why it is disabled and hides Codex from new sweep rows; an unclosed JSON fence no longer cuts at snippet backticks; check_all's CLI-install scan no longer matches its own test.
+- 2026-08-13: Codex is a review provider again. The sweep-matrix dropdown lists it whenever the CLI is installed; `plan` accepts `codex:` rows; sweeps run `--sandbox read-only` with `--ignore-rules` / `--ignore-user-config`. Apply still uses `--sandbox workspace-write`.
+- 2026-08-12: Released **0.2.50** — isolated worktrees unlink instruction-named file links; Cursor apply refuses those links; Run explains why it is disabled; an unclosed JSON fence no longer cuts at snippet backticks; check_all's CLI-install scan no longer matches its own test.
 - 2026-08-12: Released **0.2.49** — instruction-strip/Cursor walk refuse directory-link follow; Codex review refused at plan and dropped from defaults; Cursor apply pins `--workspace`; brief writes stage-then-rename; theme gate locks system-light to explicit light.
 - 2026-08-12: Theme WCAG gate also asserts system-preference light (`:root:not([data-theme="dark"])`) matches explicit `data-theme=light`, the palette default `theme: system` actually uses.
 - 2026-08-12: Cursor `BriefFile::write_in` stages then renames so a failed write cannot truncate `__bugsleuth_brief.md` in a real repository.

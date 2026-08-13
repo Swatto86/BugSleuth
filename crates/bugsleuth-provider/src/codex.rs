@@ -1,4 +1,17 @@
-//! Codex discovery, diagnostics, and disabled repository capabilities.
+//! Codex CLI adapter.
+//!
+//! The second vendor, and the reason BugSleuth exists in the shape it does: two
+//! models from the same family share blind spots, so a review that only ever
+//! asks Claude is not the cross-vendor audit the tool promises.
+//!
+//! Codex differs from Claude in three ways that matter here, all absorbed
+//! inside this file so the layer above sees one uniform result:
+//!
+//! - Its JSON Schema is passed as a **file path**, not inline text.
+//! - Its final answer can be written straight to a file with
+//!   `--output-last-message`, which avoids parsing its event stream at all.
+//! - Its sandbox is a first-class flag (`--sandbox read-only`) rather than a
+//!   tool allowlist.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -10,12 +23,13 @@ use crate::process::{self, Invocation, preview};
 
 mod apply;
 mod discover;
-mod scratch;
+pub(crate) mod scratch;
+mod sweep;
 
 pub use apply::apply;
+pub use sweep::sweep;
 
 pub(crate) const VENDOR: &str = "codex";
-const REVIEW_DISABLED_REASON: &str = "Codex's read-only sandbox permits reads outside the repository, and the installed CLI has no verified repository-only read boundary";
 
 pub struct CodexSweep<'a> {
     pub repo: &'a Path,
@@ -34,15 +48,6 @@ pub struct CodexResult {
     pub salvaged: bool,
 }
 
-/// Refuse repository-driven review before discovering or starting Codex.
-pub async fn sweep(_spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
-    Err(ProviderError::CapabilityUnavailable {
-        vendor: VENDOR,
-        capability: "repository review",
-        reason: REVIEW_DISABLED_REASON.to_string(),
-    })
-}
-
 /// The flags every Codex invocation carries, whatever it is for.
 ///
 /// One list, because a sign-in check that invokes the CLI differently from the
@@ -54,7 +59,7 @@ pub async fn sweep(_spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> 
 /// neither the machine's own configuration nor the repository's rules may
 /// change what the model is told to do. The write-capable path has to drop the
 /// first of those to write at all — see [`apply`].
-const SHARED_FLAGS: [&str; 8] = [
+pub(crate) const SHARED_FLAGS: [&str; 8] = [
     "--ask-for-approval",
     "never",
     "exec",

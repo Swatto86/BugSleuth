@@ -99,7 +99,7 @@ node both sides are actually being read
 node both themes define the same set of colours
 node checksum fallback excludes and verifies its own manifest
 node clearing hands focus off before activityChanged disables its opener
-node codex cannot be scheduled for repository review
+node codex can be scheduled for repository review
 node dark theme meets WCAG AA everywhere the UI uses it
 node declining an available update clears the running status
 node editing a model refreshes its row action labels
@@ -380,13 +380,24 @@ rust codex::apply::tests::a_write_capable_run_keeps_the_machines_configuration_b
 rust codex::apply::tests::an_empty_model_or_effort_is_omitted_rather_than_passed_blank
 rust codex::apply::tests::applying_is_granted_workspace_write_and_never_asks
 rust codex::apply::tests::the_prompt_is_read_from_stdin_rather_than_argv
-rust codex::capability_tests::repository_review_fails_closed_before_launching_codex
+rust codex::capability_tests::repository_review_launches_codex
 rust codex::scratch::tests::a_directory_already_sitting_at_the_chosen_name_is_never_adopted
 rust codex::scratch::tests::a_failure_event_on_stdout_is_preferred_over_empty_stderr
 rust codex::scratch::tests::a_plain_error_event_is_also_read
 rust codex::scratch::tests::each_scratch_directory_is_new_rather_than_reused
 rust codex::scratch::tests::output_that_is_not_events_yields_no_error_rather_than_a_wrong_one
 rust codex::scratch::tests::the_scratch_directory_is_outside_the_reviewed_repository
+rust codex::sweep::recover::tests::the_started_thread_is_the_only_event_worth_resuming
+rust codex::sweep::tests::a_named_model_and_effort_reach_the_cli
+rust codex::sweep::tests::a_sweep_runs_read_only_and_ignores_the_reviewed_repos_own_config
+rust codex::sweep::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
+rust codex::sweep::tests::an_invocation_with_no_schema_names_no_schema_file
+rust codex::sweep::tests::cleanup_guard_removes_the_directory_on_drop
+rust codex::sweep::tests::sweep_sessions_are_persisted_so_a_timeout_can_resume_them
+rust codex::sweep::tests::the_configuration_and_rules_of_the_host_and_the_repo_are_both_ignored
+rust codex::sweep::tests::the_prompt_comes_from_stdin_so_a_long_brief_cannot_overflow_the_command_line
+rust codex::sweep::tests::the_schema_and_answer_paths_are_passed_as_files_not_inline_json
+rust codex::sweep::tests::the_signin_probe_and_a_sweep_share_one_flag_list
 rust codex::tests::signin_ignores_host_and_repository_instructions
 rust commands::apply::report::tests::a_commit_that_credits_the_tool_is_named_before_it_is_pushed
 rust commands::apply::report::tests::a_completed_push_names_where_it_went_and_that_it_is_permanent
@@ -695,7 +706,7 @@ rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
 rust plan::tests::every_provider_runs_at_most_one_sweep_per_batch
 rust plan::tests::every_vendor_prefix_is_recognised
 rust plan::tests::kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to
-rust plan::tests::plan_refuses_codex_repository_review
+rust plan::tests::plan_accepts_codex_repository_review
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
 rust process::descendant_tests::a_timeout_on_run_kills_unix_descendants_not_only_the_child

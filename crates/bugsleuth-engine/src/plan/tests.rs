@@ -123,16 +123,13 @@ fn a_fully_covered_run_reports_no_gaps() {
 }
 
 #[test]
-fn plan_refuses_codex_repository_review() {
-    let refused = plan(&with_effort("codex:gpt-5.6-codex", ""));
-    let message = refused.map(|_| ()).unwrap_err().to_string();
-    assert!(
-        message.contains("repository review"),
-        "must name the disabled capability: {message}"
-    );
-    assert!(
-        message.contains("disabled") || message.contains("not repository-bounded"),
-        "must say why Codex cannot review: {message}"
+fn plan_accepts_codex_repository_review() {
+    let planned = plan(&with_effort("codex:gpt-5.6-codex", ""))
+        .unwrap_or_else(|e| panic!("plan failed: {e}"));
+    assert_eq!(planned.units.len(), 1);
+    assert_eq!(
+        planned.units.first().map(|unit| unit.model.as_str()),
+        Some("codex:gpt-5.6-codex")
     );
 }
 
