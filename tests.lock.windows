@@ -569,6 +569,7 @@ rust kilo::tests::the_model_id_says_which_account_a_sweep_will_spend_from
 rust kilo::tests::the_preflight_checks_the_agent_the_sweep_actually_runs_as
 rust kilo::tests::the_working_directory_is_pinned_explicitly
 rust kimi::apply::tests::a_missing_cli_is_reported_as_not_installed_rather_than_as_a_failed_apply
+rust kimi::apply::tests::agent_tool_lists_keep_allowed_and_denied_entries_separate
 rust kimi::apply::tests::an_empty_model_is_omitted_rather_than_passed_blank
 rust kimi::apply::tests::skills_are_replaced_by_an_empty_directory_rather_than_left_discovered
 rust kimi::apply::tests::the_prompt_that_crosses_the_command_line_stays_small

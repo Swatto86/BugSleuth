@@ -121,6 +121,19 @@ fn pointer(handoff: &Path) -> String {
 mod tests {
     use super::*;
 
+    const ALLOWED: [&str; 6] = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"];
+    const DENIED: [&str; 3] = ["Agent", "AgentSwarm", "Skill"];
+
+    fn list_after<'a>(definition: &'a str, heading: &str) -> Vec<&'a str> {
+        definition
+            .lines()
+            .skip_while(|line| line.trim() != heading)
+            .skip(1)
+            .take_while(|line| line.trim_start().starts_with("- "))
+            .map(|line| line.trim().trim_start_matches("- "))
+            .collect()
+    }
+
     fn argv(model: &str) -> (brief_file::BriefFile, Vec<String>) {
         let handoff = brief_file::BriefFile::write("fix the finding", brief_file::APPLY_AGENT)
             .expect("write handoff");
@@ -139,26 +152,33 @@ mod tests {
         assert_eq!(agent, &handoff.agent_path().to_string_lossy().into_owned());
 
         let definition = std::fs::read_to_string(agent).expect("the agent file exists");
-        for tool in ["Edit", "Write", "Bash"] {
-            assert!(
-                definition.contains(&format!("- {tool}")),
-                "applying cannot {tool}: {definition}"
-            );
-        }
-        for refused in ["Agent", "AgentSwarm", "Skill"] {
-            assert!(
-                definition.contains(&format!("- {refused}")),
-                "{refused} is not named in the definition at all: {definition}"
-            );
-        }
-        // Named under `disallowedTools`, not merely absent: absence is what
-        // allows every tool on this CLI.
-        let (allowed, refused) = definition
-            .split_once("disallowedTools:")
-            .expect("the definition refuses tools by name");
-        assert!(refused.contains("AgentSwarm"), "{definition}");
-        assert!(!allowed.contains("AgentSwarm"), "{definition}");
-        assert!(allowed.contains("Edit"), "{definition}");
+        assert_eq!(
+            list_after(&definition, "tools:"),
+            ALLOWED,
+            "unexpected apply allowlist: {definition}"
+        );
+        assert_eq!(
+            list_after(&definition, "disallowedTools:"),
+            DENIED,
+            "unexpected apply denylist: {definition}"
+        );
+    }
+
+    #[test]
+    fn agent_tool_lists_keep_allowed_and_denied_entries_separate() {
+        let malformed = r#"tools:
+  - Read
+  - Grep
+  - Glob
+  - Edit
+  - Write
+  - Bash
+  - Agent
+disallowedTools:
+  - AgentSwarm
+  - Skill"#;
+        assert_ne!(list_after(malformed, "tools:"), ALLOWED);
+        assert_ne!(list_after(malformed, "disallowedTools:"), DENIED);
     }
 
     #[test]
