@@ -798,6 +798,7 @@ rust settings::tests::known_lane_spellings_are_canonical_on_the_wire
 rust settings::tests::malformed_settings_are_reported_and_left_in_place
 rust settings::tests::retired_provider_concurrency_is_removed_when_settings_load
 rust settings::tests::the_default_covers_every_lane_so_a_first_run_has_no_silent_holes
+rust settings::tests::theme_values_are_valid_before_crossing_to_the_window
 rust settings::tests::unknown_fields_and_missing_fields_both_survive_a_round_trip
 rust signin::tests::a_failure_keeps_the_reason_the_vendor_gave
 rust signin::tests::a_signal_exit_code_is_a_failed_probe

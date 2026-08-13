@@ -12,6 +12,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
+mod theme;
+pub use theme::Theme;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -22,7 +25,7 @@ pub struct Settings {
     /// Models and the lanes each covers.
     pub models: Vec<ModelSetting>,
     /// `system`, `light` or `dark`.
-    pub theme: String,
+    pub theme: Theme,
     /// Reuse sweeps already on disk for this repository instead of paying for
     /// them again.
     ///
@@ -157,7 +160,7 @@ impl Default for Settings {
                     "gate".into(),
                 ],
             }],
-            theme: "system".into(),
+            theme: Theme::System,
             reuse_completed: true,
             triage_model: cheapest(),
             // Nothing by default: applying fixes writes to the user's own
@@ -290,6 +293,21 @@ mod tests {
             saved["models"][0]["lanes"],
             serde_json::json!(["correctness", "security", "future"])
         );
+    }
+
+    #[test]
+    fn theme_values_are_valid_before_crossing_to_the_window() {
+        for (raw, expected) in [
+            ("system", "system"),
+            ("light", "light"),
+            ("dark", "dark"),
+            ("contrast", "system"),
+        ] {
+            let parsed: Settings =
+                serde_json::from_str(&format!(r#"{{"theme":"{raw}"}}"#)).expect("settings load");
+            let saved = serde_json::to_value(parsed).expect("settings serialize");
+            assert_eq!(saved["theme"], expected, "theme migration for {raw}");
+        }
     }
 
     #[test]
