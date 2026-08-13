@@ -8,9 +8,7 @@
  * prose, and prose does not fail to compile.
  *
  * This is the same shape as every other check here: two places that must agree,
- * with no compiler spanning them. The workflow builds the names from a matrix,
- * so the comparison is on the stable stems rather than on whole filenames, and
- * the suffixes are checked separately against the matrix itself.
+ * with no compiler spanning them.
  */
 
 import { strict as assert } from "node:assert";
@@ -67,40 +65,6 @@ function suffixes(): string[] {
   );
   return found;
 }
-
-test("the README's download table names assets the workflow builds", () => {
-  const text = readme();
-  const yaml = workflow();
-
-  // Only the table, so a stem mentioned in passing elsewhere does not count.
-  // Padding is tolerated: a markdown formatter aligns table cells, and matching
-  // single spaces meant running one over the README turned this check from
-  // "the assets do not match" into "there is no table", which is the same
-  // vacuous pass the assertion below exists to prevent.
-  const table = /\|\s*You want\s*\|\s*Download\s*\|([\s\S]*?)\n\n/.exec(text);
-  assert.ok(table, "no download table in the README; the scan is broken");
-
-  const stems = [
-    ...table[1]!.matchAll(
-      /`([A-Za-z][\w.-]*?)[_-](?:x\.y\.z|windows|linux|macos)/g,
-    ),
-  ]
-    .map((m) => m[1]!)
-    .filter((stem, index, all) => all.indexOf(stem) === index);
-  assert.ok(
-    stems.length >= 3,
-    `read ${stems.length} asset names out of the table`,
-  );
-
-  const missing = stems.filter((stem) => !yaml.includes(stem));
-  assert.deepEqual(
-    missing,
-    [],
-    "the README tells people to download these and the release workflow builds " +
-      "no such thing. Someone following it lands on a releases page with no " +
-      "matching file and assumes the build is broken",
-  );
-});
 
 test("every platform the release builds for is offered in the README", () => {
   const text = readme();

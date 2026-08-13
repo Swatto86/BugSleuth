@@ -162,6 +162,7 @@ node only a complete shipped preset bypasses replacement confirmation
 node only the release publisher receives repository write authority
 node quit flushes pending settings before it can invoke exit
 node quit rechecks active work after its settings flush
+node release asset names exactly match the download table
 node release tag matches version embedded in the app
 node removing a configured model row is guarded by a confirmation
 node render redirects focus when the focused row was just removed
@@ -183,7 +184,6 @@ node the E2E run verifies the native driver before spawning it
 node the E2E stop check observes a real provider before and after cancellation
 node the E2E verifier rejects every unsuccessful process result
 node the README still promises a single file that runs with nothing installed
-node the README's download table names assets the workflow builds
 node the acceptance journey accounts for the provider pre-check
 node the clear handler disables its button and re-enables it on both outcomes
 node the clear handler shows a running status while the delete is in flight
