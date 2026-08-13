@@ -95,6 +95,7 @@ fn yes() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelSetting {
     pub id: String,
+    #[serde(deserialize_with = "canonical_lanes")]
     pub lanes: Vec<String>,
     /// Reasoning effort. Empty means the vendor's own default.
     ///
@@ -111,6 +112,20 @@ pub struct ModelSetting {
     pub passes: usize,
     #[serde(flatten)]
     pub(crate) extra: BTreeMap<String, serde_json::Value>,
+}
+
+fn canonical_lanes<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let lanes = Vec::<String>::deserialize(deserializer)?;
+    Ok(lanes
+        .into_iter()
+        .map(|lane| match lane.parse::<bugsleuth_domain::Lane>() {
+            Ok(known) => known.slug().to_string(),
+            Err(_) => lane,
+        })
+        .collect())
 }
 
 fn one_pass() -> usize {
@@ -257,6 +272,24 @@ mod tests {
         let saved = serde_json::to_value(parsed).expect("settings serialize");
         assert_eq!(saved["future_setting"]["enabled"], true);
         assert_eq!(saved["models"][0]["future_model_setting"], 7);
+    }
+
+    #[test]
+    fn known_lane_spellings_are_canonical_on_the_wire() {
+        let parsed: Settings = serde_json::from_str(
+            r#"{"models":[{"id":"sonnet","lanes":[" Correctness ","SECURITY","future"]}]}"#,
+        )
+        .expect("settings load");
+        assert_eq!(
+            parsed.models[0].lanes,
+            ["correctness", "security", "future"]
+        );
+
+        let saved = serde_json::to_value(parsed).expect("settings serialize");
+        assert_eq!(
+            saved["models"][0]["lanes"],
+            serde_json::json!(["correctness", "security", "future"])
+        );
     }
 
     #[test]
