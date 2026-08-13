@@ -123,7 +123,7 @@ mod tests {
         let marker = dir.join("fsmonitor_ran");
         #[cfg(windows)]
         {
-            let hook = dir.join("fsmonitor-hook.cmd");
+            let hook = dir.join(".git").join("fsmonitor-hook.cmd");
             std::fs::write(
                 &hook,
                 format!("@echo off\r\necho ran > \"{}\"\r\n", marker.display()),
@@ -137,7 +137,7 @@ mod tests {
         }
         #[cfg(unix)]
         {
-            let hook = dir.join("fsmonitor-hook");
+            let hook = dir.join(".git").join("fsmonitor-hook");
             std::fs::write(
                 &hook,
                 format!("#!/bin/sh\necho ran > \"{}\"\n", marker.display()),
@@ -150,7 +150,10 @@ mod tests {
             git(&["config", "core.fsmonitor", &hook.to_string_lossy()]);
         }
 
-        let _ = super::clean_revision(&dir);
+        assert!(
+            super::clean_revision(&dir).is_some(),
+            "the clean committed fixture produced no revision"
+        );
         assert!(
             !marker.exists(),
             "the repository's fsmonitor hook was executed during the revision probe"

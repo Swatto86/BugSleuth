@@ -284,12 +284,14 @@ fn a_post_checkout_hook_in_the_repository_is_not_run_by_worktree_creation() {
         std::fs::set_permissions(&hook, perms).unwrap();
     }
 
-    let _ = Worktree::create(&repo, "HEAD", "security");
+    let worktree = Worktree::create(&repo, "HEAD", "security")
+        .expect("create isolated worktree with repository hook disabled");
     assert!(
         !marker.exists(),
         "the repository's post-checkout hook ran while creating an isolated worktree"
     );
 
+    drop(worktree);
     let _ = std::fs::remove_dir_all(long_path(&repo));
 }
 

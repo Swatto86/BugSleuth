@@ -33,7 +33,7 @@ fn a_repo_fsmonitor_hook_is_not_run_during_apply() {
     let marker = dir.join("fsmonitor_ran");
     #[cfg(windows)]
     {
-        let hook = dir.join("fsmonitor-hook.cmd");
+        let hook = dir.join(".git").join("fsmonitor-hook.cmd");
         std::fs::write(
             &hook,
             format!("@echo off\r\necho ran > \"{}\"\r\n", marker.display()),
@@ -47,7 +47,7 @@ fn a_repo_fsmonitor_hook_is_not_run_during_apply() {
     }
     #[cfg(unix)]
     {
-        let hook = dir.join("fsmonitor-hook");
+        let hook = dir.join(".git").join("fsmonitor-hook");
         std::fs::write(
             &hook,
             format!("#!/bin/sh\necho ran > \"{}\"\n", marker.display()),
@@ -61,7 +61,11 @@ fn a_repo_fsmonitor_hook_is_not_run_during_apply() {
     }
 
     // Unborn baseline still hits `git status` / `ls-files` through `git_with_env`.
-    let _ = changed_since(&dir, &Baseline::Unborn);
+    assert!(
+        changed_since(&dir, &Baseline::Unborn)
+            .expect("inspect repository with fsmonitor disabled")
+            .is_empty()
+    );
     assert!(
         !marker.exists(),
         "the repository's fsmonitor hook was executed during apply git"
