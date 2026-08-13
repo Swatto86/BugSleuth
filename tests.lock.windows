@@ -228,6 +228,7 @@ node turning pushing off redraws the tag control before the settings are saved
 node two models on one lane is two sweeps, because that is the point
 node unknown lane names are ignored rather than counted
 node vendor parsing matches the engine, including bare and colon-containing names
+node version agreement reads only root manifest versions
 node writes stay blocked when saved settings failed to load
 rust agreement_counts_distinct_vendors
 rust anchor::tests::a_directory_link_out_of_the_repository_is_refused
