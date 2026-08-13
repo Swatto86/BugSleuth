@@ -154,12 +154,9 @@ fn build_args(prefix: &[String], workspace: &Path, handoff: &Path, model: &str) 
     }
 
     // Relative name so the prompt stays short; the handoff sits in the repo root.
-    let name = handoff
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| brief_file::BRIEF_NAME.to_string());
+    let pointer = brief_file::review_pointer(handoff);
     args.push(format!(
-        "Read ./{name} and carry out the fixes it describes, exactly as written. Change \
+        "Read {pointer} and carry out the fixes it describes, exactly as written. Change \
          only files inside this workspace, and end by reporting what you actually changed."
     ));
     args

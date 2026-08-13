@@ -108,7 +108,7 @@ pub async fn sweep(spec: CursorSweep<'_>) -> Result<CursorResult, ProviderError>
 fn build_args(
     prefix: &[String],
     spec: &CursorSweep<'_>,
-    _brief: &brief_file::BriefFile,
+    brief: &brief_file::BriefFile,
 ) -> Vec<String> {
     let mut args = prefix.to_vec();
     args.extend(BASE_FLAGS.iter().map(|flag| (*flag).to_string()));
@@ -125,7 +125,7 @@ fn build_args(
         args.push(model.to_string());
     }
 
-    args.push(brief_file::review_pointer());
+    args.push(brief_file::review_pointer(brief.path()));
     args
 }
 

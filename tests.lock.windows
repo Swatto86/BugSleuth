@@ -457,9 +457,8 @@ rust cursor::apply::tests::an_instruction_named_file_link_is_detected_as_reposit
 rust cursor::apply::tests::apply_forces_writes_and_never_asks
 rust cursor::apply::tests::claude_md_alone_does_not_refuse_cursor_apply
 rust cursor::apply::tests::outbound_directory_link_is_not_walked_for_instructions
-rust cursor::brief_file::tests::a_failed_write_in_does_not_leave_a_truncated_brief
+rust cursor::brief_file::tests::a_preexisting_repository_file_is_never_replaced_or_deleted
 rust cursor::brief_file::tests::a_private_brief_is_removed_on_drop
-rust cursor::brief_file::tests::write_in_replaces_through_a_staging_file_not_an_in_place_truncate
 rust cursor::catalogue::tests::ignores_noise_rather_than_emptying_the_menu
 rust cursor::catalogue::tests::parses_the_documented_listing_shape
 rust cursor::discover::tests::launch_at_requires_both_node_and_index

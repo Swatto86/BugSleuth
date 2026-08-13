@@ -88,7 +88,12 @@ fn the_brief_never_reaches_the_command_line() {
         "the command line is {line} characters; cmd.exe refuses it"
     );
     assert!(
-        args.iter().any(|arg| arg.contains(brief_file::BRIEF_NAME)),
+        args.iter().any(|arg| {
+            brief
+                .path()
+                .file_name()
+                .is_some_and(|name| arg.contains(&*name.to_string_lossy()))
+        }),
         "the argv must name the brief file: {args:?}"
     );
     let _ = std::fs::remove_dir_all(&dir);
