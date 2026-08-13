@@ -12,16 +12,22 @@ import ts from "typescript";
 
 import { frontendFiles, walk } from "./ast.test.ts";
 
-/** The source text of a top-level function declaration, by name. */
-function functionText(source: ts.SourceFile, name: string): string | undefined {
-  let text: string | undefined;
+/** A function declaration, by name. */
+function functionDeclaration(
+  source: ts.SourceFile,
+  name: string,
+): ts.FunctionDeclaration | undefined {
+  let found: ts.FunctionDeclaration | undefined;
   walk(source, (node) => {
     if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
-      text = node.getText();
+      found = node;
     }
   });
-  return text;
+  return found;
 }
+
+const functionText = (source: ts.SourceFile, name: string) =>
+  functionDeclaration(source, name)?.getText();
 
 test("render redirects focus when the focused row was just removed", () => {
   // The behaviour moved to plan-view.ts when main.ts was split at the line cap;
@@ -51,20 +57,78 @@ test("render redirects focus when the focused row was just removed", () => {
 test("a failed catalogue load is told to the user rather than swallowed", () => {
   const main = frontendFiles().find((file) => file.fileName === "main.ts");
   assert.ok(main, "main.ts is no longer a shipped frontend module");
-  const load = functionText(main, "loadCatalogue");
+  const load = functionDeclaration(main, "loadCatalogue");
   assert.ok(load, "loadCatalogue is gone from main.ts");
-  assert.match(load, /catch/, "loadCatalogue has no catch");
-  assert.match(
-    load,
-    /return/,
-    "loadCatalogue swallows the failure instead of handing it back",
+  let failure: ts.CatchClause | undefined;
+  walk(load, (node) => {
+    if (ts.isCatchClause(node)) failure = node;
+  });
+  assert.ok(failure, "loadCatalogue has no catch");
+  const caught = failure.variableDeclaration?.name;
+  assert.ok(
+    caught && ts.isIdentifier(caught),
+    "the catalogue error is not named",
   );
-  const boot = functionText(main, "boot");
+  let returned: ts.ReturnStatement | undefined;
+  walk(failure.block, (node) => {
+    if (ts.isReturnStatement(node)) returned = node;
+  });
+  assert.ok(returned?.expression, "the catalogue failure is not returned");
+  const diagnostic = returned.expression;
+  assert.ok(
+    ts.isTemplateExpression(diagnostic) &&
+      diagnostic.head.text.includes("Could not load the model lists") &&
+      diagnostic.templateSpans.some(
+        ({ expression }) =>
+          ts.isCallExpression(expression) &&
+          ts.isIdentifier(expression.expression) &&
+          expression.expression.text === "String" &&
+          expression.arguments[0] !== undefined &&
+          ts.isIdentifier(expression.arguments[0]) &&
+          expression.arguments[0].text === caught.text,
+      ),
+    "loadCatalogue returns no diagnostic derived from the caught error",
+  );
+
+  const boot = functionDeclaration(main, "boot");
   assert.ok(boot, "boot is gone from main.ts");
-  assert.match(
-    boot,
-    /catalogueError/,
-    "boot never reads the catalogue failure, so the preflight 'Ready' overwrites it",
+  let assigned: ts.VariableDeclaration | undefined;
+  let statusUse: ts.CallExpression | undefined;
+  const mentionsCatalogueError = (node: ts.Node): boolean => {
+    let found = false;
+    walk(node, (candidate) => {
+      if (ts.isIdentifier(candidate) && candidate.text === "catalogueError") {
+        found = true;
+      }
+    });
+    return found;
+  };
+  walk(boot, (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "catalogueError" &&
+      node.initializer &&
+      ts.isAwaitExpression(node.initializer) &&
+      ts.isCallExpression(node.initializer.expression) &&
+      ts.isIdentifier(node.initializer.expression.expression) &&
+      node.initializer.expression.expression.text === "loadCatalogue"
+    ) {
+      assigned = node;
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "setStatus" &&
+      node.arguments.some(mentionsCatalogueError)
+    ) {
+      statusUse = node;
+    }
+  });
+  assert.ok(assigned, "boot does not await the catalogue diagnostic");
+  assert.ok(
+    statusUse && statusUse.getStart() > assigned.getEnd(),
+    "boot never uses the catalogue diagnostic in its final status",
   );
 });
 
