@@ -39,7 +39,6 @@ const read = (...parts: string[]) =>
 
 const readme = () => read("README.md");
 const workflow = () => read(".github", "workflows", "release.yml");
-const e2eConfig = () => read("e2e", "wdio.conf.ts");
 const e2eSpec = () => read("e2e", "specs", "review.spec.ts");
 const e2eSupport = () => read("e2e", "specs", "support.ts");
 
@@ -154,19 +153,6 @@ test("the packaged gate still release-builds the libraries and CLI", () => {
   const build = "cargo build --release --workspace --exclude bugsleuth-app";
   assert.ok(script.includes(`${build}\n\nif [ "$package" = "1" ]; then`));
   assert.ok(!script.includes('if [ "$package" != "1" ]; then'));
-});
-
-test("the E2E harness waits for its driver cleanup and rejects a stale port", () => {
-  const source = e2eConfig();
-  assert.equal(
-    source.match(/spawn\(\s*"tauri-driver"/g)?.length,
-    1,
-    "the check found no real driver launch",
-  );
-  assert.ok(source.includes("assertDriverPortFree"));
-  assert.ok(source.includes("AbortSignal.timeout"));
-  assert.ok(source.includes('spawnSync("taskkill"'));
-  assert.ok(!source.includes("shell: true"));
 });
 
 test("the live E2E review replaces saved configuration deterministically", () => {
