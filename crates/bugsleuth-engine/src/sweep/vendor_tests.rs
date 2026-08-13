@@ -13,6 +13,7 @@ use super::*;
 /// its brief has to describe the shape in words.
 #[test]
 fn kimi_is_selected_by_prefix_and_must_be_isolated() {
+    assert_eq!(Vendor::parse(" codex:gpt "), (Vendor::Codex, "gpt"));
     assert_eq!(Vendor::parse("kimi:kimi-k3"), (Vendor::Kimi, "kimi-k3"));
     assert_eq!(Vendor::parse("kimi:"), (Vendor::Kimi, ""));
     assert_eq!(resolved_label("kimi:kimi-k3"), "kimi:kimi-k3");

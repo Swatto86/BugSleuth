@@ -69,7 +69,8 @@ export type Vendor = (typeof VENDORS)[number];
  * splitting it is a display concern and must not change what is written back.
  * A bare name means Claude, exactly as the engine reads it.
  */
-export function splitId(id: string): { vendor: Vendor; model: string } {
+export function splitId(raw: string): { vendor: Vendor; model: string } {
+  const id = raw.trim();
   const at = id.indexOf(":");
   if (at === -1) return { vendor: "claude", model: id };
   const prefix = id.slice(0, at);

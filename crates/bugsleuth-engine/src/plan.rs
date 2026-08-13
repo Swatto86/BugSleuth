@@ -154,6 +154,7 @@ pub fn check_effort(id: &str, effort: &str) -> Result<()> {
 /// never applied. Kept in step with [`crate::sweep::Vendor::parse`], which is
 /// the enum this mirrors.
 fn vendor_of(model: &str) -> String {
+    let model = model.trim();
     match model.split_once(':') {
         Some((vendor, _)) if matches!(vendor, "claude" | "codex" | "kilo" | "kimi" | "cursor") => {
             vendor.to_string()

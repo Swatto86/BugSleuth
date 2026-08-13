@@ -223,6 +223,7 @@ fn canonical_spec_collapses_claude_but_keeps_the_default_and_other_vendors() {
     // The bare default is not a specific model, so it is kept as-is.
     assert_eq!(canonical_spec("claude:"), "claude:");
     assert_eq!(canonical_spec("codex:gpt-5.6"), "codex:gpt-5.6");
+    assert_eq!(canonical_spec(" codex:gpt "), "codex:gpt");
     assert_eq!(canonical_spec("kilo:z-ai/glm"), "kilo:z-ai/glm");
 }
 
@@ -240,6 +241,7 @@ fn every_vendor_prefix_is_recognised() {
     assert_eq!(super::vendor_of("sonnet"), "claude");
     assert_eq!(super::vendor_of("claude:opus"), "claude");
     assert_eq!(super::vendor_of("codex:gpt-5.6-codex"), "codex");
+    assert_eq!(super::vendor_of(" codex:gpt "), "codex");
     assert_eq!(super::vendor_of("kilo:kilo/x"), "kilo");
     assert_eq!(
         super::vendor_of("kimi:kimi-code/k3"),

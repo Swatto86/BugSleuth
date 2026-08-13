@@ -25,7 +25,8 @@ pub enum Vendor {
 impl Vendor {
     /// Read a `vendor:model` spec such as `codex:gpt-5.6-codex`. A bare name
     /// means Claude, which keeps the common case short.
-    pub fn parse(spec: &str) -> (Vendor, &str) {
+    pub fn parse(raw: &str) -> (Vendor, &str) {
+        let spec = raw.trim();
         match spec.split_once(':') {
             Some(("codex", model)) => (Vendor::Codex, model),
             Some(("claude", model)) => (Vendor::Claude, model),

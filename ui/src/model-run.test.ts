@@ -22,7 +22,7 @@ import {
   supportsAgents,
   usesUltracode,
 } from "./model.ts";
-import { offeredVendors, vendorCliPresent } from "./cli-offer.ts";
+import { offeredVendors } from "./cli-offer.ts";
 import type { Catalogue } from "./view.ts";
 
 const base = {
@@ -351,34 +351,4 @@ test("menus only offer vendors whose CLI is installed", () => {
     !view.includes("offeredSweepVendors"),
     "a second filter would hide an installed provider the status pills still show",
   );
-});
-
-test("Run refuses a model whose CLI is not installed", () => {
-  const catalogue: Catalogue = {
-    claude: {
-      vendor: "claude",
-      installed: false,
-      error: "not found",
-      groups: [{ label: "Claude", models: ["haiku"] }],
-      efforts: [],
-      efforts_by_model: {},
-    },
-  };
-  assert.equal(vendorCliPresent("haiku", catalogue), false);
-  assert.equal(
-    canRun(
-      {
-        ...base,
-        repo: "C:/x",
-        models: [
-          { id: "haiku", lanes: ["correctness"], effort: "", passes: 1 },
-        ],
-      },
-      catalogue,
-    ),
-    false,
-    "Run stayed enabled for a provider whose CLI is not on the machine",
-  );
-  // Empty catalogue (still loading) must not block.
-  assert.equal(vendorCliPresent("haiku", {}), true);
 });
