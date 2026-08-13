@@ -69,6 +69,28 @@ fn a_user_branch_with_a_numeric_suffix_is_never_deleted() {
 }
 
 #[test]
+fn unregistered_git_directory_under_container_is_never_deleted() {
+    let Some(repo) = temp_repo("unregistered-directory") else {
+        return;
+    };
+    let foreign = repo.join(".bugsleuth-worktrees").join("not-ours");
+    std::fs::create_dir_all(&foreign).expect("create unregistered directory");
+    std::fs::write(foreign.join(".git"), "not a BugSleuth ownership record\n")
+        .expect("write git marker");
+    std::fs::write(foreign.join("keep.txt"), "user data\n").expect("write user data");
+
+    let worktree =
+        Worktree::create(&repo, "HEAD", "trigger-cleanup").expect("create isolated worktree");
+    assert!(
+        foreign.join("keep.txt").exists(),
+        "an unregistered directory was treated as BugSleuth-owned and deleted"
+    );
+
+    drop(worktree);
+    let _ = std::fs::remove_dir_all(long_path(&repo));
+}
+
+#[test]
 fn a_preexisting_exact_name_collision_is_not_deleted() {
     let Some(repo) = temp_repo("exact-collision") else {
         return;

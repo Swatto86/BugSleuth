@@ -68,9 +68,7 @@ impl Worktree {
         // The reviewed repository controls `.bugsleuth-worktrees`, so a
         // committed symlink or Windows junction there could point our cleanup
         // and `git worktree add` at an attacker-chosen directory. Validate the
-        // container before it is read, deleted from, or written to — the
-        // deletion sink (`remove`, reached from here, `remove_orphans`, and
-        // `Drop`) recursively removes whatever it is handed.
+        // container before creating the owned path that `Drop` later removes.
         let root = checked_worktree_root(&repo)?;
 
         // Unique per process. The path used to be `<slug>` alone, so two
@@ -103,12 +101,6 @@ impl Worktree {
                 break (branch, path);
             }
         };
-
-        // A run killed rather than dropped leaves a directory behind, and the
-        // unique path above means nothing will ever reuse and clean it. Git is
-        // the authority on which of them are still worktrees: anything under
-        // our directory that it no longer lists is wreckage.
-        remove_orphans(&repo);
 
         git(
             &repo,
@@ -203,18 +195,6 @@ fn remove(repo: &Path, path: &Path) {
     let _ = git(repo, &["worktree", "prune"]);
 }
 
-/// Windows' extended-length path form, which raises the 260-character limit.
-/// A no-op elsewhere, and on paths that already carry the prefix.
-/// Delete anything under our directory that git no longer calls a worktree.
-///
-/// Paths carry the creating process's id, so nothing else will ever reuse a
-/// directory left behind by a run that was killed. Rather than guess whether
-/// some other BugSleuth still owns one — process ids are reused, and checking
-/// liveness portably is its own problem — this asks git, which knows exactly
-/// which worktrees exist. Anything it does not list is wreckage.
-///
-/// Best effort throughout: failing to tidy up is not a reason to refuse to
-/// start a review.
 /// Validate the worktree container before anything reads from, deletes under,
 /// or writes into it, and fail closed on anything that is not the real
 /// `.bugsleuth-worktrees` directory beneath the canonical repository.
@@ -265,69 +245,8 @@ fn is_reparse_point(_metadata: &std::fs::Metadata) -> bool {
     false
 }
 
-fn remove_orphans(repo: &Path) {
-    let ours = repo.join(".bugsleuth-worktrees");
-    let Ok(entries) = std::fs::read_dir(&ours) else {
-        return;
-    };
-    // The container is validated as a real directory, but its *contents* are
-    // repository-controlled: the reviewed repository can commit any directory it
-    // likes under `.bugsleuth-worktrees/`. Only a genuine leftover worktree may
-    // be treated as ours and removed. Fail closed if the container will not
-    // resolve.
-    let Ok(container) = ours.canonicalize() else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        // Real directories only. A symlink or Windows junction reports a
-        // directory when followed; recursing into either is how a deletion
-        // escapes the container, so reject anything whose own metadata is a
-        // link or reparse point.
-        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
-            continue;
-        };
-        if !metadata.is_dir() || metadata.file_type().is_symlink() || is_reparse_point(&metadata) {
-            continue;
-        }
-        // A deregistered worktree of ours, or repository-controlled content?
-        // Only the former carries the `.git` file that `git worktree add` writes
-        // at the worktree root, and git refuses to track any path containing a
-        // `.git` component, so nothing the reviewed repository can commit
-        // satisfies this check.
-        if !path.join(".git").is_file() {
-            continue;
-        }
-        // Belt and braces: the resolved location must stay inside the container,
-        // or this is not our wreckage either. Compared canonically because git
-        // reports forward slashes and its own spelling of the drive.
-        let Ok(canonical) = path.canonicalize() else {
-            continue;
-        };
-        if !canonical.starts_with(&container) {
-            continue;
-        }
-        // Liveness is re-checked against a FRESH listing immediately before
-        // deletion. Snapshotting the list once up front would treat a worktree
-        // another process registered after the snapshot as wreckage. A listing
-        // that cannot be obtained means "do not delete", not "delete
-        // everything".
-        let still_live = git(repo, &["worktree", "list", "--porcelain", "-z"])
-            .map(|listing| {
-                paths::worktree_roots(&listing).into_iter().any(|known| {
-                    Path::new(known)
-                        .canonicalize()
-                        .ok()
-                        .is_some_and(|k| k == canonical)
-                })
-            })
-            .unwrap_or(true);
-        if !still_live {
-            remove(repo, &path);
-        }
-    }
-}
-
+/// Windows' extended-length path form, which raises the 260-character limit.
+/// A no-op elsewhere, and on paths that already carry the prefix.
 fn long_path(path: &Path) -> PathBuf {
     if !cfg!(windows) {
         return path.to_path_buf();
