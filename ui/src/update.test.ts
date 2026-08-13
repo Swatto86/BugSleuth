@@ -134,11 +134,28 @@ test("declining an available update clears the running status", () => {
     }
   });
   assert.ok(declined, "the update confirmation has no declined path");
-  assert.match(
-    declined.thenStatement.getText(update),
-    /setStatus\s*\(/,
-    "declining the install leaves the running status and spinner stuck",
+  const statusCalls: ts.CallExpression[] = [];
+  walk(declined.thenStatement, (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "setStatus"
+    ) {
+      statusCalls.push(node);
+    }
+  });
+  assert.ok(
+    statusCalls.length > 0,
+    "declining the install never updates the running status",
   );
+  for (const call of statusCalls) {
+    const kind = call.arguments[1]?.getText(update) ?? "";
+    assert.notEqual(
+      kind,
+      '"running"',
+      "declining the install leaves the running spinner stuck",
+    );
+  }
 });
 
 test("an available update clears the checking status before the install confirmation", () => {
