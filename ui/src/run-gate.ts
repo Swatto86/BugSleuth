@@ -30,6 +30,8 @@ export function runBlockReason(
   settings: Settings,
   catalogue: Catalogue,
 ): string | null {
+  if ((settings.additional_repos?.length ?? 0) > 15)
+    return "Choose at most 16 repositories per batch.";
   if (settings.repo.trim().length === 0) {
     return "Choose a repository folder first.";
   }

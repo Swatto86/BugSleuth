@@ -7,11 +7,15 @@
  * finished report, and the fix prompt must survive the window losing it.
  */
 
+import {
+  offerRepositoryResults,
+  type RepositoryResult,
+} from "./repository-results";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import { type RunEvent, describe } from "./format";
-import { type FindingCard, findingsList } from "./findings";
+import { findingsList } from "./findings";
 import type { Settings } from "./model";
 
 const NEWLINE = String.fromCharCode(10);
@@ -51,6 +55,10 @@ export const currentFixPromptPath = (): string => fixPromptPath;
 
 export async function startRun(deps: RunDeps): Promise<void> {
   activeRunRepo = deps.settings().repo.trim();
+  const resultLabel = document.getElementById("repository-result-label");
+  const resultsWereShown =
+    resultLabel && !resultLabel.classList.contains("hidden");
+  resultLabel?.classList.add("hidden");
   running = true;
   progressLog = [];
   deps.renderPlanSummary();
@@ -82,6 +90,7 @@ export async function startRun(deps: RunDeps): Promise<void> {
     await invoke("start_run", { settings: deps.settings() });
   } catch (error) {
     activeRunRepo = "";
+    if (resultsWereShown) resultLabel?.classList.remove("hidden");
     running = false;
     deps.setStatus(String(error), "error");
     deps.output.textContent = String(error);
@@ -108,8 +117,11 @@ let completionEventsReady = false;
 export const runEventsReady = (): boolean => completionEventsReady;
 
 export async function listenForRunEvents(deps: RunDeps): Promise<void> {
-  await listen<RunEvent>("run-progress", (event) => {
-    progressLog.push(describe(event.payload));
+  await listen<RunEvent & { repo?: string }>("run-progress", (event) => {
+    progressLog.push(
+      (event.payload.repo ? `[${event.payload.repo}] ` : "") +
+        describe(event.payload),
+    );
     // Once the run has finished, the pane holds the report — the thing the
     // whole run was for. A late progress event must not paint over it.
     //
@@ -137,24 +149,26 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     deps.output.scrollTop = deps.output.scrollHeight;
   });
 
-  await listen<{
-    ok: boolean;
-    complete: boolean;
-    /** Whether Stop was pressed, independently of whether a report exists. */
-    cancelled: boolean;
-    text: string;
-    prompt?: string;
-    promptPath?: string | null;
-    saveError?: string;
-    findings?: FindingCard[];
-  }>("run-finished", (event) => {
+  await listen<RepositoryResult>("run-finished", (event) => {
     running = false;
+    const selectedRepo = event.payload.repo ?? activeRunRepo;
+    offerRepositoryResults(event.payload, (result) => {
+      showReport(result, result.repo ?? selectedRepo, deps);
+      deps.setStatus(
+        result.cancelled
+          ? "Review stopped"
+          : !result.ok
+            ? "Run failed"
+            : !result.complete
+              ? "Review incomplete — some lanes were not swept"
+              : result.saveError
+                ? "Finished, but the fix prompts were not completely saved"
+                : "Finished",
+        result.ok && result.complete && !result.saveError ? "" : "error",
+      );
+    });
     // Cards first, report text underneath — the text still carries the notes
     // about unswept lanes and how severities were graded.
-    deps.findings.replaceChildren(findingsList(event.payload.findings ?? []));
-    deps.output.textContent = event.payload.text;
-    currentReport = event.payload.ok ? event.payload.text : "";
-    deps.copyReport.classList.toggle("hidden", currentReport === "");
     // A finished run whose fix prompts did not fully save is not a plain
     // "Finished": the detail is in the output text, but the status has to say
     // the save was incomplete rather than letting the window read as all-clear.
@@ -186,17 +200,8 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // The prompt is the point of the run, so it is offered the moment there
     // is one — and its path is shown either way, because a window can be
     // closed and tens of minutes of sweeping should not go with it.
-    fixPrompt = event.payload.prompt ?? "";
-    fixPromptRepo = activeRunRepo;
+    showReport(event.payload, selectedRepo, deps);
     activeRunRepo = "";
-    deps.copyPrompt.classList.toggle("hidden", fixPrompt === "");
-    // Applying reads the prompt Rust wrote to disk, so it is offered only when
-    // this run actually produced one.
-    const path = event.payload.promptPath ?? "";
-    fixPromptPath = path;
-    deps.applyPanel.classList.toggle("hidden", path === "");
-    deps.promptPath.classList.toggle("hidden", path === "");
-    deps.promptPath.textContent = path ? `Also saved to ${path}` : "";
     if (document.activeElement === deps.stop) deps.focusStatus();
     deps.renderPlanSummary();
   });
@@ -204,4 +209,24 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
   // Both subscriptions have registered, so a started run can be heard to
   // finish. Set last, and only on the success path of both awaits.
   completionEventsReady = true;
+}
+
+function showReport(
+  payload: RepositoryResult,
+  repo: string,
+  deps: RunDeps,
+): void {
+  deps.findings.replaceChildren(findingsList(payload.findings ?? []));
+  deps.output.textContent = payload.text;
+  currentReport = payload.ok ? payload.text : "";
+  deps.copyReport.classList.toggle("hidden", currentReport === "");
+  fixPrompt = payload.prompt ?? "";
+  fixPromptRepo = repo;
+  fixPromptPath = payload.promptPath ?? "";
+  deps.copyPrompt.classList.toggle("hidden", fixPrompt === "");
+  deps.applyPanel.classList.toggle("hidden", fixPromptPath === "");
+  deps.promptPath.classList.toggle("hidden", fixPromptPath === "");
+  deps.promptPath.textContent = fixPromptPath
+    ? `Also saved to ${fixPromptPath}`
+    : "";
 }

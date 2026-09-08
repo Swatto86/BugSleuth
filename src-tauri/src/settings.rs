@@ -20,6 +20,8 @@ pub use theme::Theme;
 pub struct Settings {
     /// Last repository reviewed, so the app opens where you left off.
     pub repo: String,
+    /// Additional repositories reviewed with the same matrix and relative scope.
+    pub additional_repos: Vec<String>,
     /// Optional path scope within the repository.
     pub scope: String,
     /// Models and the lanes each covers.
@@ -145,6 +147,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             repo: String::new(),
+            additional_repos: Vec::new(),
             scope: String::new(),
             models: vec![ModelSetting {
                 id: "sonnet".into(),

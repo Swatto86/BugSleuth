@@ -86,7 +86,7 @@
         </section>
 
         <section class="panel">
-          <h2>Repository</h2>
+          <h2>Repositories</h2>
           <p class="hint">The code to review. It is never modified.</p>
           <div class="row">
             <label class="field">
@@ -96,6 +96,12 @@
             <button id="clone-open" type="button" style="align-self: end">Clone…</button>
             <button id="browse" type="button" style="align-self: end">Browse…</button>
           </div>
+          <label class="field" style="margin-top: 12px">
+            <span>Additional repositories (optional, one folder per line)</span>
+            <textarea id="additional-repos" rows="3" spellcheck="false" placeholder="/path/to/another-repo"></textarea>
+          </label>
+          <button id="add-repository" type="button" style="margin-top: 8px">Add folder…</button>
+          <p class="hint">Up to 16 repositories use the same review settings and relative path scope. Three reviews can be active; each provider runs one sweep at a time across the batch. Stop stops the whole batch. Clear saved sweeps affects only the Folder above.</p>
           <div class="row">
             <label class="field">
               <span>Limit to paths (optional)</span>
@@ -230,6 +236,10 @@
               Copy fix prompt
             </button>
           </div>
+          <label id="repository-result-label" class="field hidden">
+            <span>Repository report</span>
+            <select id="repository-result"></select>
+          </label>
           <p class="hint hidden" id="prompt-path" style="margin: 0 0 10px"></p>
 
           <div class="hidden" id="apply-panel">

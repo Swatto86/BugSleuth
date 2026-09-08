@@ -93,6 +93,7 @@ export function joinId(vendor: Vendor, model: string): string {
 
 export interface Settings {
   repo: string;
+  additional_repos?: string[];
   scope: string;
   models: ModelSetting[];
   theme: "system" | "light" | "dark";

@@ -29,6 +29,8 @@ const ui = {
   updateNotice: el<HTMLElement>("update-status"),
   checkUpdate: el<HTMLButtonElement>("check-update"),
   repo: el<HTMLInputElement>("repo"),
+  additionalRepos: el<HTMLTextAreaElement>("additional-repos"),
+  addRepository: el<HTMLButtonElement>("add-repository"),
   scope: el<HTMLInputElement>("scope"),
   browse: el<HTMLButtonElement>("browse"),
   matrixBody: el<HTMLTableSectionElement>("matrix-body"),

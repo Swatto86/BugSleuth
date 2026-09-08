@@ -117,6 +117,7 @@ pub async fn apply(clusters: &mut [Cluster], request: Request<'_>) -> Outcome {
         };
     }
 
+    let _slot = crate::vendor_slots::acquire(crate::sweep::Vendor::Claude).await;
     let prompt = prompt_for(clusters, Some(request.repo));
     let verdicts = match claude_triage(TriageRequest {
         repo: request.repo,

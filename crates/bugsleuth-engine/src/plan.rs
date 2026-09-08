@@ -69,7 +69,7 @@ pub struct Unit {
 }
 
 /// A run, with the gaps made explicit.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Plan {
     pub units: Vec<Unit>,
     /// Lanes no model was assigned to. Never silently dropped.

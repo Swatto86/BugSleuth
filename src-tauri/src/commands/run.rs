@@ -7,14 +7,14 @@
 //! way at the same cap, into [`control`].
 
 use std::path::PathBuf;
-use std::time::Duration;
 
-use bugsleuth_engine::{orchestrate, plan, sweep};
+use bugsleuth_engine::plan;
 use tauri::{Emitter, Manager};
 
 use super::CommandResult;
 use crate::settings::{self, Settings};
 
+mod batch;
 mod control;
 
 /// Re-exported so every caller keeps its existing path: the lock moved out of
@@ -36,86 +36,17 @@ pub async fn start_run(
     control: tauri::State<'_, RunControl>,
     settings: Settings,
 ) -> CommandResult<()> {
-    let repo = checked_repo(&settings.repo)?;
+    let repositories = batch::prepare(&settings)?;
     let plan = plan::plan(&to_config(&settings)).map_err(|e| e.to_string())?;
-    // The units themselves, not just their model names: Kilo's pre-check has to
-    // ask the exact route each lane will use, effort included.
-    let selected_units = plan.units.clone();
-    let out_dir = run_output_dir(&repo)?;
-
-    // A fresh signal per run: reusing one would let a cancel from a finished
-    // run stop the next one before it started. Reserving the running state is
-    // the one guard that a review reads the tree while an apply rewrites it —
-    // done atomically here, after the fallible setup above and before anything
-    // is spawned, so a concurrent apply or a second run cannot slip in and no
-    // early return leaves the state reserved.
     let cancel = bugsleuth_engine::cancel::Cancel::new();
     control.try_start_run(cancel.clone())?;
     crate::tray::work_started(&app, crate::tray::BackgroundWork::Review);
-
-    // Forward engine progress to the window as it happens. A run is tens of
-    // minutes; a front end that only learns the outcome at the end shows a
-    // spinner for half an hour.
-    let (progress, mut events) = tokio::sync::mpsc::unbounded_channel();
-    let forwarder = app.clone();
     tauri::async_runtime::spawn(async move {
-        while let Some(event) = events.recv().await {
-            let _ = forwarder.emit("run-progress", event);
-        }
-    });
-
-    tauri::async_runtime::spawn(async move {
-        // The pre-check's own cancellation is carried out, not inferred: a Stop
-        // during it produces an `Err`, while a Stop mid-run produces an
-        // `Ok(RunReport)` with gaps — so without this the same action was
-        // reported as "Run failed" or "Finished" purely by timing.
-        let (checked, precheck_cancelled) = tokio::select! {
-            result = sweep::precheck_selected(&selected_units) => (result, false),
-            _ = cancel.cancelled() => (
-                Err("Provider pre-check stopped; no lane started.".to_string()),
-                true,
-            )
-        };
-        let report = match checked {
-            Ok(()) => {
-                orchestrate::run(
-                    &plan,
-                    orchestrate::RunOptions {
-                        repo: &repo,
-                        scope: non_empty(&settings.scope),
-                        max_turns: 40,
-                        timeout: Duration::from_secs(2700),
-                        api_key: None,
-                        out_dir: Some(&out_dir),
-                        resume: settings.reuse_completed,
-                        triage_model: &settings.triage_model,
-                        cancel: cancel.clone(),
-                        progress: Some(progress),
-                    },
-                )
-                .await
-            }
-            Err(error) => Err(anyhow::anyhow!(error)),
-        };
-
-        // The engine's own record where there is one, because a cancellation
-        // arriving after it recorded completion must remain completed.
-        let cancelled = report
-            .as_ref()
-            .map_or(precheck_cancelled, |report| report.cancelled);
-
-        let payload = crate::outcome::run_payload(report, cancelled, &repo, &out_dir);
-
-        // Announce completion to the tray, and to the desktop when the window is
-        // hidden — a review that finished while closed to the tray otherwise
-        // left no visible sign it was done.
+        let payload = batch::execute(&app, repositories, plan, settings, cancel).await;
         crate::tray::work_finished(
             &app,
             crate::tray::BackgroundWork::Review,
-            // Stopped is decided before success, because a stopped run still
-            // produces a usable partial report and would otherwise be announced
-            // as having finished.
-            if cancelled {
+            if payload["cancelled"].as_bool().unwrap_or(false) {
                 crate::tray::Completion::Stopped
             } else if !payload["ok"].as_bool().unwrap_or(false) {
                 crate::tray::Completion::Failed
@@ -127,16 +58,11 @@ pub async fn start_run(
                 crate::tray::Completion::Succeeded
             },
         );
-        let _ = app.emit("run-finished", payload);
-        // Cleared here, at the real end of the work — after the triage pass and
-        // after the report and fix prompt are on disk. Clearing it when Stop was
-        // pressed would reopen the window in which a tray Quit could kill the
-        // process before any of that had been written.
         if let Some(control) = app.try_state::<RunControl>() {
             control.finish_run();
         }
+        let _ = app.emit("run-finished", payload);
     });
-
     Ok(())
 }
 

@@ -66,8 +66,6 @@ let settings: Settings = {
  */
 let catalogue: Catalogue = {};
 
-// ── Theme ───────────────────────────────────────────────────────────────────
-
 /**
  * `system` removes the attribute entirely rather than resolving it here, so the
  * CSS media query takes over and the app follows the OS live — resolving it in
@@ -79,16 +77,15 @@ function applyTheme(theme: Settings["theme"]): void {
   else root.setAttribute("data-theme", theme);
 }
 
-// ── Rendering ───────────────────────────────────────────────────────────────
-
 function renderPlanSummary(): void {
   const blocked = runBlockReason(settings, catalogue);
-  const units = unitCount(settings.models);
+  const repositories = 1 + (settings.additional_repos?.length ?? 0);
+  const units = unitCount(settings.models) * repositories;
   const rounds = batchCount(settings.models);
   const summary =
     units === 0 || blocked
       ? ""
-      : `${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`;
+      : `${repositories} ${repositories === 1 ? "repository" : "repositories"} · ${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"} per repository`;
   if (ui.planSummary.textContent !== summary)
     ui.planSummary.textContent = summary;
   const busy =
@@ -116,6 +113,8 @@ function renderPlanSummary(): void {
     ui.run.removeAttribute("aria-describedby");
   }
   ui.clearSaved.disabled = busy;
+  (document.getElementById("repository-result") as HTMLSelectElement).disabled =
+    busy;
   (document.getElementById("clone-open") as HTMLButtonElement).disabled = busy;
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
 }
@@ -333,6 +332,7 @@ async function boot(): Promise<void> {
   ui.theme.value = settings.theme;
   ui.repo.value = settings.repo;
   ui.scope.value = settings.scope;
+  ui.additionalRepos.value = (settings.additional_repos ?? []).join("\n");
   ui.reuseCompleted.checked = settings.reuse_completed;
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
   renderWithoutPersisting();

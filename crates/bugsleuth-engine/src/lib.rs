@@ -39,3 +39,4 @@ pub mod plan;
 pub mod report;
 pub mod sweep;
 pub mod triage;
+mod vendor_slots;

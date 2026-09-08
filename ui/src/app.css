@@ -113,6 +113,7 @@ label.field > span {
 
 /* ── Controls ────────────────────────────────────────────────────────────── */
 
+textarea,
 input[type="text"],
 input[type="number"],
 input[type="search"],
@@ -127,6 +128,7 @@ select {
   user-select: text;
 }
 
+textarea:focus-visible,
 input[type="text"]:focus-visible,
 input[type="number"]:focus-visible,
 input[type="search"]:focus-visible,

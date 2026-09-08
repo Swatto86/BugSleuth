@@ -60,6 +60,7 @@ async fn invoke_vendor(
     use_agents: bool,
 ) -> Result<(Vec<RawFinding>, Option<u32>, bool, Option<String>), bugsleuth_provider::ProviderError>
 {
+    let _slot = crate::vendor_slots::acquire(vendor).await;
     match vendor {
         Vendor::Claude => claude::sweep(ClaudeSweep {
             repo: reviewed,

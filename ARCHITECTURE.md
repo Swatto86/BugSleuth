@@ -261,3 +261,16 @@ because Git or helpers may include credentials. The destination must be new;
 failed or stopped destinations are retained rather than recursively deleted.
 Only a successful clone replaces the selected repository and clears its scope.
 Clone suppresses template hooks and automatic submodule initialization.
+
+## Desktop repository batches
+
+The desktop batch coordinator validates and deduplicates canonical folders,
+refuses overlapping paths and caps a batch at 16 repositories. It checks the
+selected providers once, then admits three repository reviews at a time under
+the existing operation lock. Engine vendor slots cover sweeps and Claude triage,
+so separate repositories cannot race the same CLI's mutable session state.
+Cancellation drains the batch and preserves per-repository errors and reports.
+Progress carries the canonical repository path; handoffs and caches keep their
+existing per-repository locations. The UI offers an overview and individual
+reports, and Apply always uses the selected report's repository rather than the
+editable run inputs. This adds no automatic batch write or publication action.

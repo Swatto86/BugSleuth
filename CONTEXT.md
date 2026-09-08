@@ -38,3 +38,13 @@ failed/cancelled destinations are retained. HTTPS, SSH and absolute local source
 are supported; embedded HTTPS credentials are refused. Clones use the shared
 operation lock and cancellation, with a 30-minute timeout. Submodules are not
 initialized automatically. No credentials are stored by BugSleuth.
+
+Desktop reviews accept up to 16 separate repository folders using one model
+matrix and relative scope. Three repository reviews can be active; shared
+provider slots serialize each vendor's sweeps and Claude triage across the
+batch. Different vendors can work concurrently. Stop cancels the entire batch,
+including repositories waiting to start. Each repository retains its own cache,
+coverage, findings and fix prompt; the report selector binds Apply to that
+report's repository. Apply remains an explicit single-repository action.
+Additional folders are saved compatibly alongside the existing primary folder.
+Clear saved sweeps still targets only the primary folder.

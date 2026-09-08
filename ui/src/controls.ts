@@ -22,6 +22,8 @@ export interface ControlDeps {
   ui: {
     theme: HTMLSelectElement;
     repo: HTMLInputElement;
+    additionalRepos: HTMLTextAreaElement;
+    addRepository: HTMLButtonElement;
     scope: HTMLInputElement;
     reuseCompleted: HTMLInputElement;
     triageSeverities: HTMLInputElement;
@@ -110,6 +112,34 @@ export function bindControls(deps: ControlDeps): void {
   ui.repo.addEventListener("input", () => {
     settings().repo = ui.repo.value;
     refresh();
+  });
+  ui.additionalRepos.addEventListener("input", () => {
+    settings().additional_repos = [
+      ...new Set(
+        ui.additionalRepos.value
+          .split(/\r?\n/)
+          .map((p) => p.trim())
+          .filter(Boolean),
+      ),
+    ];
+    refresh();
+  });
+  ui.addRepository.addEventListener("click", () => {
+    void invoke<string | null>("pick_directory")
+      .then((picked) => {
+        if (!picked) return;
+        settings().additional_repos = [
+          ...new Set([...(settings().additional_repos ?? []), picked]),
+        ];
+        ui.additionalRepos.value = settings().additional_repos!.join("\n");
+        refresh();
+      })
+      .catch((error: unknown) =>
+        deps.setStatus(
+          `Could not open the folder picker: ${String(error)}`,
+          "error",
+        ),
+      );
   });
   ui.scope.addEventListener("input", () => {
     settings().scope = ui.scope.value;
