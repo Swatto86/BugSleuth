@@ -114,6 +114,10 @@ export interface Settings {
    * is not necessarily the one you want editing your code. Empty until chosen —
    * the button refuses rather than guessing.
    */
+  apply_repositories?: Record<
+    string,
+    import("./apply-repositories").ApplyChoice
+  >;
   apply_model: string;
   /**
    * Reasoning effort for that model. Empty is the vendor's own default.

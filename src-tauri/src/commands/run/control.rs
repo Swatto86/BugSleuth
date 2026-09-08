@@ -1,28 +1,12 @@
-//! The one lock that keeps a review, apply, clear and update from overlapping.
-//!
-//! Split from `run` at the hard line cap, along the seam already there: this is
-//! the mutually-exclusive state machine and nothing else, and what is left in
-//! `run` is starting a sweep and working out where it writes.
+//! Atomic reservations for reviews, fixes, clearing and updates.
+//! Fixes may overlap only in separate, non-nested repository directories.
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
-/// The single record of what mutually-exclusive work is in flight, held for
-/// the app's life.
-///
-/// Running, applying, clearing, and updating must never overlap: a sweep reads
-/// the tree while an apply rewrites it, clearing deletes sweeps a run is
-/// writing, and an update restarts the process underneath all three. The window
-/// disables the buttons, but the window is not the only way in and a disabled
-/// button is not a lock.
-///
-/// It used to be two independent primitives — an `Option<Cancel>` for the run
-/// and an `AtomicBool` for the apply — each checked and then set as separate
-/// steps. Two commands could both read idle before either recorded its work,
-/// and a second run could overwrite the first's cancel signal. One
-/// mutex-protected state instead, so every idle-to-active transition is a
-/// single atomic step under one lock.
 enum WorkState {
     Idle,
     Running(bugsleuth_engine::cancel::Cancel),
-    Applying(bugsleuth_engine::cancel::Cancel),
+    Applying(BTreeMap<PathBuf, (PathBuf, bugsleuth_engine::cancel::Cancel)>),
     Clearing,
     Updating,
 }
@@ -72,18 +56,35 @@ impl RunControl {
     }
 
     /// Reserve the applying state, or say why it cannot start.
-    pub fn try_start_apply(&self, cancel: bugsleuth_engine::cancel::Cancel) -> Result<(), String> {
+    pub fn try_start_apply(
+        &self,
+        repo: &Path,
+        cancel: bugsleuth_engine::cancel::Cancel,
+    ) -> Result<(), String> {
+        let common = common_git_dir(repo).unwrap_or_else(|| repo.to_path_buf());
         let mut state = self.state.lock().map_err(|_| lock_poisoned())?;
-        match &*state {
+        match &mut *state {
             WorkState::Idle => {
-                *state = WorkState::Applying(cancel);
+                *state =
+                    WorkState::Applying(BTreeMap::from([(repo.to_path_buf(), (common, cancel))]));
                 Ok(())
             }
             WorkState::Running(_) => Err(
                 "a review is running — applying fixes now would edit the code it is reading"
                     .to_string(),
             ),
-            WorkState::Applying(_) => Err("fixes are already being applied".to_string()),
+            WorkState::Applying(jobs) => {
+                if jobs.iter().any(|(active, (git, _))| {
+                    repo.starts_with(active) || active.starts_with(repo) || git == &common
+                }) {
+                    return Err("fixes are already being applied in this repository or an overlapping folder".into());
+                }
+                if jobs.len() >= 16 {
+                    return Err("wait for one of the 16 active fixes to finish".into());
+                }
+                jobs.insert(repo.to_path_buf(), (common, cancel));
+                Ok(())
+            }
             WorkState::Clearing => {
                 Err("saved sweeps are being cleared — wait for that to finish".to_string())
             }
@@ -149,11 +150,14 @@ impl RunControl {
     }
 
     /// Mark an apply over. Clears only the applying state.
-    pub fn finish_apply(&self) {
+    pub fn finish_apply(&self, repo: &Path) {
         if let Ok(mut state) = self.state.lock()
-            && matches!(&*state, WorkState::Applying(_))
+            && let WorkState::Applying(jobs) = &mut *state
         {
-            *state = WorkState::Idle;
+            jobs.remove(repo);
+            if jobs.is_empty() {
+                *state = WorkState::Idle;
+            }
         }
     }
 
@@ -184,8 +188,7 @@ impl RunControl {
     }
 
     /// Whether a fix is being applied.
-    #[cfg(test)]
-    fn applying(&self) -> bool {
+    pub fn applying(&self) -> bool {
         self.state
             .lock()
             .is_ok_and(|state| matches!(&*state, WorkState::Applying(_)))
@@ -211,11 +214,25 @@ impl RunControl {
     /// Stop the apply in flight, if there is one.
     pub fn cancel_apply(&self) {
         if let Ok(state) = self.state.lock()
-            && let WorkState::Applying(cancel) = &*state
+            && let WorkState::Applying(jobs) = &*state
         {
-            cancel.stop();
+            for (_, cancel) in jobs.values() {
+                cancel.stop();
+            }
         }
     }
+}
+
+// Linked worktrees share refs, tags and publication state: reserve them together.
+fn common_git_dir(repo: &Path) -> Option<PathBuf> {
+    let dot_git = repo.join(".git");
+    if dot_git.is_dir() {
+        return dot_git.canonicalize().ok();
+    }
+    let link = std::fs::read_to_string(dot_git).ok()?;
+    let git = repo.join(link.trim().strip_prefix("gitdir: ")?);
+    let common = std::fs::read_to_string(git.join("commondir")).ok()?;
+    git.join(common.trim()).canonicalize().ok()
 }
 
 fn lock_poisoned() -> String {
@@ -223,119 +240,4 @@ fn lock_poisoned() -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use bugsleuth_engine::cancel::Cancel;
-    use std::sync::{Arc, Barrier};
-    use std::thread;
-
-    /// Race two idle-to-active transitions against one shared, idle control and
-    /// report which won, as `(first_ok, second_ok)`. A `Barrier` lines the two
-    /// threads up so both attempt the transition at once.
-    fn race(
-        first: impl Fn(&RunControl) -> Result<(), String> + Send + 'static,
-        second: impl Fn(&RunControl) -> Result<(), String> + Send + 'static,
-    ) -> (Arc<RunControl>, bool, bool) {
-        let control = Arc::new(RunControl::default());
-        let barrier = Arc::new(Barrier::new(2));
-
-        let c1 = Arc::clone(&control);
-        let b1 = Arc::clone(&barrier);
-        let t1 = thread::spawn(move || {
-            b1.wait();
-            first(&c1).is_ok()
-        });
-        let c2 = Arc::clone(&control);
-        let b2 = Arc::clone(&barrier);
-        let t2 = thread::spawn(move || {
-            b2.wait();
-            second(&c2).is_ok()
-        });
-        let first_ok = t1.join().unwrap();
-        let second_ok = t2.join().unwrap();
-        (control, first_ok, second_ok)
-    }
-
-    #[test]
-    fn run_control_run_and_apply_cannot_both_start() {
-        for _ in 0..200 {
-            let (control, run_ok, apply_ok) = race(
-                |c| c.try_start_run(Cancel::new()),
-                |c| c.try_start_apply(Cancel::new()),
-            );
-            assert!(run_ok ^ apply_ok, "exactly one of run/apply must win");
-            if run_ok {
-                assert!(control.running() && !control.applying());
-            } else {
-                assert!(control.applying() && !control.running());
-            }
-        }
-    }
-
-    #[test]
-    fn run_control_only_one_of_two_runs_can_start() {
-        for _ in 0..200 {
-            let (control, first, second) = race(
-                |c| c.try_start_run(Cancel::new()),
-                |c| c.try_start_run(Cancel::new()),
-            );
-            assert!(first ^ second, "a second run started over the first");
-            assert!(control.running());
-        }
-    }
-
-    #[test]
-    fn run_control_clear_and_run_cannot_both_start() {
-        for _ in 0..200 {
-            let (control, clear_ok, run_ok) =
-                race(|c| c.try_start_clear(), |c| c.try_start_run(Cancel::new()));
-            assert!(clear_ok ^ run_ok, "clear and run both started");
-            assert!(control.running() || control.clearing());
-        }
-    }
-
-    #[test]
-    fn finishing_clears_only_its_own_state() {
-        // A stray completion from one operation must not idle another that
-        // started after it.
-        let control = RunControl::default();
-        control
-            .try_start_apply(Cancel::new())
-            .expect("apply should start from idle");
-        control.finish_run();
-        assert!(control.applying(), "finish_run wrongly idled a live apply");
-        control.finish_apply();
-        assert!(!control.running() && !control.applying() && !control.clearing());
-    }
-
-    #[test]
-    fn cancelling_an_apply_stops_its_signal() {
-        let control = RunControl::default();
-        let cancel = Cancel::new();
-        control
-            .try_start_apply(cancel.clone())
-            .expect("apply should start from idle");
-        control.cancel_apply();
-        assert!(
-            cancel.stopped(),
-            "cancel_apply did not stop the applying signal"
-        );
-    }
-
-    #[test]
-    fn update_cannot_overlap_repository_work_in_either_direction() {
-        let control = RunControl::default();
-        control
-            .try_start_update()
-            .expect("update should start while idle");
-        assert!(control.try_start_run(Cancel::new()).is_err());
-        assert!(control.try_start_apply(Cancel::new()).is_err());
-        assert!(control.try_start_clear().is_err());
-        control.finish_update();
-
-        control
-            .try_start_clear()
-            .expect("clear should start after update releases the state");
-        assert!(control.try_start_update().is_err());
-    }
-}
+mod tests;

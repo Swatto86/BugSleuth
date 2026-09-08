@@ -478,9 +478,11 @@ rust commands::run::batch::tests::batch_deduplicates_canonical_paths_and_rejects
 rust commands::run::batch::tests::batch_preserves_each_failure_and_prompt_target
 rust commands::run::control::tests::cancelling_an_apply_stops_its_signal
 rust commands::run::control::tests::finishing_clears_only_its_own_state
+rust commands::run::control::tests::linked_worktrees_cannot_apply_together
 rust commands::run::control::tests::run_control_clear_and_run_cannot_both_start
 rust commands::run::control::tests::run_control_only_one_of_two_runs_can_start
 rust commands::run::control::tests::run_control_run_and_apply_cannot_both_start
+rust commands::run::control::tests::separate_applies_finish_independently_and_stop_cancels_all_remaining
 rust commands::run::control::tests::update_cannot_overlap_repository_work_in_either_direction
 rust commands::run::tests::a_directory_under_the_old_hash_is_migrated_to_the_stable_name
 rust commands::run::tests::the_stable_hash_is_a_fixed_contract_that_a_toolchain_bump_cannot_move

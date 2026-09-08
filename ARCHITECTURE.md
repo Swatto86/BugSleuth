@@ -274,3 +274,11 @@ Progress carries the canonical repository path; handoffs and caches keep their
 existing per-repository locations. The UI offers an overview and individual
 reports, and Apply always uses the selected report's repository rather than the
 editable run inputs. This adds no automatic batch write or publication action.
+
+Apply reservations are keyed by canonical repository paths and shared Git
+metadata. Separate repositories can be fixed concurrently with different
+providers; each vendor retains one process slot. Completion releases only its
+own repository, while Stop cancels all active and queued applies. The report
+selector keeps per-repository model/effort preferences and result text; settings
+save these preferences in the additive `apply_repositories` map. Publishing
+options stay session-only, and the confirmation snapshots each exact request.

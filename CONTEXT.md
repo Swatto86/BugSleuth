@@ -45,6 +45,12 @@ provider slots serialize each vendor's sweeps and Claude triage across the
 batch. Different vendors can work concurrently. Stop cancels the entire batch,
 including repositories waiting to start. Each repository retains its own cache,
 coverage, findings and fix prompt; the report selector binds Apply to that
-report's repository. Apply remains an explicit single-repository action.
+report's repository. Each report remembers its own fixing provider/model and
+effort. Explicit Apply actions may run concurrently in separate repositories;
+provider slots serialize jobs using the same vendor. Results remain attached to
+their repository. Stop all fixes cancels active and queued jobs. Duplicate,
+nested and linked worktrees sharing Git metadata cannot apply together. Scans,
+clearing, cloning and updates remain blocked until every apply finishes.
+Publishing choices are session-only and confirmed separately for each apply.
 Additional folders are saved compatibly alongside the existing primary folder.
 Clear saved sweeps still targets only the primary folder.

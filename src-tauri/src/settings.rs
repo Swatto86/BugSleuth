@@ -15,6 +15,13 @@ use serde::{Deserialize, Serialize};
 mod theme;
 pub use theme::Theme;
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApplyChoice {
+    pub apply_model: String,
+    pub apply_effort: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -55,6 +62,8 @@ pub struct Settings {
     /// until chosen, and the button refuses rather than guessing.
     #[serde(default)]
     pub apply_model: String,
+    /// Per-repository fixing model and effort; publishing remains session-only.
+    pub apply_repositories: BTreeMap<String, ApplyChoice>,
     /// Reasoning effort for that model. Empty means the vendor's own default.
     ///
     /// Its own field rather than part of the spec, because effort is not part of
@@ -169,6 +178,7 @@ impl Default for Settings {
             // Nothing by default: applying fixes writes to the user's own
             // checkout, and a model nobody chose is not something to default to.
             apply_model: String::new(),
+            apply_repositories: BTreeMap::new(),
             apply_effort: String::new(),
             push_after_apply: false,
             tag_release_after_push: false,

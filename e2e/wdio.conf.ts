@@ -154,6 +154,7 @@ export const config: WebdriverIO.Config = {
     [
       "review",
       "batch",
+      "parallel-apply",
       "clone",
       "agents",
       "dialog-focus",

@@ -1,3 +1,4 @@
+import { clearApplyReports } from "./apply-repositories";
 /**
  * The run lifecycle: starting a sweep, reflecting its progress, showing its
  * result.
@@ -150,6 +151,7 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
   });
 
   await listen<RepositoryResult>("run-finished", (event) => {
+    clearApplyReports();
     running = false;
     const selectedRepo = event.payload.repo ?? activeRunRepo;
     offerRepositoryResults(event.payload, (result) => {
@@ -229,4 +231,5 @@ function showReport(
   deps.promptPath.textContent = fixPromptPath
     ? `Also saved to ${fixPromptPath}`
     : "";
+  document.dispatchEvent(new Event("repository-report-shown"));
 }

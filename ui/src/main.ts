@@ -114,8 +114,9 @@ function renderPlanSummary(): void {
   }
   ui.clearSaved.disabled = busy;
   (document.getElementById("repository-result") as HTMLSelectElement).disabled =
-    busy;
+    isRunning() || isClearing() || isCloning() || isUpdating();
   (document.getElementById("clone-open") as HTMLButtonElement).disabled = busy;
+  ui.stop.textContent = isApplying() ? "Stop all fixes" : "Stop";
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
 }
 

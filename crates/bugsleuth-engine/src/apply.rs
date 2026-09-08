@@ -126,6 +126,13 @@ pub struct ApplyReport {
 /// than as an empty result.
 pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     Vendor::validate(request.model)?;
+    let (vendor, model) = Vendor::parse(request.model);
+    // Check the tree after waiting: edits made while queued must still refuse Apply.
+    let slot = tokio::select! {
+        biased;
+        () = request.cancel.cancelled() => anyhow::bail!("the apply was stopped before editing started"),
+        slot = crate::vendor_slots::acquire(vendor) => slot,
+    };
     let repo = request.repo;
     bugsleuth_verify::validate_repository_identity(repo).map_err(|error| {
         anyhow::anyhow!(
@@ -145,7 +152,6 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     // happened after a model had rewritten half the tree.
     let base = baseline(repo)?;
 
-    let (vendor, model) = Vendor::parse(request.model);
     let provider = run_provider(&request, vendor, model);
     tokio::pin!(provider);
     let attempt = tokio::select! {
@@ -153,6 +159,8 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         () = request.cancel.cancelled() => anyhow::bail!(cancelled_message()),
         attempt = &mut provider => attempt,
     };
+
+    drop(slot);
 
     // A failure is not "nothing happened". The invocation is killed on timeout
     // and can fail after the model has already rewritten half the tree, and an

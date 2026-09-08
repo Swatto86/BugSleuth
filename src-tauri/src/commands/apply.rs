@@ -102,6 +102,8 @@ pub async fn apply_fixes(
                 let changed_files = report.changed_files.len();
                 (
                     serde_json::json!({
+                        "repo": repo,
+                        "model": model,
                         "ok": true,
                         "cancelled": cancelled,
                         "text": describe(&report),
@@ -112,6 +114,8 @@ pub async fn apply_fixes(
             }
             Err(error) => (
                 serde_json::json!({
+                    "repo": repo,
+                    "model": model,
                     "ok": false,
                     "cancelled": cancelled,
                     "text": error.to_string(),
@@ -127,10 +131,13 @@ pub async fn apply_fixes(
             crate::tray::BackgroundWork::Apply,
             completion_for_apply(cancelled, changed_files),
         );
-        let _ = app.emit("apply-finished", payload);
         if let Some(control) = app.try_state::<RunControl>() {
-            control.finish_apply();
+            control.finish_apply(&repo);
+            if control.applying() {
+                crate::tray::work_started(&app, crate::tray::BackgroundWork::Apply);
+            }
         }
+        let _ = app.emit("apply-finished", payload);
     });
 
     Ok(())
@@ -152,8 +159,8 @@ fn reserve_and_load(
     repo: &std::path::Path,
     cancel: bugsleuth_engine::cancel::Cancel,
 ) -> Result<String, String> {
-    control.try_start_apply(cancel)?;
-    load_prompt(repo).inspect_err(|_| control.finish_apply())
+    control.try_start_apply(repo, cancel)?;
+    load_prompt(repo).inspect_err(|_| control.finish_apply(repo))
 }
 
 /// The fix prompt the last run wrote for this repository.
@@ -247,7 +254,7 @@ mod tests {
             control.try_start_clear().is_err(),
             "a clear could delete the run directory while apply was loading from it"
         );
-        control.finish_apply();
+        control.finish_apply(&dir);
         assert!(
             control.try_start_clear().is_ok(),
             "the reservation outlived the apply"

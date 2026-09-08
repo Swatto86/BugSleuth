@@ -11,10 +11,16 @@ if (args.includes("--version")) {
   let prompt = "";
   for await (const chunk of process.stdin) prompt += chunk;
   await new Promise((resolve) => setTimeout(resolve, 2000));
+  const editing = writable();
+  if (editing) await pauseApply();
   const text = prompt.includes("Reply with exactly OK and nothing else.")
     ? "OK"
-    : writable() ? apply() : review();
+    : editing ? apply() : review();
   console.log(JSON.stringify({ type: "text", part: { id: "part", messageID: "answer", text } }));
+} else if (args.includes("--print") && args.includes("Read,Glob,Grep,Edit,Write,Bash")) {
+  for await (const chunk of process.stdin) { /* consume the real prompt */ }
+  await pauseApply();
+  console.log(JSON.stringify({ type: "result", result: apply(), is_error: false }));
 } else {
   console.error("Unexpected fixture invocation");
   process.exitCode = 1;
@@ -42,5 +48,12 @@ function apply() {
   const source = fs.readFileSync(file, "utf8");
   if (!source.includes("if quantity > 50")) throw new Error("Expected original threshold");
   fs.writeFileSync(file, source.replace("if quantity > 50", "if quantity >= 50"));
-  return "Fixed the bulk discount threshold in src/pricing.rs.";
+  return `Fixed the bulk discount threshold in src/pricing.rs for ${path.basename(process.cwd())}.`;
+}
+
+async function pauseApply() {
+  const root = path.dirname(process.cwd());
+  if (!root || !fs.existsSync(path.join(root, "parallel-apply"))) return;
+  fs.appendFileSync(path.join(root, "applies.jsonl"), JSON.stringify({ repo: process.cwd(), args, at: Date.now() }) + "\n");
+  await new Promise(resolve => setTimeout(resolve, args[0] === "run" ? 30000 : 20000));
 }

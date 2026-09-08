@@ -29,6 +29,13 @@ import { offeredVendors, vendorCliPresent } from "./cli-offer.ts";
 import { effortPicker, modelPicker, option } from "./pickers";
 import type { Catalogue } from "./view";
 
+import {
+  activeApplies,
+  applyLog,
+  recordApply,
+  repositoryDeps,
+} from "./apply-repositories";
+
 const NEWLINE = String.fromCharCode(10);
 
 export interface ApplyDeps {
@@ -60,8 +67,7 @@ export interface ApplyDeps {
   focusStatus: () => void;
 }
 
-let applying = false;
-export const isApplying = (): boolean => applying;
+export const isApplying = (): boolean => activeApplies.size > 0;
 
 export interface ApplyBinding {
   redraw: () => void;
@@ -70,24 +76,19 @@ export interface ApplyBinding {
 
 /** Wire the panel up and expose its two focused redraw operations. */
 export function bindApply(deps: ApplyDeps): ApplyBinding {
+  deps = repositoryDeps(deps);
   const { ui } = deps;
 
-  // `apply-finished` is the only thing that clears `applying`. Until its
-  // subscription has registered, starting an apply would leave the window
-  // unable to hear it end — and Stop relies on the same event, so restarting
-  // the app would be the only recovery.
   let completionEventsReady = false;
 
   /** Draw the provider, model and effort controls from the stored settings. */
   const draw = (): void => {
-    // Replacing a focused picker drops focus to <body> in WebView2 — restore it.
     const focused = document.activeElement;
     const focusKey =
       focused instanceof HTMLElement &&
       (ui.model.contains(focused) || ui.effort.contains(focused))
         ? focused.dataset["focusKey"]
         : undefined;
-    // Always read live settings: boot replaces the object once after load.
     const stored = deps.settings().apply_model;
     const selected = splitId(stored).vendor;
     ui.vendor.replaceChildren(
@@ -108,9 +109,6 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
         onChange: (id) => {
           const live = deps.settings();
           live.apply_model = id;
-          // A model that does not accept the effort already chosen must not
-          // keep it — it would be sent to the CLI and rejected. Same reset the
-          // matrix does, for the same reason.
           live.apply_effort = allowedEffort(id, live.apply_effort);
           deps.refresh();
           drawEffort();
@@ -122,7 +120,6 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
     ui.push.checked = deps.settings().push_after_apply;
     drawTag();
     setButtonState();
-    // After both replacements, so the element being focused is the new one.
     if (focusKey) {
       const selector = `[data-focus-key="${CSS.escape(focusKey)}"]`;
       (
@@ -143,12 +140,6 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
   const drawTag = (): void => {
     const live = deps.settings();
     const publishing = live.push_after_apply;
-    // Corrected in the settings, not just in the display. A stored file can
-    // say "tag but do not push" — hand-edited, or written before pushing was
-    // switched off — and showing an unticked box over a stored `true` means
-    // the window and the thing it sends Rust disagree about whether a release
-    // is armed. Rust refuses that combination anyway; this makes the two say
-    // the same thing rather than relying on the far end to be the only guard.
     if (!publishing) live.tag_release_after_push = false;
     ui.tag.disabled = !publishing;
     ui.tag.checked = live.tag_release_after_push;
@@ -195,9 +186,6 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
   const setButtonState = (): void => {
     const live = deps.settings();
     const chosen = live.apply_model.trim() !== "";
-    // The same catalogue-aware rule the Run gate uses. Checking only that a
-    // model was chosen enabled Apply for a stored effort the provider rejects,
-    // and the failure then arrived hours later, asynchronously.
     const validEffort = effortIsValid(
       live.apply_model,
       live.apply_effort,
@@ -206,7 +194,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
     const cliPresent = vendorCliPresent(live.apply_model, deps.catalogue());
     ui.button.disabled =
       !completionEventsReady ||
-      applying ||
+      activeApplies.has(deps.promptRepo()) ||
       deps.busy() ||
       !chosen ||
       !validEffort ||
@@ -223,10 +211,6 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
   };
 
   ui.vendor.addEventListener("change", () => {
-    // The model goes with the old provider: an id from one vendor means nothing
-    // to another, and carrying it over would send a real-looking model id to a
-    // CLI that has never heard of it. The effort goes with it for the same
-    // reason — the levels differ between vendors.
     deps.settings().apply_model = joinId(ui.vendor.value as Vendor, "");
     deps.settings().apply_effort = "";
     deps.refresh();
@@ -235,10 +219,6 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
 
   ui.push.addEventListener("change", () => {
     deps.settings().push_after_apply = ui.push.checked;
-    // `drawTag` clears the tag setting whenever pushing is off, so switching
-    // pushing off here disarms the release rather than leaving a `true` behind
-    // a disabled box — which would come back the moment pushing was turned on
-    // again. Redrawn before the save so what is written is what is shown.
     drawTag();
     deps.refresh();
   });
@@ -249,9 +229,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
   });
 
   ui.button.addEventListener("click", () => {
-    // Checked here as well as inside `start`, so a second click cannot even
-    // open a second dialog on top of the first.
-    if (applying) return;
+    if (activeApplies.has(deps.promptRepo())) return;
     const repo = deps.promptRepo().trim();
     if (repo === "") {
       deps.setStatus(
@@ -260,17 +238,9 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
       );
       return;
     }
-    // The confirmation has to describe what is about to happen, not what
-    // usually happens. Publishing is the one part of an apply that no amount
-    // of reading the diff afterwards can undo, so when it is switched on the
-    // dialog says so and the button that confirms it says so too — a settings
-    // checkbox someone ticked days ago is not informed consent at the moment
-    // the commits leave the machine.
-    const publishing = deps.settings().push_after_apply;
-    // Read together: tagging is stored off whenever pushing is, but the dialog
-    // is the last thing between here and someone else's release pipeline, so it
-    // does not take that on trust.
-    const releasing = publishing && deps.settings().tag_release_after_push;
+    const confirmed = { ...deps.settings() };
+    const publishing = confirmed.push_after_apply;
+    const releasing = publishing && confirmed.tag_release_after_push;
     void confirmDialog({
       title: releasing
         ? "Apply these fixes, push them, and tag a release?"
@@ -278,7 +248,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
           ? "Apply these fixes and push them?"
           : "Apply these fixes to your code?",
       message:
-        `This runs the displayed fix prompt against "${repo}" with write access, ` +
+        `This runs the displayed fix prompt against "${repo}" using ${confirmed.apply_model} with write access, ` +
         "editing files in place and running your tests. It is refused unless " +
         "the working tree is clean, so everything it does will show up in " +
         "`git diff` and `git log` — but nothing it writes has been checked by " +
@@ -302,29 +272,49 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
       destructive: true,
     }).then((yes) => {
       if (!yes) return;
-      start(deps, repo);
+      start(
+        {
+          ...deps,
+          settings: () => confirmed,
+          refresh: () => {
+            deps.refresh();
+            setButtonState();
+          },
+        },
+        repo,
+      );
     });
   });
 
   void listen<{
+    repo: string;
+    model: string;
     ok: boolean;
     /** Whether Stop was pressed, as opposed to the provider failing. */
     cancelled: boolean;
     text: string;
     changed?: string[];
   }>("apply-finished", (event) => {
-    applying = false;
-    append(ui.output, event.payload.text);
-    const changed = event.payload.changed?.length ?? 0;
-    // Stopping an apply is a deliberate act, not a provider failure — both
-    // arrived as `ok: false` and were reported as "applying failed".
-    const failed = !event.payload.ok && !event.payload.cancelled;
-    deps.setStatus(
+    const { repo, model } = event.payload;
+    activeApplies.delete(repo);
+    recordApply(
+      repo,
+      model,
+      event.payload.text,
       event.payload.cancelled
-        ? "Applying the fixes was stopped"
-        : applyStatus(event.payload.ok, changed),
-      failed ? "error" : "",
+        ? "Stopped"
+        : applyStatus(event.payload.ok, event.payload.changed?.length ?? 0),
     );
+    if (repo === deps.promptRepo()) append(ui.output, event.payload.text);
+    const changed = event.payload.changed?.length ?? 0;
+    const failed = !event.payload.ok && !event.payload.cancelled;
+    if (repo === deps.promptRepo())
+      deps.setStatus(
+        event.payload.cancelled
+          ? "Applying the fixes was stopped"
+          : applyStatus(event.payload.ok, changed),
+        failed ? "error" : "",
+      );
     if (document.activeElement === ui.stop) deps.focusStatus();
     deps.refresh();
     draw();
@@ -336,9 +326,6 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
       setButtonState();
     },
     (error: unknown) => {
-      // Its own persistent alert as well as the status: boot overwrites the
-      // shared status with "Ready" moments later, and this is the message that
-      // explains why Apply is permanently unavailable.
       const message = `Cannot hear the result of applying: ${String(error)}`;
       ui.listenerError.textContent = message;
       ui.listenerError.classList.remove("hidden");
@@ -347,37 +334,38 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
     },
   );
 
+  document.addEventListener("repository-report-shown", () => {
+    const log = applyLog(deps.promptRepo());
+    if (log) append(ui.output, log);
+    draw();
+  });
   draw();
   return { redraw: draw, refreshButton: setButtonState };
 }
 
 function start(deps: ApplyDeps, repo: string): void {
-  // Checked again, after the dialog. It can sit open for as long as anyone
-  // likes, and two confirmed dialogs used to send two `apply_fixes` calls: the
-  // second is refused by Rust, and its rejection then cleared the flag and
-  // re-enabled the button while the first was still editing the repository.
-  if (applying) return;
-  applying = true;
+  if (activeApplies.has(repo) || deps.busy()) return;
+  activeApplies.add(repo);
   deps.setStatus("Applying the fixes — this edits your repository", "running");
   if (document.activeElement === deps.ui.button) deps.focusStatus();
   deps.ui.button.disabled = true;
-  // Redrawn, not just disabled here: the Run button is disabled from the same
-  // flag, and without this it stayed live for the whole apply — every press
-  // rejected by Rust with an error, which reads as the app being broken rather
-  // than as a button that should not have been offered.
   deps.refresh();
-  // A stop from a previous operation left the button disabled; this apply is a
-  // fresh operation with its own stop.
   deps.ui.stop.disabled = false;
   append(deps.ui.output, "Applying the fixes…");
+  recordApply(
+    repo,
+    deps.settings().apply_model,
+    "Applying the fixes…",
+    "Running or waiting for this provider",
+  );
   const settings = settingsForApply(deps.settings(), repo);
   invoke("apply_fixes", { settings }).catch((error: unknown) => {
-    // A rejected call means nothing started, so the flag must come back off or
-    // the button stays dead for the rest of the session with nothing running.
-    applying = false;
-    deps.ui.button.disabled = false;
-    deps.setStatus(String(error), "error");
-    append(deps.ui.output, String(error));
+    activeApplies.delete(repo);
+    recordApply(repo, settings.apply_model, String(error), "Failed to start");
+    if (repo === deps.promptRepo()) {
+      deps.setStatus(String(error), "error");
+      append(deps.ui.output, String(error));
+    }
     deps.refresh();
   });
 }

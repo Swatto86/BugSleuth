@@ -132,7 +132,11 @@ test("long-running actions wait for their completion listeners", () => {
   assert.ok(applyReady, "apply readiness is not set by registration success");
   // Whitespace-normalized: the formatter wraps this expression across lines.
   assert.ok(
-    apply.replace(/\s+/g, " ").includes("!completionEventsReady || applying"),
+    apply
+      .replace(/\s+/g, " ")
+      .includes(
+        "!completionEventsReady || activeApplies.has(deps.promptRepo())",
+      ),
     "the Apply gate does not require its completion listener",
   );
 

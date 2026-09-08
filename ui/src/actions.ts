@@ -164,8 +164,8 @@ export function bindGuardedActions(deps: ActionDeps): void {
     void confirmDialog({
       title: applying ? "Stop applying the fixes?" : "Stop this review?",
       message: applying
-        ? "The model is killed part-way through editing this repository. " +
-          "Commits it has already made are kept — check `git status` and " +
+        ? "All active fixing models are stopped, including queued repositories. " +
+          "Commits they have already made are kept — check `git status` and " +
           "`git log` afterwards to see how far it got."
         : "Sweeps that have already finished are kept on disk, and running " +
           "again with reuse enabled picks up from there rather than paying for " +
@@ -181,7 +181,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
       if (applying ? !isApplying() : !isRunning()) return;
       deps.setStatus(
         applying
-          ? "Stopping — killing the model mid-apply"
+          ? "Stopping — killing all models mid-apply"
           : "Stopping — killing the sweeps in flight",
         "running",
       );
