@@ -55,7 +55,23 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            libxdo-dev
+            libxdo-dev \
+            webkit2gtk-driver \
+            xvfb \
+            xclip \
+            dbus-x11
+
+      - name: Pinned native WebDriver
+        if: matrix.os != 'macos-latest'
+        shell: bash
+        run: |
+          bash scripts/setup-tauri-driver.sh
+          echo "$PWD/.webdriver" >> "$GITHUB_PATH"
+
+      - name: Match EdgeDriver to WebView2
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: ./scripts/setup-e2e.ps1
 
       # One command everywhere. There is one gate now; the platforms differ in
       # what they run it on, not in what it checks.

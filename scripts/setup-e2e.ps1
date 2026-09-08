@@ -23,22 +23,13 @@ $dest = Join-Path $root '.webdriver'
 New-Item -ItemType Directory -Force $dest | Out-Null
 
 Write-Host '== tauri-driver ==' -ForegroundColor Cyan
-# The reviewed release, pinned. `--locked` only pins the crate's own
-# dependencies: without a version, a newly published compromised release is the
-# newest compatible one, and its build script runs here before its binary runs
-# the E2E suite. Cargo's own record is read rather than executing whatever
-# binary happens to be on PATH under that name.
-$wantedTauriDriver = '2.0.6'
-$installedTauriDriver = cargo install --list |
-    Select-String -Pattern "^tauri-driver v$([regex]::Escape($wantedTauriDriver)):"
-if ($LASTEXITCODE -ne 0) { throw 'could not list installed Cargo binaries' }
-if ($installedTauriDriver) {
-    Write-Host "  already installed ($wantedTauriDriver)"
-}
-else {
-    cargo install tauri-driver --version "=$wantedTauriDriver" --locked --force
-    if ($LASTEXITCODE -ne 0) { throw "could not install tauri-driver $wantedTauriDriver" }
-}
+$git = (Get-Command git -ErrorAction Stop).Source
+$bash = Join-Path (Split-Path -Parent (Split-Path -Parent $git)) 'bin/bash.exe'
+if (-not (Test-Path $bash)) { throw 'Git for Windows Bash is required to verify the prebuilt driver.' }
+$setup = (Join-Path $PSScriptRoot 'setup-tauri-driver.sh') -replace '\\', '/'
+& $bash $setup
+if ($LASTEXITCODE -ne 0) { throw 'could not provision the verified tauri-driver' }
+$env:PATH = "$dest;$env:PATH"
 
 Write-Host '== WebView2 runtime ==' -ForegroundColor Cyan
 $key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'

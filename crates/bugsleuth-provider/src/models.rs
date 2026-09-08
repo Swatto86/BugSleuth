@@ -4,17 +4,8 @@
 //! that you spelled it wrong — or worse, that you spelled a *real* model that
 //! bills somewhere you did not intend. So the app offers a list.
 //!
-//! The three vendors differ in how much they will tell us, and this module is
-//! honest about that rather than pretending to a uniformity that is not there:
-//!
-//! - **Kilo** publishes its whole catalogue, and it is the one list worth
-//!   fetching live: it is long, it changes, and getting the billing route wrong
-//!   is the mistake that costs money. It also says, per model, which reasoning
-//!   efforts that model accepts — which is not uniform and is not always a
-//!   graded scale. See `kilo_catalogue`.
-//! - **Claude and Codex** have no list command. Their aliases are few, stable
-//!   and documented in `--help`, so they are named here. Their effort levels
-//!   vary by model and are recorded alongside those known models.
+//! Claude offers documented aliases. Codex, Cursor and OpenCode expose model
+//! catalogues; OpenCode includes globally configured local provider routes.
 //!
 //! Every list is a *suggestion*. A model id that is not on it must still be
 //! usable, because a curated list goes stale and a tool that refuses a valid
@@ -22,16 +13,17 @@
 
 mod codex_catalogue;
 mod efforts;
-mod kilo_catalogue;
+mod opencode_catalogue;
+mod verbose_catalogue;
 
 use std::collections::BTreeMap;
 use std::time::Duration;
 
 use crate::error::ProviderError;
-use crate::{claude, codex, cursor, kilo, kimi, process};
+use crate::{claude, codex, cursor, opencode, process};
 
 /// Vendors the desktop and CLI know about, in menu order.
-pub const VENDORS: &[&str] = &["claude", "codex", "kilo", "kimi", "cursor"];
+pub const VENDORS: &[&str] = &["claude", "codex", "cursor", "opencode"];
 
 /// Whether this vendor's CLI is on the machine, without starting it.
 ///
@@ -43,18 +35,15 @@ pub fn cli_installed(vendor: &str) -> bool {
     match vendor {
         "claude" => claude::binary_path().is_some(),
         "codex" => codex::binary_path().is_some(),
-        "kilo" => kilo::binary_path().is_some(),
-        "kimi" => kimi::binary_path().is_some(),
         "cursor" => cursor::binary_path().is_some(),
+        "opencode" => opencode::binary_path().is_some(),
         _ => false,
     }
 }
 
 /// A named set of models shown together.
 ///
-/// For Kilo the label is the billing route, which is the thing worth grouping
-/// by: it is what decides whether a sweep spends your own key, your Kilo
-/// subscription, or nothing at all.
+/// OpenCode groups by provider route.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ModelGroup {
     pub label: String,
@@ -128,8 +117,7 @@ const CODEX_MODELS: &[&str] = &["gpt-5.6-codex", "gpt-5.6-sol"];
 ///
 /// Refuses when the CLI is not installed — a fixed list for a missing binary
 /// is how Claude and Codex used to appear usable on machines that cannot run
-/// them. Only Kilo costs anything to ask once the binary is present, and
-/// asking it starts no model — `kilo models` reads a cached catalogue.
+/// them. Catalogue discovery does not start a model.
 pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
     if !cli_installed(vendor) {
         return Err(not_installed(vendor));
@@ -137,9 +125,8 @@ pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
     match vendor {
         "claude" => Ok(claude_models()),
         "codex" => Ok(codex_models().await),
-        "kilo" => kilo_models().await,
-        "kimi" => Ok(kimi_models()),
         "cursor" => cursor_models().await,
+        "opencode" => opencode_catalogue::available().await,
         _ => Err(ProviderError::NotFound {
             vendor: "unknown",
             hint: format!("no model list for vendor {vendor:?}"),
@@ -149,6 +136,7 @@ pub async fn available(vendor: &str) -> Result<VendorCatalogue, ProviderError> {
 
 fn not_installed(vendor: &str) -> ProviderError {
     match vendor {
+        "opencode" => ProviderError::NotFound { vendor: "opencode", hint: "Install OpenCode and configure a cloud or local provider.".into() },
         "claude" => ProviderError::NotFound {
             vendor: "claude",
             hint: "Install it with `npm install -g @anthropic-ai/claude-code` and sign in by running `claude` once.".into(),
@@ -156,14 +144,6 @@ fn not_installed(vendor: &str) -> ProviderError {
         "codex" => ProviderError::NotFound {
             vendor: "codex",
             hint: "Install the Codex CLI and sign in with `codex login`.".into(),
-        },
-        "kilo" => ProviderError::NotFound {
-            vendor: "kilo",
-            hint: "Install the Kilo CLI to list its models.".into(),
-        },
-        "kimi" => ProviderError::NotFound {
-            vendor: "kimi",
-            hint: "Install the Kimi Code CLI and sign in with `/login`.".into(),
         },
         "cursor" => ProviderError::NotFound {
             vendor: "cursor",
@@ -190,16 +170,6 @@ async fn cursor_models() -> Result<VendorCatalogue, ProviderError> {
         }],
         efforts_by_model: BTreeMap::new(),
     })
-}
-
-/// Kimi's menu, read from the CLI's own configuration.
-///
-/// There is no `models` list command, and which aliases exist depends on the
-/// account — a subscription and a bring-your-own-key setup reach different
-/// sets. So the menu comes from the same file the CLI reads rather than from a
-/// list written here, which would offer models this user may not have.
-fn kimi_models() -> VendorCatalogue {
-    kimi::catalogue()
 }
 
 fn fixed(label: &str, models: &[&str]) -> VendorCatalogue {
@@ -259,112 +229,6 @@ fn codex_catalogue_from_output(output: process::CliOutput) -> VendorCatalogue {
         }],
         efforts_by_model: codex_catalogue::efforts(&entries),
     }
-}
-
-async fn kilo_models() -> Result<VendorCatalogue, ProviderError> {
-    let binary = kilo::binary_path().ok_or_else(|| ProviderError::NotFound {
-        vendor: kilo::VENDOR,
-        hint: "install the Kilo CLI to list its models".into(),
-    })?;
-    // Fail fast rather than queue: this fills a dropdown, and a menu that hangs
-    // for the length of a sweep is worse than one that says why it is empty.
-    // Kilo processes share a mutable credential store, so this must not run
-    // beside a live sweep or apply.
-    let Some(_operation) = kilo::try_operation_guard() else {
-        return Err(ProviderError::NotFound {
-            vendor: kilo::VENDOR,
-            hint: "a Kilo review or apply is running; its model list cannot be read at the \
-                   same time"
-                .into(),
-        });
-    };
-    let output = process::run(process::Invocation {
-        binary: &binary.to_string_lossy(),
-        // `--verbose` rather than the bare list, because the bare list cannot
-        // answer either question that matters: which account a model bills to,
-        // and which efforts it accepts.
-        args: &["models".to_string(), "--verbose".to_string()],
-        cwd: &std::env::temp_dir(),
-        stdin: None,
-        env: &[],
-        // Reading a cached catalogue. If it takes longer than this something is
-        // wrong, and the app must not hang a dropdown open waiting for it.
-        timeout: Duration::from_secs(60),
-        what: "kilo models",
-    })
-    .await?;
-    kilo_catalogue_from_output(output)
-}
-
-/// Interpret a finished `kilo models` invocation.
-///
-/// `process::run` returns `Ok` for a process that launched and exited non-zero,
-/// so a bare `group_by_route` on the stdout of a failed run parses nothing into
-/// an empty catalogue and returns it as success — Kilo then looks like a vendor
-/// with no models rather than one whose listing failed. Both a non-zero exit and
-/// an empty successful parse are errors here.
-fn kilo_catalogue_from_output(
-    output: process::CliOutput,
-) -> Result<VendorCatalogue, ProviderError> {
-    if !output.succeeded() {
-        let code = output.code.unwrap_or(-1);
-        let diagnostic = if output.stderr.trim().is_empty() {
-            process::preview(output.stdout.trim(), 2_000)
-        } else {
-            process::preview(output.stderr.trim(), 2_000)
-        };
-        return Err(if diagnostic.is_empty() {
-            ProviderError::FailedSilently {
-                vendor: kilo::VENDOR,
-                code,
-            }
-        } else {
-            ProviderError::Failed {
-                vendor: kilo::VENDOR,
-                code,
-                message: diagnostic,
-            }
-        });
-    }
-
-    let catalogue = group_by_route(&output.stdout);
-    if catalogue.groups.is_empty() {
-        return Err(ProviderError::Envelope {
-            vendor: kilo::VENDOR,
-            detail: "the model listing contained no model IDs".to_string(),
-        });
-    }
-    Ok(catalogue)
-}
-
-/// Turn a verbose listing into groups by billing route, plus per-model efforts.
-///
-/// Kept separate from the process call so it can be tested against real
-/// captured output without running anything.
-#[must_use]
-pub fn group_by_route(listing: &str) -> VendorCatalogue {
-    let mut catalogue = VendorCatalogue::default();
-
-    for entry in kilo_catalogue::parse(listing) {
-        // A `kilo/` id is Gateway unless the catalogue says the model bills to
-        // a plan of your own. Nothing in the id itself distinguishes them.
-        let route = match kilo::route_of(&entry.id) {
-            kilo::Route::Gateway if entry.byok => kilo::Route::KiloByok,
-            other => other,
-        };
-        let label = route.describe().to_string();
-        match catalogue.groups.iter_mut().find(|g| g.label == label) {
-            Some(group) => group.models.push(entry.id.clone()),
-            None => catalogue.groups.push(ModelGroup {
-                label,
-                models: vec![entry.id.clone()],
-            }),
-        }
-        if !entry.efforts.is_empty() {
-            catalogue.efforts_by_model.insert(entry.id, entry.efforts);
-        }
-    }
-    catalogue
 }
 
 #[cfg(test)]

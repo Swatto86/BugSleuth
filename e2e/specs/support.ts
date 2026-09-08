@@ -17,7 +17,9 @@ import path from "node:path";
 
 import { splitId } from "../../ui/src/model.ts";
 
-export const REPO = path.resolve(process.cwd(), "fixtures/seeded-repo");
+export const REPO =
+  process.env["BUGSLEUTH_E2E_REPO"] ??
+  path.resolve(process.cwd(), "fixtures/seeded-repo");
 export const RUNS_ROOT = path.join(
   process.env["APPDATA"] ?? os.tmpdir(),
   "BugSleuth",
@@ -111,13 +113,33 @@ export async function configureOneSweep(modelSpec: string): Promise<void> {
 
 /** Provider processes carrying BugSleuth's production-only flag combinations. */
 export function providerCliProcesses(): string {
-  const command = `
-Get-CimInstance Win32_Process | Where-Object {
-  ($_.Name -eq 'claude.exe' -and $_.CommandLine -match '--safe-mode' -and $_.CommandLine -match '--output-format') -or
-  ($_.Name -eq 'codex.exe' -and $_.CommandLine -match '--ignore-rules' -and $_.CommandLine -match '--output-last-message') -or
-  ($_.Name -eq 'kilo.exe' -and $_.CommandLine -match '--pure' -and $_.CommandLine -match '--agent')
-} | ForEach-Object { "$($_.ProcessId) $($_.Name)" }
-`;
+  if (process.platform !== "win32") {
+    return fs
+      .readdirSync("/proc")
+      .filter((pid) => /^\d+$/.test(pid))
+      .flatMap((pid) => {
+        try {
+          const args = fs
+            .readFileSync(`/proc/${pid}/cmdline`, "utf8")
+            .split("\0");
+          return args.includes("--agent") &&
+            args.some((arg) => arg.startsWith(REPO))
+            ? [pid]
+            : [];
+        } catch (error) {
+          if (
+            ["ENOENT", "EACCES", "EPERM", "ESRCH"].includes(
+              (error as NodeJS.ErrnoException).code ?? "",
+            )
+          )
+            return [];
+          throw error;
+        }
+      })
+      .join(" ");
+  }
+  const command =
+    "$root = [regex]::Escape($env:BUGSLEUTH_E2E_REPO); Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match $root -and $_.CommandLine -match '--agent|--output-format|--output-last-message' } | ForEach-Object { $_.ProcessId }";
   return execFileSync(
     "powershell.exe",
     ["-NoProfile", "-NonInteractive", "-Command", command],
@@ -127,6 +149,14 @@ Get-CimInstance Win32_Process | Where-Object {
 
 /** Text placed on the Windows clipboard by the real webview. */
 export function clipboardText(): string {
+  if (process.platform !== "win32") {
+    // The WebDriver app uses GDK_BACKEND=x11 even on a Wayland desktop.
+    return execFileSync("xclip", ["-selection", "clipboard", "-o"], {
+      encoding: "utf8",
+    })
+      .replace(/\r\n/g, "\n")
+      .trimEnd();
+  }
   return execFileSync(
     "powershell.exe",
     ["-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard -Raw"],

@@ -2,7 +2,7 @@
 
 Living document. Code is ground truth; correct this when they diverge.
 
-**Last updated:** 13 August 2026.
+**Last updated:** 8 September 2026.
 
 ## The constraint everything follows from
 
@@ -25,7 +25,7 @@ domain  ←  provider  ┐
 
 Everything may depend on `domain`. `domain` depends on nothing of ours — no I/O,
 no async. `judge` does not know `provider` exists; `provider` does not know
-`judge` exists. `cli` is the only crate that composes.
+`judge` exists. `engine` composes the shared workflow; CLI and desktop are entry points.
 
 | Crate | Owns | Deliberately does not |
 |---|---|---|
@@ -53,24 +53,20 @@ absorbing them is most of that crate's job:
 |---|---|---|---|
 | Claude | Inline JSON Schema | Tool allowlist | One JSON envelope |
 | Codex | Schema as a file | `--sandbox read-only` | Final message to a file |
-| Kilo | **None** — described in the prompt | **None** — needs a worktree | NDJSON events, messages repeated |
-| Kimi | **None** — described in the prompt | Agent-file allowlist + worktree | Text reply |
+| OpenCode | Prompt-described JSON | Deny-by-default agent + worktree | NDJSON text parts |
 | Cursor (`agent`) | **None** — described in the prompt | `--mode ask` + worktree (no ignore-rules) | Text reply |
 
 Three consequences worth knowing:
 
-- **Kilo sweeps run in a throwaway git worktree**, because it is the only way to
-  guarantee a review cannot modify the code it is reviewing. The adapter takes a
-  `worktree`, not a `repo`, so the unsafe call does not compile.
+- **Cursor and OpenCode reviews use throwaway worktrees** and read-only tool permissions.
 - **Isolation never hides reduced coverage.** Project instruction paths removed
-  from Kilo, Kimi, and Cursor worktrees are recorded in every report; a scope
+  from OpenCode and Cursor worktrees are recorded in every report; a scope
   wholly inside one is refused as not swept.
 - **An interrupted provider run is resumed, not restarted.** The shared runner
   kills timed-out process trees but keeps their partial output. Claude receives
   a session id before launch and enables
-  `CLAUDE_CODE_RESUME_INTERRUPTED_TURN` on recovery; Codex and Kilo expose their
-  ids in early JSON events. Codex transient `turn.failed` events and Kilo's
-  native timeout exit 124 take the same path. Each adapter gets one answer-only
+  `CLAUDE_CODE_RESUME_INTERRUPTED_TURN` on recovery; Codex exposes their
+  ids in early JSON events. Codex transient `turn.failed` events take the same path. Each adapter gets one answer-only
   recovery capped at five minutes, and the report marks that result as
   potentially incomplete. With no session id, the lane remains `NOT SWEPT`
   rather than spending another full review from scratch.
@@ -101,13 +97,10 @@ passed everything. Both are fixed; both had been read over many times.
    enumerated. Every lane is always listed, so one with no model assigned is
    carried through as an explicit gap.
 2. **Desktop pre-check** — the app gives each selected provider one minimal real
-   invocation, concurrently. Missing sessions, unhealthy CLIs and an unsafe
-   Kilo `ask` policy stop the desktop run before any lane starts.
+   invocation, concurrently. Missing sessions and unhealthy CLIs stop the desktop
+   run before any lane starts; OpenCode checks every selected model and variant.
 3. **Batch** — different vendors run together, but each vendor's sweeps run one
-   at a time. Claude, Codex and Kilo all support parallel agents in some product
-   surfaces, but none publishes a safe maximum for independent authenticated
-   CLI processes. Two Kilo processes were observed colliding while updating its
-   shared credential database, so BugSleuth does not guess a limit.
+   at a time because CLIs share mutable authentication and session state.
 4. **Sweep** — each unit runs its vendor against the repository. Failure is a
    *reported state*, never an exception that vanishes.
 5. **Verify** — every finding's quoted snippet must exist in the file it names,
@@ -211,15 +204,8 @@ a shell, so none of it is a sandbox in the sense that word usually carries:
 - **Codex** runs under `--sandbox workspace-write` — its own sandbox rather than
   a list this tool passes, which is stronger where the platform implements it
   and is not something BugSleuth can observe from outside.
-- **Kimi** is confined by its agent file, whose `tools` list is an allowlist;
-  omitting it would allow every tool, including the ones that spawn subagents.
 - **Cursor** runs without `--mode ask` and with `--force`, so print mode may write; there is no tighter per-invocation write allowlist BugSleuth can pass.
-- **Kilo** has no per-invocation limit at all — its permissions come from the
-  machine's own config. So an apply is refused outright when the repository
-  ships Kilo configuration of its own, because a `kilo.jsonc` in the working
-  directory rewrites the resolved permissions of the agent named on the command
-  line: the repository would be choosing what the model applying its fixes may
-  do.
+- **OpenCode** uses an invocation-specific agent allowing reads, edits and shell commands; project configuration is disabled.
 
 Beyond that the guarantee is git:
 
@@ -248,3 +234,18 @@ per-sweep JSON files — `--resume` reads those rather than a database, which is
 the smallest thing that makes a dead run recoverable. Each file fingerprints
 the briefs and finding schema, so changed review semantics cannot reuse stale
 coverage.
+
+## OpenCode provider boundary
+
+`opencode:` is a first-class vendor alongside Claude, Codex and Cursor. Its model identifier is opaque after the first colon: local model tags
+and custom provider paths survive settings, planning and argv unchanged. The
+verbose catalogue parser preserves provider IDs and per-model variants.
+
+OpenCode sweeps use the engine's disposable worktree and remove `.opencode`
+agent/plugin directories as well as instruction files. The adapter supplies
+a unique per-invocation agent through `OPENCODE_CONFIG_CONTENT`, disables
+project configuration and external plugins, and grants read/glob/grep only.
+Apply uses the same execution path with edit/bash permissions added. Each
+selected model/variant receives its own precheck, using the sweep invocation
+in an empty private directory. NDJSON error events override text even when the
+CLI exits zero; duplicate text parts are replaced and distinct parts retained.

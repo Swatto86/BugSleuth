@@ -137,7 +137,7 @@ test("the release uses the lockfile's Tauri CLI", () => {
 test("the E2E build uses the locked local Tauri CLI", () => {
   const pkg = JSON.parse(read("package.json"));
   const lock = JSON.parse(read("package-lock.json"));
-  assert.equal(pkg.scripts["e2e:build"], "tauri build --no-bundle");
+  assert.equal(pkg.scripts["e2e:build"], "tauri build --debug --no-bundle");
   assert.equal(pkg.devDependencies["@tauri-apps/cli"], "2.11.4");
   assert.equal(lock.packages["node_modules/@tauri-apps/cli"].version, "2.11.4");
 });
@@ -151,8 +151,21 @@ test("the packaged gate cannot download a Tauri CLI", () => {
 test("the packaged gate still release-builds the libraries and CLI", () => {
   const script = read("scripts", "verify.sh");
   const build = "cargo build --release --workspace --exclude bugsleuth-app";
-  assert.ok(script.includes(`${build}\n\nif [ "$package" = "1" ]; then`));
+  const packaging = script.indexOf('if [ "$package" = "1" ]; then');
+  assert.ok(packaging >= 0);
+  assert.ok(script.indexOf(build) > packaging);
   assert.ok(!script.includes('if [ "$package" != "1" ]; then'));
+});
+
+test("the routine full gate builds debug and drives the real webview", () => {
+  const script = read("scripts", "verify.sh");
+  const packaging = script.indexOf('if [ "$package" = "1" ]; then');
+  assert.ok(packaging > 0);
+  const routine = script.slice(0, packaging);
+  assert.ok(routine.includes("tauri build --debug --no-bundle"));
+  assert.ok(routine.includes("npm run --silent e2e:run"));
+  assert.ok(!routine.includes("--release"));
+  assert.ok(script.includes("cargo test --locked --workspace --all-targets"));
 });
 
 test("the live E2E review replaces saved configuration deterministically", () => {

@@ -22,6 +22,22 @@ fn write(root: &Path, rel: &str, text: &str) {
 }
 
 #[test]
+fn opencode_project_agents_and_plugins_are_removed() {
+    let root = scratch("opencode-project-config");
+    write(&root, ".opencode/agents/review.md", "permission: allow");
+    write(
+        &root,
+        "nested/.OpenCode/plugins/hooks.ts",
+        "untrusted plugin",
+    );
+    write(&root, "src/main.rs", "fn main() {}");
+    let removed = strip_agent_instructions(&root).expect("strip instructions");
+    assert_eq!(removed, [".opencode", "nested/.OpenCode"]);
+    assert!(root.join("src/main.rs").exists());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn instruction_files_go_and_code_stays() {
     let root = scratch("basic");
     write(&root, "CONTEXT.md", "165 KB of standing orders");

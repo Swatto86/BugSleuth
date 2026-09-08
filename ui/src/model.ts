@@ -59,7 +59,7 @@ export interface ModelSetting {
 }
 
 /** The vendors that can be picked, in the order they are offered. */
-export const VENDORS = ["claude", "codex", "kilo", "kimi", "cursor"] as const;
+export const VENDORS = ["claude", "codex", "cursor", "opencode"] as const;
 export type Vendor = (typeof VENDORS)[number];
 
 /**
@@ -242,7 +242,7 @@ export function vendorOf(modelId: string): string {
 }
 
 /** Whether BugSleuth's read-only invocation of this provider can delegate. */
-export const CANNOT_DELEGATE = ["kilo", "kimi", "cursor"] as const;
+export const CANNOT_DELEGATE = ["cursor", "opencode"] as const;
 
 /**
  * Whether this vendor can be asked to split a lane across subagents.
@@ -312,7 +312,7 @@ export function effortIsValid(
   const effort = rawEffort.trim();
   if (effort === "") return true;
   const { vendor, model } = splitId(id);
-  if (vendor === "kilo") return true;
+  if (vendor === "opencode") return true;
   const menu = catalogue[vendor];
   if (!menu) return true;
   if (menu.efforts.length > 0) return menu.efforts.includes(effort);

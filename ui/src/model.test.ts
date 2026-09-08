@@ -134,7 +134,7 @@ test("vendor parsing matches the engine, including bare and colon-containing nam
   assert.equal(vendorOf("sonnet"), "claude");
   assert.equal(vendorOf("claude:opus"), "claude");
   assert.equal(vendorOf("codex:gpt"), "codex");
-  assert.equal(vendorOf("kilo:"), "kilo");
+  assert.equal(vendorOf("opencode:"), "opencode");
   assert.equal(vendorOf("anthropic:claude-opus-5"), "claude");
 });
 
@@ -227,10 +227,10 @@ test("splitting a model spec and rejoining it settles on one spelling", () => {
     "sonnet",
     "claude:opus",
     "codex:gpt-5.6-codex",
-    "kilo:openrouter/z-ai/glm-4.6",
-    "kilo:kilo/anthropic/claude-opus-5",
+    "opencode:openrouter/z-ai/glm-4.6",
+    "opencode:opencode/anthropic/claude-opus-5",
     "codex:",
-    "kilo:",
+    "opencode:",
   ]) {
     const once = joinId(splitId(id).vendor, splitId(id).model);
     const twice = joinId(splitId(once).vendor, splitId(once).model);
@@ -249,10 +249,10 @@ test("splitting a model spec and rejoining it settles on one spelling", () => {
   // Everything else is left exactly as written.
   assert.equal(
     joinId(
-      splitId("kilo:openrouter/z-ai/glm-4.6").vendor,
-      splitId("kilo:openrouter/z-ai/glm-4.6").model,
+      splitId("opencode:openrouter/z-ai/glm-4.6").vendor,
+      splitId("opencode:openrouter/z-ai/glm-4.6").model,
     ),
-    "kilo:openrouter/z-ai/glm-4.6",
+    "opencode:openrouter/z-ai/glm-4.6",
   );
 });
 
@@ -271,11 +271,11 @@ test("splitId agrees with vendorOf on every shape", () => {
     "sonnet",
     "claude:opus",
     "codex:x",
-    "kilo:a/b",
+    "opencode:a/b",
     "gpt:weird",
     "",
     "codex",
-    "kilo",
+    "opencode",
   ]) {
     assert.equal(splitId(id).vendor, vendorOf(id), `disagreement on ${id}`);
   }
@@ -338,7 +338,7 @@ test("an identical duplicate row adds nothing, exactly like the engine", () => {
 });
 
 test("same-provider rounds stay serial", () => {
-  for (const model of ["sonnet", "codex:model", "kilo:model"]) {
+  for (const model of ["sonnet", "codex:model", "opencode:model"]) {
     assert.equal(batchCount([row(model, ["security", "ux"])]), 2, model);
   }
 });

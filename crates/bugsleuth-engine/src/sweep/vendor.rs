@@ -11,18 +11,24 @@
 pub enum Vendor {
     Claude,
     Codex,
-    Kilo,
-    /// Moonshot's Kimi Code CLI. Present because a Kimi subscription reaches
-    /// models a bring-your-own-key route does not, and only the native CLI can
-    /// use that session.
-    Kimi,
     /// Cursor Agent CLI (`agent` on PATH). Ask mode is read-only per
     /// invocation; sweeps still use a worktree because there is no
     /// ignore-rules flag.
     Cursor,
+    OpenCode,
 }
 
 impl Vendor {
+    /// Removed adapters must never fall through to Claude for saved settings.
+    pub fn validate(spec: &str) -> anyhow::Result<()> {
+        if let Some((vendor @ ("kilo" | "kimi"), _)) = spec.trim().split_once(':') {
+            anyhow::bail!(
+                "{vendor} support has been removed; choose Claude, Codex, Cursor or OpenCode"
+            );
+        }
+        Ok(())
+    }
+
     /// Read a `vendor:model` spec such as `codex:gpt-5.6-codex`. A bare name
     /// means Claude, which keeps the common case short.
     pub fn parse(raw: &str) -> (Vendor, &str) {
@@ -30,9 +36,8 @@ impl Vendor {
         match spec.split_once(':') {
             Some(("codex", model)) => (Vendor::Codex, model),
             Some(("claude", model)) => (Vendor::Claude, model),
-            Some(("kilo", model)) => (Vendor::Kilo, model),
-            Some(("kimi", model)) => (Vendor::Kimi, model),
             Some(("cursor", model)) => (Vendor::Cursor, model),
+            Some(("opencode", model)) => (Vendor::OpenCode, model),
             _ => (Vendor::Claude, spec),
         }
     }
@@ -41,16 +46,15 @@ impl Vendor {
         match self {
             Vendor::Claude => "claude",
             Vendor::Codex => "codex",
-            Vendor::Kilo => "kilo",
-            Vendor::Kimi => "kimi",
             Vendor::Cursor => "cursor",
+            Vendor::OpenCode => "opencode",
         }
     }
 
     /// Whether the CLI can be handed a JSON Schema it will actually enforce.
     /// Kilo, Kimi and Cursor cannot, so their briefs describe the shape in words.
     pub fn enforces_schema(self) -> bool {
-        !matches!(self, Vendor::Kilo | Vendor::Kimi | Vendor::Cursor)
+        !matches!(self, Vendor::Cursor | Vendor::OpenCode)
     }
 
     /// Whether a sweep by this vendor must run in a throwaway checkout rather
@@ -62,7 +66,7 @@ impl Vendor {
     /// but no ignore-rules flag, so project instructions would otherwise brief
     /// the reviewer — isolation strips those from a throwaway tree.
     pub fn needs_isolation(self) -> bool {
-        matches!(self, Vendor::Kilo | Vendor::Kimi | Vendor::Cursor)
+        matches!(self, Vendor::Cursor | Vendor::OpenCode)
     }
 }
 
@@ -76,6 +80,10 @@ impl Vendor {
 /// reached.
 #[must_use]
 pub fn resolved_label(spec: &str) -> String {
+    // Historical reports retain their provider labels after adapter retirement.
+    if Vendor::validate(spec).is_err() {
+        return spec.trim().to_string();
+    }
     let (vendor, model) = Vendor::parse(spec);
     format!("{}:{model}", vendor.label())
 }

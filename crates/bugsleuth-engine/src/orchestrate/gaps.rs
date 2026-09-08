@@ -100,7 +100,7 @@ pub(super) fn caution(plan: &Plan, repo: &std::path::Path) {
 pub(super) fn plan_includes_kilo(plan: &Plan) -> bool {
     plan.units
         .iter()
-        .any(|unit| crate::sweep::Vendor::parse(&unit.model).0 == crate::sweep::Vendor::Kilo)
+        .any(|unit| unit.model.trim().starts_with("kilo:"))
 }
 
 /// Name every sweep a cancellation prevented.

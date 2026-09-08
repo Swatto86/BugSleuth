@@ -125,6 +125,7 @@ pub struct ApplyReport {
 /// its working tree is dirty, and reports a vendor failure as an error rather
 /// than as an empty result.
 pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
+    Vendor::validate(request.model)?;
     let repo = request.repo;
     bugsleuth_verify::validate_repository_identity(repo).map_err(|error| {
         anyhow::anyhow!(
@@ -282,18 +283,8 @@ async fn run_provider(
             )
             .await
         }
-        Vendor::Kilo => {
-            bugsleuth_provider::kilo::apply(
-                request.repo,
-                model,
-                request.effort,
-                request.prompt,
-                request.timeout,
-            )
-            .await
-        }
-        Vendor::Kimi => {
-            bugsleuth_provider::kimi::apply(
+        Vendor::OpenCode => {
+            bugsleuth_provider::opencode::apply(
                 request.repo,
                 model,
                 request.effort,

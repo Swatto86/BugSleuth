@@ -49,9 +49,8 @@ describe("BugSleuth desktop app", () => {
       timeout: 30_000,
       timeoutMsg:
         "the app shell never rendered. If the page is blank, the binary is " +
-        "probably a development build: run `cargo clean --release` then " +
-        "`cargo tauri build`, because Tauri caches the dev/production choice " +
-        "in its own build script and a plain cargo release build poisons it.",
+        "probably a development build: run `npx tauri build --debug --no-bundle` " +
+        "to embed the current frontend.",
     });
     await expect($("h1")).toHaveText("BugSleuth");
     await expect($("#run")).toBeExisting();
@@ -80,7 +79,7 @@ describe("BugSleuth desktop app", () => {
     const names: string[] = [];
     for (const pill of found) names.push(await pill.getText());
     const joined = names.join(" ");
-    for (const vendor of ["claude", "codex", "kilo"]) {
+    for (const vendor of ["claude", "codex", "cursor", "opencode"]) {
       assert.ok(joined.includes(vendor), `${vendor} missing from ${joined}`);
     }
   });
@@ -97,7 +96,7 @@ describe("BugSleuth desktop app", () => {
     await expect($("#uncovered-warning")).toBeDisplayed();
     await expect($("#uncovered-warning")).toHaveText(/NOT SWEPT/);
     await expect($("#run")).toBeDisabled();
-    await $("#repo").setValue("");
+    await $("#repo").clearValue();
     // WebDriver's empty setValue uses the native clear command, which WebView2
     // does not turn into an input event. Dispatch the same event a user edit
     // sends so the app observes the cleared field.

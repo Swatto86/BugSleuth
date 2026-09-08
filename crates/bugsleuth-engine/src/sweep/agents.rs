@@ -21,8 +21,7 @@ pub(crate) fn support(vendor: Vendor, _model: &str) -> Result<&'static str, &'st
         Vendor::Codex => Ok(
             "Use multiple Codex subagents in parallel, dividing this lane into independent search areas. Keep every subagent read-only and inside this mandate, then verify and synthesize their evidence into your one required JSON response. If delegation is unavailable, continue alone.",
         ),
-        Vendor::Kilo => Err("Kilo's read-only Ask agent cannot delegate"),
-        Vendor::Kimi => Err("Kimi has no subagent mode BugSleuth can ask for"),
+        Vendor::OpenCode => Err("OpenCode's read-only review agent cannot delegate"),
         Vendor::Cursor => Err("Cursor Ask mode has no subagent mode BugSleuth can ask for"),
     }
 }
@@ -38,9 +37,8 @@ pub fn cannot_delegate() -> Vec<&'static str> {
     [
         Vendor::Claude,
         Vendor::Codex,
-        Vendor::Kilo,
-        Vendor::Kimi,
         Vendor::Cursor,
+        Vendor::OpenCode,
     ]
     .into_iter()
     .filter(|vendor| support(*vendor, "").is_err())
@@ -58,9 +56,8 @@ mod tests {
         for vendor in [
             Vendor::Claude,
             Vendor::Codex,
-            Vendor::Kilo,
-            Vendor::Kimi,
             Vendor::Cursor,
+            Vendor::OpenCode,
         ] {
             match support(vendor, "") {
                 Ok(instruction) => assert!(
@@ -81,7 +78,7 @@ mod tests {
     #[test]
     fn the_refusing_vendors_are_derived_from_the_same_answer() {
         let refusing = cannot_delegate();
-        assert_eq!(refusing, ["kilo", "kimi", "cursor"], "{refusing:?}");
+        assert_eq!(refusing, ["cursor", "opencode"], "{refusing:?}");
         assert!(support(Vendor::Claude, "").is_ok());
         assert!(support(Vendor::Codex, "").is_ok());
     }

@@ -63,6 +63,7 @@ const INSTRUCTION_FILES: &[&str] = &[
 /// worktree contained that file. This is the reviewed repository granting
 /// itself permissions its reviewer had refused.
 const INSTRUCTION_DIRS: &[&str] = &[
+    ".opencode",
     ".kilo",
     ".kilocode",
     // Kimi discovers agent profiles and skills from project directories, which

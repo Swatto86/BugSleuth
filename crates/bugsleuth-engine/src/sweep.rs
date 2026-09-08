@@ -15,8 +15,7 @@ use bugsleuth_domain::{Lane, ModelId, RawFinding};
 use bugsleuth_provider::claude::{self, ClaudeSweep};
 use bugsleuth_provider::codex::{self, CodexSweep};
 use bugsleuth_provider::cursor::{self, CursorSweep};
-use bugsleuth_provider::kilo::{self, KiloSweep};
-use bugsleuth_provider::kimi::{self, KimiSweep};
+use bugsleuth_provider::opencode::{self, OpenCodeSweep};
 use bugsleuth_provider::process::redact_secrets;
 
 use crate::brief;
@@ -93,7 +92,7 @@ async fn invoke_vendor(
         })
         .await
         .map(|r| (r.findings.findings, None, r.salvaged, None)),
-        Vendor::Kilo => kilo::sweep(KiloSweep {
+        Vendor::OpenCode => opencode::sweep(OpenCodeSweep {
             worktree: reviewed,
             model,
             effort: request.effort,
@@ -102,19 +101,7 @@ async fn invoke_vendor(
             binary: request.binary,
         })
         .await
-        .map(|r| (r.findings.findings, None, r.salvaged, None)),
-        // No effort: Kimi has no reasoning-depth flag, and inventing one would
-        // send a value its CLI rejects. `plan::check_effort` refuses the
-        // combination before a sweep is paid for.
-        Vendor::Kimi => kimi::sweep(KimiSweep {
-            worktree: reviewed,
-            model,
-            brief,
-            timeout: request.timeout,
-            binary: request.binary,
-        })
-        .await
-        .map(|r| (r.findings.findings, None, false, None)),
+        .map(|r| (r.findings, None, false, None)),
         Vendor::Cursor => cursor::sweep(CursorSweep {
             worktree: reviewed,
             model,
@@ -175,6 +162,10 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
         usage: None,
     };
 
+    if let Err(error) = Vendor::validate(request.model) {
+        return not_swept(error.to_string());
+    }
+
     let agents_instruction = if use_agents {
         // The reason comes from the same answer as the capability, so a vendor
         // that cannot delegate is refused in its own terms rather than in
@@ -194,24 +185,6 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
         vendor.enforces_schema(),
         agents_instruction,
     );
-
-    // Kilo's sweep runs under the globally configured `ask` agent, whose
-    // `deny` rules the CLI honours even under `--auto` — measured against the
-    // real binary with the flags in `kilo::BASE_FLAGS`, not inferred from the
-    // help text, which describes `--auto` as approving everything. What it
-    // actually overrides is `ask`, never `deny`. Under those flags an edit was
-    // refused, `bash` was refused, and a read outside `--dir` was refused by
-    // the `external_directory` rule.
-    //
-    // The gate is the user's own config, so verify it rather than trust it. A
-    // reviewed repository is attacker input: shell, external paths, edits,
-    // skills, subagents, network and unknown future tools all need to default
-    // to denied, rather than inheriting one developer's current setup.
-    if vendor == Vendor::Kilo
-        && let Some(error) = precheck::kilo_permission_error()
-    {
-        return not_swept(error);
-    }
 
     // A vendor that cannot be run read-only gets a throwaway checkout instead.
     // The worktree is held for the whole sweep and deletes itself on drop.
@@ -294,19 +267,17 @@ pub(crate) async fn run_with_agents(request: Request<'_>, use_agents: bool) -> L
 /// that is installed but not signed in. The desktop's selected-provider check
 /// proves that.
 pub async fn probe_all() -> Vec<(&'static str, Result<String, String>)> {
-    let (claude, codex, kilo, kimi, cursor) = tokio::join!(
+    let (claude, codex, cursor, opencode) = tokio::join!(
         claude::probe(),
         codex::probe(),
-        kilo::probe(),
-        kimi::probe(),
-        cursor::probe()
+        cursor::probe(),
+        opencode::probe()
     );
     vec![
         ("claude", claude.map_err(|e| e.to_string())),
         ("codex", codex.map_err(|e| e.to_string())),
-        ("kilo", kilo.map_err(|e| e.to_string())),
-        ("kimi", kimi.map_err(|e| e.to_string())),
         ("cursor", cursor.map_err(|e| e.to_string())),
+        ("opencode", opencode.map_err(|e| e.to_string())),
     ]
 }
 

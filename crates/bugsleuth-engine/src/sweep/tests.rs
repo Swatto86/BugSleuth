@@ -41,12 +41,12 @@ fn selected_providers_are_checked_once_before_lane_work() {
     let models = vec![
         "sonnet".to_string(),
         "claude:opus".to_string(),
-        "kilo:kilo/zai-coding/glm-5.2".to_string(),
-        "kilo:openrouter/another".to_string(),
+        "opencode:opencode/zai-coding/glm-5.2".to_string(),
+        "opencode:openrouter/another".to_string(),
     ];
     assert_eq!(
         precheck::vendors_for(&models),
-        vec![Vendor::Claude, Vendor::Kilo]
+        vec![Vendor::Claude, Vendor::OpenCode]
     );
 }
 
@@ -60,37 +60,37 @@ fn provider_precheck_failures_are_reported_together() {
             Vendor::Claude,
             SignIn::Failed(format!("run `claude login`; token={credential}")),
         ),
-        (Vendor::Kilo, SignIn::TimedOut(60)),
+        (Vendor::OpenCode, SignIn::TimedOut(60)),
     ])
     .expect_err("two unusable providers passed");
     assert!(error.contains("before any lane started"), "{error}");
     assert!(error.contains("claude login"), "{error}");
-    assert!(error.contains("kilo"), "{error}");
+    assert!(error.contains("opencode"), "{error}");
     assert!(error.contains("60s"), "{error}");
     assert!(!error.contains(credential), "{error}");
     assert!(error.contains("<redacted-credential>"), "{error}");
 }
 
 #[test]
-fn kilo_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode() {
+fn opencode_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode() {
     assert_eq!(
-        Vendor::parse("kilo:anthropic/claude-sonnet-4-5"),
-        (Vendor::Kilo, "anthropic/claude-sonnet-4-5")
+        Vendor::parse("opencode:anthropic/claude-sonnet-4-5"),
+        (Vendor::OpenCode, "anthropic/claude-sonnet-4-5")
     );
-    assert!(Vendor::Kilo.needs_isolation());
+    assert!(Vendor::OpenCode.needs_isolation());
     assert!(!Vendor::Claude.needs_isolation());
     assert!(!Vendor::Codex.needs_isolation());
 }
 
 #[test]
-fn only_kilo_needs_the_schema_spelled_out_in_its_prompt() {
-    assert!(!Vendor::Kilo.enforces_schema());
+fn only_opencode_needs_the_schema_spelled_out_in_its_prompt() {
+    assert!(!Vendor::OpenCode.enforces_schema());
     assert!(Vendor::Claude.enforces_schema());
     assert!(Vendor::Codex.enforces_schema());
 }
 
 #[test]
-fn supported_vendors_get_their_own_agent_wording_and_kilo_gets_none() {
+fn supported_vendors_get_their_own_agent_wording_and_opencode_gets_none() {
     let claude = super::agents::support(Vendor::Claude, "sonnet").unwrap_or_default();
     let codex = super::agents::support(Vendor::Codex, "").unwrap_or_default();
     assert!(claude.contains("foreground Explore subagents"), "{claude}");
@@ -101,12 +101,12 @@ fn supported_vendors_get_their_own_agent_wording_and_kilo_gets_none() {
     assert!(codex.contains("Codex subagents"), "{codex}");
     // Both non-delegating vendors refuse, each in its own words.
     assert_eq!(
-        super::agents::support(Vendor::Kilo, ""),
-        Err("Kilo's read-only Ask agent cannot delegate")
+        super::agents::support(Vendor::OpenCode, ""),
+        Err("OpenCode's read-only review agent cannot delegate")
     );
     assert_eq!(
-        super::agents::support(Vendor::Kimi, ""),
-        Err("Kimi has no subagent mode BugSleuth can ask for")
+        super::agents::support(Vendor::Cursor, ""),
+        Err("Cursor Ask mode has no subagent mode BugSleuth can ask for")
     );
 }
 
@@ -279,7 +279,7 @@ async fn a_transient_failure_is_retried_once_before_reporting_not_swept() {
 #[tokio::test]
 async fn the_vendor_prefix_never_reaches_the_cli() {
     // 0.2.19 passed the whole spec to `-m`, so every Kilo and Codex sweep in a
-    // run was refused with `Model not found: kilo:kilo/kimi-coding/...` before
+    // run was refused with `Model not found: opencode:opencode/kimi-coding/...` before
     // it read a line of code. Claude exercises the shared split without Kilo's
     // worktree/config preflight or the deliberately disabled Codex review.
     let stub = echoing_stub("model-arg");

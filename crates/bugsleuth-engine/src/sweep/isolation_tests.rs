@@ -9,13 +9,13 @@ use super::*;
 
 /// The pre-check must ask about the model the run will actually use.
 ///
-/// Kilo authenticates per route: an Ollama model, an OpenRouter key, a Kilo plan
+/// OpenCode authenticates per route: an Ollama model, an OpenRouter key, a OpenCode plan
 /// and the configured default are each available or not independently. Reducing
-/// the plan to "wants Kilo" and asking the default therefore gated every lane on
+/// the plan to "wants OpenCode" and asking the default therefore gated every lane on
 /// an invocation the run was never going to make — and passed runs whose real
 /// route was signed out.
 #[tokio::test]
-async fn selected_kilo_model_is_the_one_prechecked() {
+async fn selected_opencode_model_is_the_one_prechecked() {
     let dir = std::env::temp_dir()
         .join("bugsleuth-precheck-route")
         .join(format!("{}", std::process::id()));
@@ -25,7 +25,7 @@ async fn selected_kilo_model_is_the_one_prechecked() {
 
     #[cfg(windows)]
     let stub = {
-        let path = dir.join("kilo.cmd");
+        let path = dir.join("opencode.cmd");
         std::fs::write(
             &path,
             format!(
@@ -39,7 +39,7 @@ async fn selected_kilo_model_is_the_one_prechecked() {
     #[cfg(not(windows))]
     let stub = {
         use std::os::unix::fs::PermissionsExt;
-        let path = dir.join("kilo.sh");
+        let path = dir.join("opencode.sh");
         std::fs::write(
             &path,
             format!(
@@ -52,9 +52,12 @@ async fn selected_kilo_model_is_the_one_prechecked() {
         path
     };
 
-    let outcome =
-        bugsleuth_provider::kilo::signin_for("ollama/qwen", "high", Some(&stub.to_string_lossy()))
-            .await;
+    let outcome = bugsleuth_provider::opencode::signin_for(
+        "ollama/qwen",
+        "high",
+        Some(&stub.to_string_lossy()),
+    )
+    .await;
     assert!(
         !outcome.usable(),
         "the stub exits non-zero, so this must not read as a working session"
@@ -66,7 +69,7 @@ async fn selected_kilo_model_is_the_one_prechecked() {
         "the check no longer uses the sweep's own arguments: {argv}"
     );
     assert!(
-        argv.contains("-m ollama/qwen"),
+        argv.contains("--model ollama/qwen"),
         "the pre-check asked about a different route from the one selected: {argv}"
     );
     assert!(
@@ -76,51 +79,15 @@ async fn selected_kilo_model_is_the_one_prechecked() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-#[tokio::test]
-async fn a_kilo_sweep_stops_at_the_preflight_before_doing_any_work() {
-    // Whichever way this machine is configured, a Kilo sweep must consult
-    // the preflight before discovering a provider or building a worktree.
-    // The two outcomes are asserted against each other rather than against
-    // a fixed expectation, because the honest answer depends on the config:
-    // a refusal must name the open tool, and a pass must mean the config
-    // really denies all host capabilities. Both halves of `permission_gap`
-    // are tested directly, against written configs, in the provider crate.
-    let report = run(Request {
-        repo: Path::new("."),
-        lane: Lane::Security,
-        model: "kilo:some/model",
-        scope: None,
-        effort: "",
-        max_turns: 1,
-        timeout: Duration::from_secs(1),
-        api_key: None,
-        binary: None,
-    })
-    .await;
-
-    match (kilo::preflight::permission_gap(), report.status) {
-        (Some(gap), Status::NotSwept { reason }) => assert!(
-            reason.contains(&gap),
-            "the refusal did not carry the permission gap: {reason}"
-        ),
-        (Some(gap), other) => {
-            panic!("permissions are open ({gap}) but the sweep was not refused: {other:?}")
-        }
-        // Permissions safe: the preflight is satisfied and the sweep proceeds
-        // to the next failure, which without a Kilo binary is a real one.
-        (None, _) => {}
-    }
-}
-
-/// Kilo must refuse a partial checkout rather than review it quietly.
+/// OpenCode must refuse a partial checkout rather than review it quietly.
 ///
 /// `git worktree add` checks out gitlinks without initializing their contents,
-/// so Kilo's throwaway worktree holds an empty directory where an initialized
+/// so OpenCode's throwaway worktree holds an empty directory where an initialized
 /// submodule's source is. Claude and Codex read the main checkout and see it.
 /// The result came back as an ordinary swept lane that had reviewed less code,
 /// which is precisely the silent gap this tool exists to prevent.
 #[tokio::test]
-async fn kilo_does_not_silently_omit_submodule_contents() {
+async fn opencode_does_not_silently_omit_submodule_contents() {
     let dir = std::env::temp_dir()
         .join("bugsleuth-submodule-sweep")
         .join(format!("{}", std::process::id()));
@@ -183,11 +150,11 @@ async fn kilo_does_not_silently_omit_submodule_contents() {
         "the fixture has no gitlink, so there is no partial checkout to detect"
     );
 
-    // The guard itself, not `run()`. Reaching it through `run` puts the Kilo
-    // permission precheck in front, so on a machine with no Kilo config the
+    // The guard itself, not `run()`. Reaching it through `run` puts the OpenCode
+    // permission precheck in front, so on a machine with no OpenCode config the
     // lane is refused for that reason instead and this test would pass or fail
     // on how the host happens to be set up rather than on the defect.
-    let refusal = isolate::checkout_for(Vendor::Kilo, &parent)
+    let refusal = isolate::checkout_for(Vendor::OpenCode, &parent)
         .expect_err("a partial checkout was accepted for review");
 
     // The exact reason. Asserting only that it was refused would be satisfied

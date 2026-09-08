@@ -109,11 +109,10 @@ pub async fn check_all() -> Vec<(&'static str, SignIn)> {
 
     let wants_claude = cli_installed("claude");
     let wants_codex = cli_installed("codex");
-    let wants_kilo = cli_installed("kilo");
-    let wants_kimi = cli_installed("kimi");
     let wants_cursor = cli_installed("cursor");
+    let wants_opencode = cli_installed("opencode");
 
-    let (claude, codex, kilo, kimi, cursor) = tokio::join!(
+    let (claude, codex, cursor, opencode) = tokio::join!(
         async {
             if wants_claude {
                 Some(("claude", crate::claude::signin(None).await))
@@ -129,28 +128,21 @@ pub async fn check_all() -> Vec<(&'static str, SignIn)> {
             }
         },
         async {
-            if wants_kilo {
-                Some(("kilo", crate::kilo::signin().await))
-            } else {
-                None
-            }
-        },
-        async {
-            if wants_kimi {
-                Some(("kimi", crate::kimi::signin().await))
-            } else {
-                None
-            }
-        },
-        async {
             if wants_cursor {
                 Some(("cursor", crate::cursor::signin().await))
             } else {
                 None
             }
         },
+        async {
+            if wants_opencode {
+                Some(("opencode", crate::opencode::signin_for("", "", None).await))
+            } else {
+                None
+            }
+        },
     );
-    [claude, codex, kilo, kimi, cursor]
+    [claude, codex, cursor, opencode]
         .into_iter()
         .flatten()
         .collect()

@@ -59,7 +59,7 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
         "input_tokens=120 output_tokens=12",
     );
     seed(
-        "kilo:",
+        "opencode:",
         "Calculating the average price of an empty inventory panics",
         "An empty inventory has length zero so this integer division panics.",
         "input_tokens=80 output_tokens=8",
@@ -75,7 +75,7 @@ async fn a_fully_resumed_run_merges_previous_sweeps_without_calling_any_model() 
                 passes: 1,
             },
             ModelPlan {
-                id: "kilo:".into(),
+                id: "opencode:".into(),
                 lanes: vec!["correctness".into()],
                 effort: String::new(),
                 use_agents: false,

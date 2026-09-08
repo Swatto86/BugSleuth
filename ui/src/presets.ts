@@ -22,12 +22,12 @@ export function preset(name: Preset): ModelSetting[] {
       // One vendor, every lane. Fewest invocations that still reviews everything.
       return [{ id: "haiku", lanes: [...LANES], effort: "", passes: 1 }];
     case "deep":
-      // Claude on every lane, Kilo doubled on the two where a second view
+      // Claude on every lane, OpenCode doubled on the two where a second view
       // pays for itself.
       return [
         { id: "opus", lanes: [...LANES], effort: "", passes: 1 },
         {
-          id: "kilo:",
+          id: "opencode:",
           lanes: ["correctness", "security"],
           effort: "",
           passes: 1,

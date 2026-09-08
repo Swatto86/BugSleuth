@@ -58,17 +58,17 @@ fn claude_effort_is_validated_per_model() {
 
 #[test]
 fn a_vendor_whose_levels_are_discovered_at_runtime_is_not_second_guessed() {
-    // Kilo passes --variant through to whichever provider is behind the
+    // OpenCode passes --variant through to whichever provider is behind the
     // model, so its accepted values belong to that model. Refusing what
     // cannot be enumerated would block valid configurations.
-    assert!(plan(&with_effort("kilo:some/model", "thinking")).is_ok());
-    assert!(plan(&with_effort("kilo:some/model", "anything-at-all")).is_ok());
+    assert!(plan(&with_effort("opencode:some/model", "thinking")).is_ok());
+    assert!(plan(&with_effort("opencode:some/model", "anything-at-all")).is_ok());
 }
 
 #[test]
-fn kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to() {
+fn opencode_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to() {
     let config: Config = serde_json::from_str(
-        r#"{"models":[{"id":"kilo:anthropic/claude-sonnet-5","lanes":["security"],"effort":"thinking","use_agents":true}]}"#,
+        r#"{"models":[{"id":"opencode:anthropic/claude-sonnet-5","lanes":["security"],"effort":"thinking","use_agents":true}]}"#,
     )
     .expect("config parses");
     let message = plan(&config).map(|_| ()).unwrap_err().to_string();
@@ -137,7 +137,7 @@ fn plan_accepts_codex_repository_review() {
 fn two_models_on_one_lane_is_two_units_because_that_is_the_point() {
     let plan = plan(&config(&[
         ("sonnet", &["correctness"]),
-        ("kilo:", &["correctness"]),
+        ("opencode:", &["correctness"]),
     ]))
     .unwrap_or_else(|e| panic!("plan failed: {e}"));
     assert_eq!(plan.units.len(), 2);
@@ -164,12 +164,12 @@ fn an_unknown_lane_name_is_rejected_rather_than_silently_skipped() {
 #[test]
 fn every_provider_runs_at_most_one_sweep_per_batch() {
     // No provider publishes a safe maximum for independent authenticated CLI
-    // processes, and two real Kilo processes collided in its credential store.
+    // processes, and two real OpenCode processes collided in its credential store.
     // Different providers may overlap, but one provider must stay serial.
     let plan = plan(&config(&[
         ("sonnet", &["security", "ux"]),
-        ("kimi:model", &["security", "ux"]),
-        ("kilo:model", &["security", "ux"]),
+        ("cursor:model", &["security", "ux"]),
+        ("opencode:model", &["security", "ux"]),
     ]))
     .unwrap_or_else(|e| panic!("plan failed: {e}"));
 
@@ -184,7 +184,7 @@ fn every_provider_runs_at_most_one_sweep_per_batch() {
 fn batching_runs_every_unit_exactly_once() {
     let plan = plan(&config(&[
         ("sonnet", &["correctness", "security", "ux"]),
-        ("kilo:", &["correctness"]),
+        ("opencode:", &["correctness"]),
     ]))
     .unwrap_or_else(|e| panic!("plan failed: {e}"));
 
@@ -197,7 +197,7 @@ fn a_bare_model_name_is_treated_as_the_claude_vendor_for_batching() {
     assert_eq!(vendor_of("sonnet"), "claude");
     assert_eq!(vendor_of("claude:opus"), "claude");
     assert_eq!(vendor_of("codex:gpt"), "codex");
-    assert_eq!(vendor_of("kilo:"), "kilo");
+    assert_eq!(vendor_of("opencode:"), "opencode");
     // A model id that merely contains a colon is not a vendor prefix.
     assert_eq!(vendor_of("anthropic:claude-opus-5"), "claude");
 }
@@ -224,16 +224,16 @@ fn canonical_spec_collapses_claude_but_keeps_the_default_and_other_vendors() {
     assert_eq!(canonical_spec("claude:"), "claude:");
     assert_eq!(canonical_spec("codex:gpt-5.6"), "codex:gpt-5.6");
     assert_eq!(canonical_spec(" codex:gpt "), "codex:gpt");
-    assert_eq!(canonical_spec("kilo:z-ai/glm"), "kilo:z-ai/glm");
+    assert_eq!(canonical_spec("opencode:z-ai/glm"), "opencode:z-ai/glm");
 }
 
 /// Every vendor prefix must be recognised here, or a model is filed under the
 /// wrong one.
 ///
 /// `vendor_of` decides which effort rules apply and which sweeps may run
-/// concurrently. An unrecognised prefix silently answers "claude", so a Kimi
+/// concurrently. An unrecognised prefix silently answers "claude", so a Cursor
 /// model was checked against Claude's effort rules — which accept anything
-/// unlisted — and an effort Kimi has nowhere to put was waved through instead
+/// unlisted — and an effort Cursor has nowhere to put was waved through instead
 /// of refused. The CLI then ignored it and the report never said the depth
 /// asked for was not applied.
 #[test]
@@ -242,25 +242,25 @@ fn every_vendor_prefix_is_recognised() {
     assert_eq!(super::vendor_of("claude:opus"), "claude");
     assert_eq!(super::vendor_of("codex:gpt-5.6-codex"), "codex");
     assert_eq!(super::vendor_of(" codex:gpt "), "codex");
-    assert_eq!(super::vendor_of("kilo:kilo/x"), "kilo");
+    assert_eq!(super::vendor_of("opencode:opencode/x"), "opencode");
     assert_eq!(
-        super::vendor_of("kimi:kimi-code/k3"),
-        "kimi",
-        "a Kimi model was filed under another vendor's rules"
+        super::vendor_of("cursor:cursor-code/k3"),
+        "cursor",
+        "a Cursor model was filed under another vendor's rules"
     );
     assert_eq!(
-        super::canonical_spec("kimi:kimi-code/k3"),
-        "kimi:kimi-code/k3"
+        super::canonical_spec("cursor:cursor-code/k3"),
+        "cursor:cursor-code/k3"
     );
 }
 
-/// And the effort refusal actually reaches a Kimi model.
+/// And the effort refusal actually reaches a Cursor model.
 #[test]
 fn an_effort_is_refused_for_a_vendor_that_has_no_such_flag() {
-    let error = super::check_effort("kimi:kimi-code/k3", "high")
-        .expect_err("Kimi has no effort flag, so an effort must not be accepted");
-    assert!(error.to_string().contains("kimi"), "{error}");
-    assert!(super::check_effort("kimi:kimi-code/k3", "").is_ok());
+    let error = super::check_effort("cursor:cursor-code/k3", "high")
+        .expect_err("Cursor has no effort flag, so an effort must not be accepted");
+    assert!(error.to_string().contains("cursor"), "{error}");
+    assert!(super::check_effort("cursor:cursor-code/k3", "").is_ok());
 }
 
 #[test]

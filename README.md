@@ -34,20 +34,34 @@ the app, and doing that during a review would throw away sweeps you have paid
 for. Only the installed build updates itself — the portable `.exe` cannot
 replace itself while running, so that one stays manual.
 
-**Releases publish the Windows assets.** Linux and macOS are still supported and
-still built from the same job — they are built on request rather than every
-time, because building and verifying three sets of artifacts for a tool with one
-user on Windows was work with nobody at the other end. To get them for a
-release: Actions → **release** → Run workflow, choose that release's **tag**, and
-set platforms to `all`. The assets appear on the existing release beside the
-Windows ones.
+**Tagged releases publish Windows and Linux assets.** On Omarchy, use the
+Linux AppImage. Windows needs WebView2; the unpackaged Linux executable needs
+WebKitGTK 4.1 and the GTK/AppIndicator runtime libraries. macOS artifacts can be
+added by running the release workflow against the release tag with platforms
+set to `all`.
 
-**You also need at least one vendor CLI**, signed in, on your `PATH`: `claude`,
-`codex` or `kilo`. BugSleuth drives them under your existing subscription — it
-holds no API key and bills nothing itself. Before the desktop app starts any
-lane, it asks each selected provider for one word so a missing session or
-unhealthy CLI fails fast; the Providers panel can perform the same sign-in check
-for all providers.
+**You also need at least one configured coding CLI** on your `PATH`: `claude`,
+`codex`, `agent` (Cursor), or `opencode`. BugSleuth uses each
+CLI's own authentication and provider configuration. Billing follows the selected
+provider; local OpenCode models do not require a cloud subscription.
+
+OpenCode models are read from `opencode models --pure --verbose`, including
+configured Ollama, LM Studio and custom provider entries. Select **opencode**
+and enter the exact `provider/model` ID, including any local tag (for example
+`ollama/qwen3:8b`). In JSON settings and CLI arguments this becomes
+`opencode:ollama/qwen3:8b`. Model boxes also accept IDs absent from a catalogue,
+so a newly available model need not wait for a BugSleuth release. OpenCode
+reasoning variants are read from the selected model's catalogue entry.
+
+Configure OpenCode providers globally: review checkouts discard repository-local
+agent and provider configuration. Reviews use a private agent allowing only
+read, glob and grep; Apply permits edits and shell commands in a separate
+invocation. The selected OpenCode model is checked before a multi-lane run,
+so an unavailable cloud default does not prevent use of a working local model.
+
+Before the desktop app starts a lane, it asks the selected providers for a short
+answer; the Providers panel can also check the configured defaults. A listed model
+still needs a working provider connection and sufficient capacity to complete a review.
 
 ## The two ideas
 
@@ -83,8 +97,7 @@ Hover a lane heading for the defects that lane is assigned to hunt.
 The optional **Agents** box asks Claude or Codex to split that row's lane work
 across parallel subagents, which uses more tokens. Claude uses one small
 Ultracode run with two foreground agents (the runtime allows at most 16 concurrently);
-Codex chooses its own fan-out. It is unavailable for Kilo because BugSleuth's
-read-only Kilo Ask agent cannot delegate.
+Codex chooses its own fan-out. It is unavailable for Cursor and OpenCode because their review modes cannot delegate.
 
 Finished results show expandable finding cards and a plain-text report split
 into coverage, summary, interpretation, limits, and actionable findings. **Copy
@@ -110,7 +123,7 @@ in; use **Check sign-in** in the desktop app for that.
 cargo run -p bugsleuth-cli -- sweep --repo <path> --lane correctness --model sonnet --json-out run.json
 ```
 
-`--model` takes `vendor:model`. A bare name means Claude. `codex:` and `kilo:`
+`--model` takes `vendor:model`. A bare name means Claude. `codex:`, `cursor:` and `opencode:`
 with nothing after them use each CLI's own default.
 
 ```bash
@@ -123,11 +136,10 @@ together, but one provider's sweeps run sequentially because the CLIs publish no
 safe process limit. Each sweep is written out as it lands, so `--resume` picks
 up a run that died without paying for the sweeps it already completed.
 
-If an individual Claude, Codex, or Kilo process times out, BugSleuth keeps its
+If an individual Claude or Codex process times out, BugSleuth keeps its
 partial CLI output and resumes that same session once for an answer-only pass.
 It also handles each provider's native interruption signal: Claude continues an
-interrupted resumed turn, Codex resumes a transient failed turn, and Kilo's exit
-code 124 is treated as its own timeout. Recovered findings are labelled as
+interrupted resumed turn and Codex resumes a transient failed turn. Recovered findings are labelled as
 potentially incomplete; a run with no usable session id remains `NOT SWEPT`
 rather than silently restarting from scratch.
 
@@ -156,8 +168,7 @@ repository you care about:
 
 - **A review cannot modify the code it reviews.** Claude runs with an explicit
   tool allowlist and no write tools. Codex runs with `--sandbox read-only`.
-  Kilo has neither, so its sweeps run in a disposable git worktree — the
-  adapter's input type makes the unsafe call impossible to write.
+  Cursor and OpenCode use disposable git worktrees and read-only tool permissions.
 - **The reviewed repository cannot alter its own review.** Every vendor runs with
   its customizations disabled, so a repository's own hooks, agent config or rules
   are not loaded.

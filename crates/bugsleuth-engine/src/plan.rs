@@ -117,6 +117,7 @@ impl Plan {
 /// the model, so its accepted values are discovered at runtime; refusing what
 /// we cannot enumerate would block valid configurations.
 pub fn check_effort(id: &str, effort: &str) -> Result<()> {
+    crate::sweep::Vendor::validate(id)?;
     if effort.is_empty() {
         return Ok(());
     }
@@ -156,7 +157,7 @@ pub fn check_effort(id: &str, effort: &str) -> Result<()> {
 fn vendor_of(model: &str) -> String {
     let model = model.trim();
     match model.split_once(':') {
-        Some((vendor, _)) if matches!(vendor, "claude" | "codex" | "kilo" | "kimi" | "cursor") => {
+        Some((vendor, _)) if matches!(vendor, "claude" | "codex" | "cursor" | "opencode") => {
             vendor.to_string()
         }
         _ => "claude".to_string(),
@@ -176,7 +177,7 @@ pub fn canonical_spec(spec: &str) -> String {
     match spec.split_once(':') {
         Some(("claude", model)) if !model.trim().is_empty() => model.trim().to_string(),
         Some(("claude", _)) => "claude:".to_string(),
-        Some((vendor, model)) if matches!(vendor, "codex" | "kilo" | "kimi" | "cursor") => {
+        Some((vendor, model)) if matches!(vendor, "codex" | "cursor" | "opencode") => {
             format!("{vendor}:{}", model.trim())
         }
         _ => spec.to_string(),

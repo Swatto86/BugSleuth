@@ -2,7 +2,7 @@
 
 use bugsleuth_provider::process::redact_secrets;
 use bugsleuth_provider::signin::SignIn;
-use bugsleuth_provider::{claude, codex, cursor, kilo, kimi};
+use bugsleuth_provider::{claude, codex, cursor, opencode};
 
 use super::Vendor;
 
@@ -10,24 +10,12 @@ pub(super) fn vendors_for(models: &[String]) -> Vec<Vendor> {
     [
         Vendor::Claude,
         Vendor::Codex,
-        Vendor::Kilo,
-        Vendor::Kimi,
         Vendor::Cursor,
+        Vendor::OpenCode,
     ]
     .into_iter()
     .filter(|vendor| models.iter().any(|model| Vendor::parse(model).0 == *vendor))
     .collect()
-}
-
-pub(super) fn kilo_permission_error() -> Option<String> {
-    kilo::preflight::permission_gap().map(|gap| {
-        format!(
-            "kilo: not usable — Kilo sweeps require a deny-by-default `ask` agent because \
-             reviewed source is attacker input: {gap}. Set `\"*\": \"deny\"`, then \
-             explicitly allow only `read`, `glob`, and `grep` inside that agent's \
-             permission block."
-        )
-    })
 }
 
 fn finish(checks: Vec<(Vendor, SignIn)>, extra_failures: Vec<String>) -> Result<(), String> {
@@ -85,13 +73,10 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
     let vendors = vendors_for(models);
     let wants_claude = vendors.contains(&Vendor::Claude);
     let wants_codex = vendors.contains(&Vendor::Codex);
-    let wants_kilo = vendors.contains(&Vendor::Kilo);
-    let wants_kimi = vendors.contains(&Vendor::Kimi);
     let wants_cursor = vendors.contains(&Vendor::Cursor);
-    let kilo_error = wants_kilo.then(kilo_permission_error).flatten();
-    let check_kilo = wants_kilo && kilo_error.is_none();
+    let wants_opencode = vendors.contains(&Vendor::OpenCode);
 
-    let (claude_result, codex_result, kilo_result, kimi_result, cursor_result) = tokio::join!(
+    let (claude_result, codex_result, cursor_result, opencode_result) = tokio::join!(
         async {
             if wants_claude {
                 Some((Vendor::Claude, claude::signin(None).await))
@@ -108,36 +93,21 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
         },
         async {
             let mut results = Vec::new();
-            if check_kilo {
-                // Sequentially, and one per distinct selected route. Kilo
-                // processes share a mutable credential store, so concurrent
-                // invocations collide there; and each route authenticates
-                // separately, so the configured default's answer says nothing
-                // about the model this run will actually ask for.
-                for (model, effort) in routes_for(Vendor::Kilo, units) {
-                    results.push((Vendor::Kilo, kilo::signin_for(&model, &effort, None).await));
-                }
-            }
-            results
-        },
-        async {
-            let mut results = Vec::new();
-            if wants_kimi {
-                // Per selected model, for the reason the adapter exists: a Kimi
-                // subscription and a key-based route do not reach the same
-                // models, so the configured default's answer says nothing about
-                // the one this run asked for.
-                for (model, _) in routes_for(Vendor::Kimi, units) {
-                    results.push((Vendor::Kimi, kimi::signin_for(&model, None).await));
-                }
-            }
-            results
-        },
-        async {
-            let mut results = Vec::new();
             if wants_cursor {
                 for (model, _) in routes_for(Vendor::Cursor, units) {
                     results.push((Vendor::Cursor, cursor::signin_for(&model, None).await));
+                }
+            }
+            results
+        },
+        async {
+            let mut results = Vec::new();
+            if wants_opencode {
+                for (model, effort) in routes_for(Vendor::OpenCode, units) {
+                    results.push((
+                        Vendor::OpenCode,
+                        opencode::signin_for(&model, &effort, None).await,
+                    ));
                 }
             }
             results
@@ -148,10 +118,9 @@ pub async fn selected(units: &[crate::plan::Unit]) -> Result<(), String> {
         [claude_result, codex_result]
             .into_iter()
             .flatten()
-            .chain(kilo_result)
-            .chain(kimi_result)
             .chain(cursor_result)
+            .chain(opencode_result)
             .collect(),
-        kilo_error.into_iter().collect(),
+        vec![],
     )
 }

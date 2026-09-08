@@ -13,8 +13,7 @@ describe("parallel review agents", () => {
       $("#matrix-body tr:first-child td:first-child select");
     const agents = () =>
       $("#matrix-body tr:first-child td.agent-cell input[type=checkbox]");
-    const effort = () =>
-      $("#matrix-body tr:first-child td.effort-cell select");
+    const effort = () => $("#matrix-body tr:first-child td.effort-cell select");
 
     await provider().selectByAttribute("value", "claude");
     await browser.waitUntil(
@@ -33,7 +32,7 @@ describe("parallel review agents", () => {
     await expect(effort()).toBeDisabled();
     assert.equal(await effort().getText(), "Ultracode");
 
-    await provider().selectByAttribute("value", "kilo");
+    await provider().selectByAttribute("value", "opencode");
     await expect(agents()).toBeDisabled();
     await expect(agents()).not.toBeSelected();
     assert.match(

@@ -149,10 +149,10 @@ test("a blank row makes the configuration unrunnable, exactly like the engine", 
   );
 });
 
-test("agents are available for Claude and Codex but not Kilo Ask", () => {
+test("agents are available for Claude and Codex but not OpenCode Ask", () => {
   assert.equal(supportsAgents("sonnet"), true);
   assert.equal(supportsAgents("codex:"), true);
-  assert.equal(supportsAgents("kilo:model"), false);
+  assert.equal(supportsAgents("opencode:model"), false);
   assert.equal(usesUltracode("fable"), true);
   assert.equal(usesUltracode("sonnet"), true);
   assert.equal(usesUltracode("haiku"), false);
@@ -163,7 +163,7 @@ test("agents are available for Claude and Codex but not Kilo Ask", () => {
     scope: "",
     models: [
       {
-        id: "kilo:model",
+        id: "opencode:model",
         lanes: ["security"],
         effort: "",
         use_agents: true,
@@ -269,10 +269,10 @@ test("an effort the model does not accept blocks the action", () => {
   );
   assert.equal(canRun(withModel("haiku", ""), catalogue), true);
   assert.equal(canRun(withModel("sonnet", "high"), catalogue), true);
-  // Deliberately open: the backend cannot enumerate Kilo variants or the
+  // Deliberately open: the backend cannot enumerate OpenCode variants or the
   // efforts of a custom Claude model, so neither may be refused here.
   assert.equal(
-    canRun(withModel("kilo:some/model", "anything"), catalogue),
+    canRun(withModel("opencode:some/model", "anything"), catalogue),
     true,
   );
   assert.equal(
@@ -284,7 +284,10 @@ test("an effort the model does not accept blocks the action", () => {
   assert.equal(effortIsValid("haiku", "high", catalogue), false);
   assert.equal(effortIsValid("haiku", "", catalogue), true);
   assert.equal(effortIsValid("sonnet", "low", catalogue), true);
-  assert.equal(effortIsValid("kilo:some/model", "anything", catalogue), true);
+  assert.equal(
+    effortIsValid("opencode:some/model", "anything", catalogue),
+    true,
+  );
   // With no catalogue at all, backend validation stays authoritative rather
   // than every configured action being disabled for the session.
   assert.equal(effortIsValid("haiku", "high", {}), true);
@@ -308,8 +311,8 @@ test("menus only offer vendors whose CLI is installed", () => {
       efforts: [],
       efforts_by_model: {},
     },
-    kilo: {
-      vendor: "kilo",
+    opencode: {
+      vendor: "opencode",
       installed: true,
       error: null,
       groups: [],
@@ -317,11 +320,11 @@ test("menus only offer vendors whose CLI is installed", () => {
       efforts_by_model: {},
     },
   };
-  assert.deepEqual(offeredVendors(catalogue), ["claude", "kilo"]);
+  assert.deepEqual(offeredVendors(catalogue), ["claude", "opencode"]);
   // A stale saved vendor stays visible so the user can switch away from it.
   assert.deepEqual(offeredVendors(catalogue, "codex"), [
     "claude",
-    "kilo",
+    "opencode",
     "codex",
   ]);
   assert.ok(

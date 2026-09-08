@@ -44,6 +44,7 @@ export function vendorCliPresent(
   id: string,
   catalogue: InstallCatalogue,
 ): boolean {
+  if (/^(kilo|kimi):/.test(id.trim())) return false;
   if (Object.keys(catalogue).length === 0) return true;
   const { vendor } = splitId(id);
   const menu = catalogue[vendor];

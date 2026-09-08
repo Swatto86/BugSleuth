@@ -27,10 +27,10 @@ say "rust fmt"
 cargo fmt --all -- --check
 
 say "clippy"
-cargo clippy --workspace --all-targets -- -D warnings
+cargo clippy --locked --workspace --all-targets -- -D warnings
 
 say "rust tests"
-cargo test --workspace
+cargo test --locked --workspace --all-targets
 
 say "frontend types"
 npm run --silent build
@@ -142,18 +142,29 @@ if [ "$over" -gt 0 ]; then
 fi
 echo "file sizes OK (none over $hard lines)"
 
-say "release build (libraries and CLI)"
-# Everything EXCEPT the app crate: building bugsleuth-app with plain cargo
-# poisons Tauri's dev-vs-production cache.
-cargo build --release --workspace --exclude bugsleuth-app
+say "debug application and CLI"
+cargo build --locked --workspace --exclude bugsleuth-app
+npx --no-install tauri build --debug --no-bundle
+
+case "$(uname -s)" in
+  Darwin) echo "WebDriver is unavailable on macOS; Windows and Linux run the suite." ;;
+  *)
+    say "native WebDriver acceptance"
+    if [ -z "${DISPLAY:-}" ] && command -v xvfb-run >/dev/null 2>&1; then
+      xvfb-run -a dbus-run-session -- npm run --silent e2e:run
+    else
+      npm run --silent e2e:run
+    fi
+    ;;
+esac
 
 if [ "$package" = "1" ]; then
-  say "packaged build (clean)"
-  # A full clean first, and not out of caution. Tauri's build script records the
-  # dev-vs-production choice and cargo caches it, so once a plain release build
-  # has recorded "dev", every later `tauri build` reuses it and silently makes
-  # an app whose window is blank without a dev server.
-  cargo clean --release
+  [ "${AGENT_RELEASE:-}" = "1" ] || {
+    echo "Packaging is a separate release/handoff step; set AGENT_RELEASE=1 after debug verification."
+    exit 1
+  }
+  say "release packaging"
+  cargo build --release --workspace --exclude bugsleuth-app
   npx --no-install tauri build
 fi
 

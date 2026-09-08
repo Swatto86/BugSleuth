@@ -30,7 +30,7 @@ async fn run_all(args: RunArgs) -> Result<()> {
         .iter()
         .any(|unit| matches!(sweep::Vendor::parse(&unit.model).0, sweep::Vendor::Claude));
     let max_turns = claude_turn_budget(args.max_turns, uses_claude, DEFAULT_CLAUDE_MAX_TURNS)?;
-    // Triage is a Claude call, so a plan of Codex and Kilo units with a triage
+    // Triage is a Claude call, so a plan of Codex and OpenCode units with a triage
     // model configured still has somewhere to spend the key.
     validate_api_key_target(
         args.use_api_key,
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn api_key_mode_is_refused_for_a_provider_it_cannot_reach() {
         // `--use-api-key` supplies ANTHROPIC_API_KEY. Accepting it for a Codex
-        // or Kilo sweep read the key and then invoked a CLI that never receives
+        // or OpenCode sweep read the key and then invoked a CLI that never receives
         // it, so the signed-in account the user meant to avoid was used and
         // charged anyway.
         assert!(super::validate_api_key_target(false, false).is_ok());
@@ -334,7 +334,7 @@ mod tests {
         ));
         std::fs::write(
             &config,
-            r#"{"models":[{"id":"kilo:","lanes":["security"]}]}"#,
+            r#"{"models":[{"id":"opencode:","lanes":["security"]}]}"#,
         )
         .expect("write config");
         let repo = config.with_extension("missing-repo");

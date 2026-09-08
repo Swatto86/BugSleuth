@@ -10,7 +10,7 @@ use bugsleuth_engine::models::{self, ModelGroup};
 use serde::Serialize;
 
 /// Vendors offered in the model dropdown, in the order they appear.
-const VENDORS: [&str; 5] = ["claude", "codex", "kilo", "kimi", "cursor"];
+const VENDORS: [&str; 4] = ["claude", "codex", "cursor", "opencode"];
 
 /// One vendor's menu.
 #[derive(Serialize)]
@@ -96,8 +96,10 @@ fn missing_cli_reason(vendor: &str) -> String {
         "codex" => {
             "Codex CLI not found. Install the Codex CLI and sign in with `codex login`.".into()
         }
-        "kilo" => "Kilo CLI not found. Install the Kilo CLI to use it here.".into(),
-        "kimi" => "Kimi Code CLI not found. Install it and run `kimi` then /login.".into(),
+        "opencode" => {
+            "OpenCode CLI not found. Install OpenCode and configure a cloud or local provider."
+                .into()
+        }
         "cursor" => {
             "Cursor Agent CLI (`agent`) not found. Install it and run `agent login`.".into()
         }
@@ -108,13 +110,6 @@ fn missing_cli_reason(vendor: &str) -> String {
 /// Why a vendor offers nothing, in words that say what to do about it.
 fn empty_list_reason(vendor: &str) -> String {
     match vendor {
-        // Only shown when the list really is empty, which for Kimi means no
-        // readable ~/.kimi-code/config.toml — the menu is read from that file.
-        "kimi" => concat!(
-            "No models found in ~/.kimi-code/config.toml. Install the Kimi Code CLI and ",
-            "run `kimi` then /login, or type an alias by hand — the box accepts one."
-        )
-        .to_string(),
         "cursor" => concat!(
             "No models returned by `agent models`. Install the Cursor Agent CLI, run ",
             "`agent login`, or type a model id by hand — the box accepts one."
@@ -137,14 +132,14 @@ mod tests {
         // This test asserted Codex was CLI-wide until the catalogue was read
         // and said otherwise. It is listed here rather than inferred, so adding
         // a vendor forces a deliberate answer instead of defaulting to one.
-        const PER_MODEL: [&str; 3] = ["claude", "kilo", "codex"];
+        const PER_MODEL: [&str; 3] = ["claude", "codex", "opencode"];
 
         // And a third answer, which is not the same as having no answer: Kimi
         // has no reasoning-depth flag of any kind, so the only truthful thing
         // its control can do is refuse. `efforts_for` says so explicitly rather
         // than leaving it unknown, and that is what makes the refusal happen —
         // an unknown vendor is waved through on the assumption it knows best.
-        const NO_EFFORT: [&str; 2] = ["kimi", "cursor"];
+        const NO_EFFORT: [&str; 1] = ["cursor"];
 
         // What must never happen is a vendor with none of the three, which
         // would render a control that silently does nothing.

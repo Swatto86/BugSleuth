@@ -37,6 +37,9 @@ export function runBlockReason(
     return "Add at least one model with a lane ticked.";
   }
   for (const model of settings.models) {
+    if (/^(kilo|kimi):/.test(model.id.trim())) {
+      return "Kilo and Kimi support has been removed; replace those saved rows with Claude, Codex, Cursor or OpenCode.";
+    }
     if (model.id.trim() === "") {
       return "Every row needs a model id — finish or remove the empty row.";
     }

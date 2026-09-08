@@ -47,14 +47,14 @@ fn sweep_rejects_invalid_effort_before_starting_a_provider() {
     // absence is what proves nothing was spent.
     assert!(!stderr.contains("Starting Correctness sweep"), "{stderr}");
 
-    let spaced_kimi = Command::new(env!("CARGO_BIN_EXE_bugsleuth"))
+    let spaced_cursor = Command::new(env!("CARGO_BIN_EXE_bugsleuth"))
         .args(["sweep", "--repo"])
         .arg(&repo)
         .args([
             "--lane",
             "correctness",
             "--model",
-            " kimi:kimi-code/k3 ",
+            " cursor:cursor-code/k3 ",
             "--effort",
             "high",
             "--timeout-secs",
@@ -64,10 +64,10 @@ fn sweep_rejects_invalid_effort_before_starting_a_provider() {
         .env("HOME", &empty_home)
         .env("USERPROFILE", &empty_home)
         .output()
-        .expect("run bugsleuth with spaced Kimi model");
-    let stderr = String::from_utf8_lossy(&spaced_kimi.stderr);
-    assert!(!spaced_kimi.status.success(), "{stderr}");
-    assert!(stderr.contains("which kimi does not accept"), "{stderr}");
+        .expect("run bugsleuth with spaced Cursor model");
+    let stderr = String::from_utf8_lossy(&spaced_cursor.stderr);
+    assert!(!spaced_cursor.status.success(), "{stderr}");
+    assert!(stderr.contains("which cursor does not accept"), "{stderr}");
     assert!(!stderr.contains("Starting Correctness sweep"), "{stderr}");
     let _ = std::fs::remove_dir_all(&empty_home);
 }

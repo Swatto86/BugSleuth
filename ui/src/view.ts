@@ -155,7 +155,7 @@ export function matrixRows(
       );
       if (agentControl) {
         const title = !agentsSupported
-          ? `Unavailable: ${selected.vendor} has no subagent mode BugSleuth can ask for.`
+          ? `Unavailable: BugSleuth's read-only ${selected.vendor} review cannot delegate.`
           : selected.vendor === "claude" && usesUltracode(id)
             ? "Use Claude Ultracode with two parallel foreground agents for this lane (provider limit: 16 concurrent). Uses more tokens."
             : `Ask ${selected.vendor === "claude" ? "Claude Code" : "Codex"} to delegate independent parts of this lane in parallel. Uses more tokens.`;

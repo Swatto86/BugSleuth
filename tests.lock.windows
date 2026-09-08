@@ -1,4 +1,5 @@
 platform windows
+node OpenCode local model tags survive selection and storage
 node Run refuses a model whose CLI is not installed
 node Tab with focus outside the dialog's buttons re-enters the trap
 node a bare Claude model never gains a redundant prefix
@@ -67,7 +68,7 @@ node a stored pass count outside the picker presets remains visible
 node a sweep that found nothing is not confusable with one that never ran
 node action references match the complete YAML uses value
 node agent and single-agent prompts are distinct sweeps
-node agents are available for Claude and Codex but not Kilo Ask
+node agents are available for Claude and Codex but not OpenCode Ask
 node an apply that changed nothing does not claim to have applied anything
 node an available update clears the checking status before the install confirmation
 node an awaited call in a catch or finally is not covered by that try
@@ -185,6 +186,7 @@ node quit rechecks active work after its settings flush
 node release asset names exactly match the download table
 node removing a configured model row is guarded by a confirmation
 node render redirects focus when the focused row was just removed
+node retired provider settings remain readable but cannot run or apply
 node rounds are driven by the busiest vendor, not the total
 node run-directory documentation includes the backend path hash
 node safety docs describe the triage exception to lane-relative grades
@@ -236,6 +238,7 @@ node the release checkout is pinned to an immutable revision
 node the release publisher is pinned to an immutable revision
 node the release tag check is enforced by its exit status
 node the release uses the lockfile's Tauri CLI
+node the routine full gate builds debug and drives the real webview
 node the runbook derives the installer name from Tauri's version
 node the scans find things at all, so a passing run means something
 node the settings the window writes are the settings Rust reads
@@ -543,88 +546,6 @@ rust json::tests::candidate_offsets_follow_utf8_boundaries
 rust json::tests::reads_findings_delivered_as_a_json_object
 rust json::tests::reads_findings_delivered_as_a_json_string
 rust json::tests::reads_findings_wrapped_in_a_code_fence
-rust kilo::apply::tests::a_repository_carrying_kilo_configuration_is_refused
-rust kilo::apply::tests::a_repository_that_configures_kilo_is_refused_before_the_cli_starts
-rust kilo::apply::tests::an_apply_never_runs_as_the_read_only_sweep_agent
-rust kilo::apply::tests::an_ordinary_repository_is_applied_into
-rust kilo::apply::tests::the_run_names_its_agent_and_its_directory
-rust kilo::events::signin_extraction_tests::a_run_that_logged_but_never_answered_yields_no_text
-rust kilo::events::signin_extraction_tests::the_models_own_words_come_back
-rust kilo::events::tests::a_malformed_event_is_skipped_rather_than_discarding_the_whole_review
-rust kilo::events::tests::a_message_repeated_by_the_stream_is_not_glued_to_itself
-rust kilo::events::tests::a_session_id_survives_noise_and_truncated_events
-rust kilo::events::tests::a_stream_with_no_text_events_yields_nothing_rather_than_panicking
-rust kilo::events::tests::error_events_accepts_legal_json_whitespace
-rust kilo::events::tests::narration_from_earlier_messages_is_not_mixed_into_the_answer
-rust kilo::events::tests::the_older_flat_event_shape_is_still_read
-rust kilo::preflight::tests::a_blanket_permission_deny_passes
-rust kilo::preflight::tests::a_commented_config_is_read_rather_than_skipped
-rust kilo::preflight::tests::a_config_without_the_sweep_agent_fails_closed
-rust kilo::preflight::tests::a_deny_by_default_config_passes
-rust kilo::preflight::tests::a_missing_config_fails_closed
-rust kilo::preflight::tests::a_missing_entry_is_not_denial
-rust kilo::preflight::tests::a_pattern_list_without_a_wildcard_deny_is_not_denial
-rust kilo::preflight::tests::a_plain_deny_counts
-rust kilo::preflight::tests::a_url_inside_a_string_is_not_mistaken_for_a_comment
-rust kilo::preflight::tests::a_wildcard_deny_counts
-rust kilo::preflight::tests::an_allow_exception_makes_a_wildcard_deny_unsafe
-rust kilo::preflight::tests::an_allowed_shell_is_a_gap
-rust kilo::preflight::tests::an_apply_agent_that_can_edit_is_allowed_through
-rust kilo::preflight::tests::an_apply_agent_that_cannot_edit_is_refused_before_the_run_is_spent
-rust kilo::preflight::tests::an_apply_is_not_refused_merely_because_the_machine_has_no_kilo_config
-rust kilo::preflight::tests::an_ask_rule_is_reported_as_a_gap_and_names_the_tool
-rust kilo::preflight::tests::an_escaped_quote_does_not_end_a_string_early
-rust kilo::preflight::tests::an_open_top_level_wildcard_is_not_hidden_by_a_specific_deny
-rust kilo::preflight::tests::an_unknown_allowed_tool_is_a_gap
-rust kilo::preflight::tests::ask_is_not_denial_because_auto_approves_it
-rust kilo::preflight::tests::comments_are_actually_removed
-rust kilo::preflight::tests::hardening_the_sweep_agent_does_not_block_the_apply_agent
-rust kilo::preflight::tests::the_real_machine_config_is_readable_when_present
-rust kilo::recover::tests::recovery_keeps_the_sweep_guards_and_the_throwaway_worktree
-rust kilo::repair::tests::a_reply_at_the_limit_is_repaired_whole_and_one_over_is_refused
-rust kilo::repair::tests::the_repair_is_pointed_at_an_empty_directory_of_its_own
-rust kilo::repair::tests::the_repair_prompt_forbids_inventing_and_forbids_reviewing_again
-rust kilo::repair::tests::the_scratch_directory_is_removed_when_the_repair_ends
-rust kilo::tests::a_genuinely_silent_exit_zero_still_reads_as_empty
-rust kilo::tests::a_timed_out_sweep_resumes_the_session_reported_by_kilo
-rust kilo::tests::an_empty_model_is_omitted_rather_than_passed_as_a_blank_argument
-rust kilo::tests::an_exit_zero_with_error_events_but_no_answer_reports_the_error_not_silence
-rust kilo::tests::an_id_with_no_prefix_leaves_the_choice_to_kilo
-rust kilo::tests::every_route_can_be_described_to_a_person
-rust kilo::tests::external_plugins_are_skipped_so_the_machine_cannot_change_the_review
-rust kilo::tests::external_project_skills_are_disabled
-rust kilo::tests::kilo_diagnostics_refuse_while_an_operation_holds_the_slot
-rust kilo::tests::kilo_operations_are_serialized
-rust kilo::tests::kilos_native_timeout_exit_resumes_the_session_it_reported
-rust kilo::tests::the_model_id_says_which_account_a_sweep_will_spend_from
-rust kilo::tests::the_preflight_checks_the_agent_the_sweep_actually_runs_as
-rust kilo::tests::the_working_directory_is_pinned_explicitly
-rust kimi::apply::tests::a_missing_cli_is_reported_as_not_installed_rather_than_as_a_failed_apply
-rust kimi::apply::tests::agent_tool_lists_keep_allowed_and_denied_entries_separate
-rust kimi::apply::tests::an_empty_model_is_omitted_rather_than_passed_blank
-rust kimi::apply::tests::skills_are_replaced_by_an_empty_directory_rather_than_left_discovered
-rust kimi::apply::tests::the_prompt_that_crosses_the_command_line_stays_small
-rust kimi::apply::tests::the_run_is_confined_by_an_agent_file_that_allows_writing
-rust kimi::brief_file::tests::a_precreated_brief_directory_is_never_adopted
-rust kimi::brief_file::tests::each_brief_gets_its_own_file
-rust kimi::brief_file::tests::the_brief_is_removed_when_the_sweep_ends
-rust kimi::brief_file::tests::the_prompt_that_reaches_the_command_line_is_tiny
-rust kimi::catalogue::tests::a_model_without_a_display_name_is_still_offered
-rust kimi::catalogue::tests::an_unreadable_config_offers_nothing_rather_than_guessing
-rust kimi::catalogue::tests::every_configured_model_is_offered_with_its_display_name
-rust kimi::catalogue::tests::other_sections_contribute_nothing
-rust kimi::catalogue::tests::the_real_local_config_parses_if_present
-rust kimi::signin::tests::the_probe_invokes_the_cli_the_way_a_sweep_does
-rust kimi::tests::a_failing_cli_is_an_error_rather_than_no_findings
-rust kimi::tests::a_real_invocation_returns_the_findings_the_cli_printed
-rust kimi::tests::discovery_finds_a_real_installation
-rust kimi::tests::every_sweep_runs_under_an_agent_that_cannot_delegate
-rust kimi::tests::no_approval_flag_is_passed_because_prompt_mode_refuses_them
-rust kimi::tests::project_skill_discovery_is_disabled
-rust kimi::tests::the_brief_directory_is_granted_to_the_session
-rust kimi::tests::the_brief_never_reaches_the_command_line
-rust kimi::tests::the_findings_survive_the_cli_s_own_banner_and_resume_hint
-rust kimi::tests::the_selected_model_is_passed_and_an_empty_one_is_omitted
 rust lane::mandates::tests::the_contract_mandate_asks_about_a_rule_written_down_on_both_sides
 rust lane::mandates::tests::the_correctness_mandate_asks_for_the_two_classes_it_measurably_missed
 rust lane::mandates::tests::the_gate_mandate_names_the_shapes_it_was_graded_on
@@ -654,14 +575,9 @@ rust models::codex_catalogue::tests::a_hidden_model_is_not_offered
 rust models::codex_catalogue::tests::effort_levels_are_per_model_and_not_all_the_same
 rust models::codex_catalogue::tests::leading_output_before_the_json_does_not_defeat_it
 rust models::codex_catalogue::tests::output_that_is_not_a_catalogue_is_refused_rather_than_read_as_empty
-rust models::kilo_catalogue::tests::a_record_whose_json_is_unreadable_keeps_its_model_selectable
-rust models::kilo_catalogue::tests::each_model_gets_its_own_efforts_rather_than_the_vendors
-rust models::kilo_catalogue::tests::the_banner_is_not_mistaken_for_a_model
-rust models::kilo_catalogue::tests::the_byok_flag_is_read_per_record_and_does_not_leak
-rust models::kilo_catalogue::tests::unknown_effort_names_sort_after_known_ones_rather_than_at_random
+rust models::opencode_catalogue::tests::catalogue_keeps_local_tags_custom_routes_and_variants
+rust models::opencode_catalogue::tests::failed_or_empty_catalogues_are_not_reported_as_success
 rust models::tests::a_failed_codex_listing_uses_the_fallback
-rust models::tests::a_failed_kilo_listing_is_an_error_not_an_empty_catalogue
-rust models::tests::a_kilo_model_billed_to_your_own_plan_is_not_filed_under_the_subscription
 rust models::tests::available_checks_install_before_inventing_a_catalogue
 rust models::tests::available_consults_cli_installed_before_any_catalogue
 rust models::tests::claude_catalogue_offers_the_documented_fable_alias
@@ -669,8 +585,15 @@ rust models::tests::claude_effort_is_recorded_per_model
 rust models::tests::claude_effort_is_rejected_when_the_model_cannot_apply_it
 rust models::tests::cli_installed_rejects_unknown_vendors
 rust models::tests::effort_not_supported_by_codex_model_is_rejected
-rust models::tests::efforts_are_recorded_per_model_and_only_where_the_model_has_any
+rust models::verbose_catalogue::tests::a_record_whose_json_is_unreadable_keeps_its_model_selectable
+rust models::verbose_catalogue::tests::each_model_gets_its_own_efforts_rather_than_the_vendors
+rust models::verbose_catalogue::tests::the_banner_is_not_mistaken_for_a_model
+rust models::verbose_catalogue::tests::unknown_effort_names_sort_after_known_ones_rather_than_at_random
 rust one_defect_anchored_five_lines_apart_by_two_vendors_still_merges
+rust opencode::tests::error_after_text_never_becomes_a_successful_review
+rust opencode::tests::local_model_tags_and_variants_are_forwarded_verbatim
+rust opencode::tests::repeated_parts_are_replaced_and_distinct_parts_are_retained
+rust opencode::tests::review_and_apply_have_distinct_permissions
 rust orchestrate::batch::tests::a_panicking_sweep_reports_its_own_lane_and_model
 rust orchestrate::batch::tests::a_sweep_that_finishes_during_cancellation_is_still_collected
 rust orchestrate::batch::tests::cancellation_awaits_joinset_results_after_abort
@@ -760,7 +683,7 @@ rust plan::tests::cursor_vendor_and_effort_rules
 rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
 rust plan::tests::every_provider_runs_at_most_one_sweep_per_batch
 rust plan::tests::every_vendor_prefix_is_recognised
-rust plan::tests::kilo_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to
+rust plan::tests::opencode_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to
 rust plan::tests::plan_accepts_codex_repository_review
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
 rust plan::tests::two_models_on_one_lane_is_two_units_because_that_is_the_point
@@ -828,14 +751,14 @@ rust sweep::isolate::tests::instruction_named_directory_link_is_removed_without_
 rust sweep::isolate::tests::instruction_named_file_link_is_removed_without_touching_its_target
 rust sweep::isolate::tests::kilo_project_control_files_are_removed
 rust sweep::isolate::tests::matching_ignores_case_because_windows_does
+rust sweep::isolate::tests::opencode_project_agents_and_plugins_are_removed
 rust sweep::isolate::tests::outbound_directory_link_is_not_followed_for_deletion
 rust sweep::isolate::tests::the_git_directory_is_never_touched
-rust sweep::isolation_tests::a_kilo_sweep_stops_at_the_preflight_before_doing_any_work
 rust sweep::isolation_tests::a_scope_removed_by_isolation_is_not_marked_swept
 rust sweep::isolation_tests::broader_isolated_sweeps_report_every_removed_path
-rust sweep::isolation_tests::kilo_does_not_silently_omit_submodule_contents
+rust sweep::isolation_tests::opencode_does_not_silently_omit_submodule_contents
 rust sweep::isolation_tests::removed_instruction_paths_are_returned_to_the_sweep
-rust sweep::isolation_tests::selected_kilo_model_is_the_one_prechecked
+rust sweep::isolation_tests::selected_opencode_model_is_the_one_prechecked
 rust sweep::revision::tests::a_repository_fsmonitor_hook_is_not_run_by_the_revision_probe
 rust sweep::revision::tests::git_is_never_spawned_with_a_visible_console_window
 rust sweep::tests::a_bare_model_name_means_claude_so_the_common_case_stays_short
@@ -845,16 +768,19 @@ rust sweep::tests::a_vendor_prefix_selects_that_vendor
 rust sweep::tests::agent_mode_reaches_each_supported_provider_prompt_and_claudes_tool_policy
 rust sweep::tests::an_unknown_prefix_is_treated_as_a_model_name_not_silently_dropped
 rust sweep::tests::bare_alias_reports_use_the_resolved_label_on_both_paths
-rust sweep::tests::kilo_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode
-rust sweep::tests::only_kilo_needs_the_schema_spelled_out_in_its_prompt
+rust sweep::tests::only_opencode_needs_the_schema_spelled_out_in_its_prompt
+rust sweep::tests::opencode_is_selected_by_prefix_and_needs_isolation_because_it_has_no_read_only_mode
 rust sweep::tests::provider_precheck_failures_are_reported_together
 rust sweep::tests::selected_providers_are_checked_once_before_lane_work
-rust sweep::tests::supported_vendors_get_their_own_agent_wording_and_kilo_gets_none
+rust sweep::tests::supported_vendors_get_their_own_agent_wording_and_opencode_gets_none
 rust sweep::tests::the_vendor_prefix_never_reaches_the_cli
 rust sweep::vendor_tests::a_cursor_model_selects_cursor_for_the_precheck
 rust sweep::vendor_tests::a_kimi_model_selects_kimi_for_the_precheck
 rust sweep::vendor_tests::cursor_is_selected_by_prefix_and_must_be_isolated
 rust sweep::vendor_tests::kimi_is_selected_by_prefix_and_must_be_isolated
+rust sweep::vendor_tests::opencode_preserves_local_tags_and_selects_its_own_precheck
+rust sweep::vendor_tests::retired_provider_sweep_reports_not_swept_without_starting_a_cli
+rust sweep::vendor_tests::retired_providers_are_refused_even_without_an_effort
 rust sweep_rejects_invalid_effort_before_starting_a_provider
 rust tests::a_claude_turn_budget_defaults_and_applies_when_claude_is_present
 rust tests::a_non_claude_run_rejects_an_explicit_turn_budget_before_repo_work

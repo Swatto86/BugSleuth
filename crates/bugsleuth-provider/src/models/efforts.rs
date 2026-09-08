@@ -25,10 +25,6 @@ pub fn efforts_for(vendor: &str, model: &str) -> Option<&'static [&'static str]>
         ("claude", "opus") => Some(CLAUDE_OPUS_EFFORTS),
         ("claude", "sonnet") => Some(CLAUDE_SONNET_EFFORTS),
         ("claude", "haiku") => Some(NO_EFFORTS),
-        // Kimi has no reasoning-depth flag at all. `Some(NO_EFFORTS)` rather
-        // than `None`: `None` means "unknown, allow anything", which would let
-        // an effort through to a CLI that has nowhere to put it.
-        ("kimi", _) => Some(NO_EFFORTS),
         // Effort is encoded in Cursor model ids (e.g. `...-high`), not a separate flag.
         ("cursor", _) => Some(NO_EFFORTS),
         _ => None,
