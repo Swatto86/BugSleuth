@@ -204,6 +204,8 @@ let applyBinding: ApplyBinding = {
   refreshButton: () => {},
 };
 
+let startUpdates: () => void = () => {};
+
 function bind(): void {
   applyBinding = bindApply({
     ui: {
@@ -244,18 +246,20 @@ function bind(): void {
     fixPrompt: currentFixPrompt,
   });
 
-  wireUpdate({
-    button: ui.checkUpdate,
-    setStatus,
-    focusStatus,
-    busy: () => isRunning() || isApplying() || isClearing(),
-    flushSettings: () => settingsSaver.flush(),
-    setSettingsLocked: (locked) => {
-      ui.main.inert = locked;
-      ui.theme.disabled = locked;
-    },
-    activityChanged,
-  });
+  startUpdates = () =>
+    wireUpdate({
+      button: ui.checkUpdate,
+      notice: ui.updateNotice,
+      setStatus,
+      focusStatus,
+      busy: () => isRunning() || isApplying() || isClearing(),
+      flushSettings: () => settingsSaver.flush(),
+      setSettingsLocked: (locked) => {
+        ui.main.inert = locked;
+        ui.theme.disabled = locked;
+      },
+      activityChanged,
+    });
 
   bindGuardedActions({
     ui,
@@ -385,4 +389,5 @@ void boot()
   })
   .finally(() => {
     ui.checkSignin.disabled = false;
+    startUpdates();
   });

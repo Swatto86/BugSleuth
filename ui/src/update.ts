@@ -1,19 +1,5 @@
-/**
- * Checking for a newer release, and installing it.
- *
- * A window rather than a background task, because installing an update
- * replaces the running executable and restarts the app. Doing that under
- * someone mid-review would throw away a run that costs real quota — so the
- * check is a button, and the install is a confirmation.
- *
- * The download and signature check happen in Rust. The page can ask, and is
- * told the answer; it cannot fetch or execute anything itself, which is why
- * the updater's frontend permission is deliberately not granted.
- */
-
+/** Signed automatic updates, deferred until repository work is quiet. */
 import { invoke } from "@tauri-apps/api/core";
-
-import { confirmDialog } from "./dialog";
 
 interface Available {
   version: string;
@@ -23,9 +9,9 @@ interface Available {
 
 export interface UpdateDeps {
   button: HTMLButtonElement;
+  notice: HTMLElement;
   setStatus: (text: string, kind?: "" | "running" | "error") => void;
   focusStatus: () => void;
-  /** True while work that an install-and-restart would interrupt is in flight. */
   busy: () => boolean;
   flushSettings: () => Promise<boolean>;
   setSettingsLocked: (locked: boolean) => void;
@@ -35,95 +21,109 @@ export interface UpdateDeps {
 let updating = false;
 export const isUpdating = (): boolean => updating;
 
-export function wireUpdate(deps: UpdateDeps): void {
+export function wireUpdate(deps: UpdateDeps): () => void {
   const { button, setStatus } = deps;
+  let checking = false;
+  let stopped = false;
+  let pending: Available | null = null;
+  let deferred: ReturnType<typeof setTimeout> | undefined;
+  const label = button.textContent;
+  const announce = (message: string): void => {
+    deps.notice.textContent = message;
+    deps.notice.classList.remove("hidden");
+  };
 
-  button.addEventListener("click", () => {
-    setStatus("Checking for updates…", "running");
+  function disableButton(): void {
     if (document.activeElement === button) deps.focusStatus();
     button.disabled = true;
-    const previous = button.textContent;
+  }
+
+  async function installWhenQuiet(): Promise<void> {
+    if (stopped || updating || !pending) return;
+    if (deps.busy()) {
+      announce(
+        `Version ${pending.version} is ready. BugSleuth will update after the current work finishes.`,
+      );
+      deferred = setTimeout(() => void installWhenQuiet(), 1000);
+      return;
+    }
+    const update = pending;
+    pending = null;
+    updating = true;
+    deps.focusStatus();
+    deps.setSettingsLocked(true);
+    deps.activityChanged();
+    disableButton();
+    try {
+      setStatus("Saving settings before installing…", "running");
+      if (!(await deps.flushSettings())) {
+        const message = `Version ${update.version} was not installed because the latest settings could not be saved`;
+        announce(message);
+        setStatus(message, "error");
+        return;
+      }
+      announce(
+        `Installing ${update.version}. BugSleuth will restart automatically.`,
+      );
+      setStatus(`Installing ${update.version}…`, "running");
+      // Rust checks the signed manifest again and atomically refuses if a
+      // review, apply or clear operation won the race to start.
+      await invoke("install_update");
+    } catch (error: unknown) {
+      const message = `Could not install ${update.version}: ${String(error)}`;
+      announce(message);
+      setStatus(message, "error");
+    } finally {
+      updating = false;
+      deps.setSettingsLocked(false);
+      deps.activityChanged();
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
+  async function check(manual = false): Promise<void> {
+    if (stopped || checking || updating || pending) return;
+    checking = true;
+    disableButton();
     button.textContent = "Checking…";
-
-    invoke<Available | null>("check_for_update")
-      .then(async (update) => {
-        if (!update) {
-          setStatus("You are on the latest version");
-          return;
-        }
-
-        // Asked, not assumed. An install restarts the app, and a review or an
-        // apply in flight would be killed part-way.
-        if (deps.busy()) {
-          setStatus(
-            `Version ${update.version} is available — finish the current operation first`,
-            "error",
-          );
-          return;
-        }
-
-        setStatus(`Version ${update.version} is available`);
-
-        const notes = update.notes.trim();
-        const agreed = await confirmDialog({
-          title: `Version ${update.version} is available`,
-          message:
-            `You have ${update.current}. Installing downloads the new version, ` +
-            `replaces this one and restarts BugSleuth.` +
-            (notes ? `\n\n${notes.slice(0, 600)}` : ""),
-          confirmLabel: "Install and restart",
-        });
-        if (!agreed) {
-          setStatus(`Version ${update.version} is available — not installed`);
-          return;
-        }
-        if (deps.busy()) {
-          setStatus(
-            `Version ${update.version} is available — finish the current operation first`,
-            "error",
-          );
-          return;
-        }
-
-        updating = true;
-        deps.setSettingsLocked(true);
-        deps.activityChanged();
-        setStatus("Saving settings before installing…", "running");
-        try {
-          if (!(await deps.flushSettings())) {
-            setStatus(
-              `Version ${update.version} was not installed because the latest settings could not be saved`,
-              "error",
-            );
-            return;
-          }
-          setStatus(`Installing ${update.version}…`, "running");
-          // Nothing after this resolves: the process is replaced. An error is
-          // the only thing that can come back, and it needs its own message —
-          // reporting a failed install as "could not check for updates" sends
-          // the reader looking at their network instead of at the install.
-          await invoke("install_update");
-        } catch (error: unknown) {
-          setStatus(
-            `Could not install ${update.version}: ${String(error)}`,
-            "error",
-          );
-        }
-      })
-      .catch((error: unknown) => {
-        // Said out loud rather than swallowed. A check that fails silently is
-        // how an install sits eight releases behind while looking current.
-        setStatus(`Could not check for updates: ${String(error)}`, "error");
-      })
-      .finally(() => {
-        const activityChanged = updating;
-        updating = false;
-        if (activityChanged) {
-          deps.setSettingsLocked(false);
-          deps.activityChanged();
-        }
+    if (manual) {
+      setStatus("Checking for updates…", "running");
+    }
+    try {
+      pending = await invoke<Available | null>("check_for_update");
+      if (stopped) {
+        pending = null;
+        return;
+      }
+      if (pending) {
+        await installWhenQuiet();
+      } else if (manual) {
+        setStatus("You are on the latest version");
+      }
+    } catch (error: unknown) {
+      const message = `Could not check for updates: ${String(error)}`;
+      announce(message);
+      if (manual) setStatus(message, "error");
+    } finally {
+      checking = false;
+      if (!updating) {
         button.disabled = false;
-        button.textContent = previous;
-      });
-  });
+        button.textContent = label;
+      }
+    }
+  }
+
+  const clicked = (): void => {
+    void check(true);
+  };
+  button.addEventListener("click", clicked);
+  void check();
+  const timer = setInterval(() => void check(), 4 * 60 * 60 * 1000);
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+    clearTimeout(deferred);
+    button.removeEventListener("click", clicked);
+  };
 }

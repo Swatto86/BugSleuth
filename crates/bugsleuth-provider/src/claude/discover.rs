@@ -15,6 +15,15 @@ pub(super) fn resolve_binary() -> Option<PathBuf> {
         .or_else(|| std::env::var_os("HOME"))
         .map(PathBuf::from);
 
+    resolve_from(which("claude"), home)
+}
+
+fn resolve_from(path: Option<PathBuf>, home: Option<PathBuf>) -> Option<PathBuf> {
+    // Respect the native executable selected by PATH on Unix. A fallback
+    // wrapper can print setup banners (or select a different CLI version).
+    if cfg!(unix) && path.is_some() {
+        return path;
+    }
     if let Some(home) = home {
         let candidates = [
             home.join(".local/bin/claude.exe"),
@@ -27,5 +36,28 @@ pub(super) fn resolve_binary() -> Option<PathBuf> {
             }
         }
     }
-    which("claude")
+    path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn path_selection_and_native_windows_preference_are_preserved() {
+        let dir =
+            std::env::temp_dir().join(format!("bugsleuth-claude-discovery-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".local/bin")).unwrap();
+        let native = dir.join(".local/bin/claude.exe");
+        std::fs::write(&native, "native fixture").unwrap();
+        let selected = dir.join("selected-on-path");
+        std::fs::write(&selected, "path fixture").unwrap();
+        let actual = resolve_from(Some(selected.clone()), Some(dir.clone()));
+        assert_eq!(
+            actual,
+            Some(if cfg!(unix) { selected } else { native.clone() })
+        );
+        assert_eq!(resolve_from(None, Some(dir.clone())), Some(native));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

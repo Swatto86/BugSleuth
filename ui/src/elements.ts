@@ -26,6 +26,7 @@ const ui = {
   aboutDialog: el<HTMLDialogElement>("about-dialog"),
   aboutClose: el<HTMLButtonElement>("about-close"),
   appVersion: el<HTMLParagraphElement>("app-version"),
+  updateNotice: el<HTMLElement>("update-status"),
   checkUpdate: el<HTMLButtonElement>("check-update"),
   repo: el<HTMLInputElement>("repo"),
   scope: el<HTMLInputElement>("scope"),

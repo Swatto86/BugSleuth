@@ -26,3 +26,7 @@ include macOS.
 Kilo and Kimi adapters have been retired. Existing saved rows are preserved but
 refused explicitly until the user selects a supported provider. Historical reports
 remain readable.
+
+Installed releases check signed updates at startup and every four hours. Updates
+wait for repository operations to finish and settings to save before restarting.
+Development builds never check for or install updates.

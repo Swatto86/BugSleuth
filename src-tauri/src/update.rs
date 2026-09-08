@@ -33,6 +33,10 @@ pub struct Available {
 /// which is exactly what happened here, and why this exists at all.
 #[tauri::command]
 pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<Available>, String> {
+    // Development and acceptance builds never install or advertise updates.
+    if cfg!(debug_assertions) {
+        return Ok(None);
+    }
     let current = app.package_info().version.to_string();
     let updater = app.updater().map_err(|e| e.to_string())?;
 
@@ -52,8 +56,7 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<Available>
 
 /// Download and install the newer release, then restart into it.
 ///
-/// Only ever called after `check_for_update` has offered one and the user has
-/// agreed. The check runs again here rather than trusting a version string
+/// Called automatically after a signed update is found and the UI is quiet. The check runs again here rather than trusting a version string
 /// from the window: the frontend is not a trusted source for what to install,
 /// and the gap between offering and accepting is unbounded.
 #[tauri::command]
@@ -61,6 +64,9 @@ pub async fn install_update(
     app: tauri::AppHandle,
     control: tauri::State<'_, crate::commands::RunControl>,
 ) -> Result<(), String> {
+    if cfg!(debug_assertions) {
+        return Err("Updates are disabled in development builds".into());
+    }
     control.try_start_update()?;
     let result: Result<(), String> = async {
         let updater = app.updater().map_err(|e| e.to_string())?;

@@ -20,12 +20,14 @@ impl Session {
                 NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             );
             let dir = std::env::temp_dir().join(&agent);
-            let mut builder = std::fs::DirBuilder::new();
+            let builder = std::fs::DirBuilder::new();
             #[cfg(unix)]
-            {
+            let builder = {
                 use std::os::unix::fs::DirBuilderExt;
+                let mut builder = builder;
                 builder.mode(0o700);
-            }
+                builder
+            };
             builder.create(&dir).map_err(|e| scratch(e.to_string()))?;
             Ok(Self { dir, agent })
         })

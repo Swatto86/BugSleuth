@@ -120,85 +120,6 @@ test("the updater busy predicate rejects conjunctions", () => {
   assert.equal(predicateCalls(call, "busy"), undefined);
 });
 
-test("declining an available update clears the running status", () => {
-  const update = frontendFiles().find((file) => file.fileName === "update.ts");
-  assert.ok(update, "update.ts is no longer a shipped frontend module");
-
-  let declined: ts.IfStatement | undefined;
-  walk(update, (node) => {
-    if (
-      ts.isIfStatement(node) &&
-      node.expression.getText(update) === "!agreed"
-    ) {
-      declined = node;
-    }
-  });
-  assert.ok(declined, "the update confirmation has no declined path");
-  const statusCalls: ts.CallExpression[] = [];
-  walk(declined.thenStatement, (node) => {
-    if (
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === "setStatus"
-    ) {
-      statusCalls.push(node);
-    }
-  });
-  assert.ok(
-    statusCalls.length > 0,
-    "declining the install never updates the running status",
-  );
-  for (const call of statusCalls) {
-    const kind = call.arguments[1]?.getText(update) ?? "";
-    assert.notEqual(
-      kind,
-      '"running"',
-      "declining the install leaves the running spinner stuck",
-    );
-  }
-});
-
-test("an available update clears the checking status before the install confirmation", () => {
-  const update = frontendFiles().find((file) => file.fileName === "update.ts");
-  assert.ok(update, "update.ts is no longer a shipped frontend module");
-
-  let busyGuard: ts.IfStatement | undefined;
-  walk(update, (node) => {
-    if (
-      ts.isIfStatement(node) &&
-      node.expression.getText(update) === "deps.busy()"
-    ) {
-      busyGuard ??= node;
-    }
-  });
-  assert.ok(busyGuard, "the update handler has no busy guard before confirm");
-
-  const confirms = callsTo(update, "confirmDialog");
-  assert.ok(
-    confirms.length >= 1,
-    "confirmDialog is no longer called from update.ts",
-  );
-  const confirm = confirms[0]!;
-
-  const statusCalls = callsTo(update, "setStatus").filter(
-    (call) =>
-      call.getStart(update) > busyGuard!.getEnd() &&
-      call.getStart(update) < confirm.getStart(update),
-  );
-  assert.ok(
-    statusCalls.length >= 1,
-    "no setStatus runs after the busy guard and before confirmDialog, so the checking spinner stays up during the install prompt",
-  );
-  for (const call of statusCalls) {
-    const kind = call.arguments[1]?.getText(update) ?? "";
-    assert.notEqual(
-      kind,
-      '"running"',
-      `pre-confirm setStatus still uses the running kind: ${call.getText(update)}`,
-    );
-  }
-});
-
 test("installing an update disables every operation its restart would interrupt", () => {
   const files = frontendFiles();
   const main = files.find((file) => file.fileName === "main.ts");
@@ -274,7 +195,6 @@ test("installing an update locks and saves settings before restart", () => {
     "wireUpdate is not given the settings lock",
   );
 
-  const confirm = callsTo(update, "confirmDialog")[0];
   const install = callsTo(update, "invoke").find(
     (call) => stringArgument(call) === "install_update",
   );
@@ -286,7 +206,6 @@ test("installing an update locks and saves settings before restart", () => {
   const unlock = locks.find(
     (call) => call.arguments[0]?.kind === ts.SyntaxKind.FalseKeyword,
   );
-  assert.ok(confirm, "the install confirmation disappeared");
   assert.ok(install, "the real install_update invocation disappeared");
   assert.ok(flush, "settings are not flushed before update restart");
   assert.ok(lock, "settings controls are not locked during installation");
@@ -295,7 +214,6 @@ test("installing an update locks and saves settings before restart", () => {
     ts.isAwaitExpression(flush.parent),
     "the settings flush is started but not awaited",
   );
-  assert.ok(confirm.getStart(update) < lock.getStart(update));
   assert.ok(lock.getStart(update) < flush.getStart(update));
   assert.ok(flush.getStart(update) < install.getStart(update));
   assert.ok(install.getStart(update) < unlock.getStart(update));

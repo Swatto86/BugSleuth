@@ -35,6 +35,7 @@ node a chain ending in .catch is handled, however many statements are inside it
 node a class built from a prefix counts as used, not as dead style
 node a downloaded EdgeDriver is verified before it is executed
 node a failed catalogue load is told to the user rather than swallowed
+node a failed signed install reports failure and releases the activity lock
 node a failed tray-Quit listener leaves a persistent alert
 node a lane is spelled the same way in the window as in the engine
 node a model listed twice with different passes counts like the engine: max, not sum
@@ -70,7 +71,6 @@ node action references match the complete YAML uses value
 node agent and single-agent prompts are distinct sweeps
 node agents are available for Claude and Codex but not OpenCode Ask
 node an apply that changed nothing does not claim to have applied anything
-node an available update clears the checking status before the install confirmation
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
 node an awaited call in a catch or finally is not covered by that try
@@ -117,6 +117,7 @@ node an uncovered lane is reported
 node an unknown prefix is treated as a Claude model, colon and all
 node apply redraw restores a focused picker after replacing it
 node applying uses the repository that produced the displayed prompt
+node automatic updates wait for idle then save before installing exactly once
 node boot redraws the Run gate as soon as its listener is ready
 node both sides are actually being read
 node both themes define the same set of colours
@@ -125,7 +126,6 @@ node clearing a different repository keeps the displayed Apply action
 node clearing hands focus off before activityChanged disables its opener
 node codex can be scheduled for repository review
 node dark theme meets WCAG AA everywhere the UI uses it
-node declining an available update clears the running status
 node editing a model refreshes its row action labels
 node every active control hands focus off before it disables or hides itself
 node every arm of a union is read, not just the first
@@ -150,6 +150,7 @@ node every platform the release builds for is offered in the README
 node every quit into Rust reports its failure rather than looking broken
 node every shipped preset covers every lane
 node every silent-failure opt-out gives a reason
+node failed settings persistence prevents update and allows a manual retry
 node flushing waits for edits made while an earlier save is pending
 node flushing writes the latest pending settings exactly once
 node installing an update disables every operation its restart would interrupt
@@ -186,6 +187,7 @@ node quit rechecks active work after its settings flush
 node release asset names exactly match the download table
 node removing a configured model row is guarded by a confirmation
 node render redirects focus when the focused row was just removed
+node resident update checks run every four hours without changing idle status
 node retired provider settings remain readable but cannot run or apply
 node rounds are driven by the busiest vendor, not the total
 node run-directory documentation includes the backend path hash
@@ -375,6 +377,7 @@ rust caveats::tests::the_limits_carry_the_surrounding_documents_indent
 rust caveats::tests::the_recovery_caveat_covers_timeouts_as_well_as_turn_limits
 rust claude::apply::tests::applying_a_fix_may_write_and_run_commands
 rust claude::apply::tests::writes_are_granted_only_inside_the_repository
+rust claude::discover::tests::path_selection_and_native_windows_preference_are_preserved
 rust claude::envelope::tests::a_failure_is_explained_from_the_envelope_when_stderr_says_nothing
 rust claude::envelope::tests::a_legacy_schema_reply_can_still_fall_back_to_result
 rust claude::envelope::tests::a_normal_envelope_is_read_without_complaint

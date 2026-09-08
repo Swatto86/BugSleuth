@@ -24,15 +24,11 @@ want the app in your start menu.
 
 Checksums for each platform are published beside them as `SHA256SUMS-*.txt`.
 
-**It updates itself.** Open *About* to see the running version and press
-*Check for updates*. BugSleuth checks GitHub and installs a newer release if
-you agree. Updates are signed; a
-release that does not verify against the key built into the app is refused
-before anything runs, so a tampered or unsigned download cannot install itself.
-The check is a button rather than a background task because installing restarts
-the app, and doing that during a review would throw away sweeps you have paid
-for. Only the installed build updates itself — the portable `.exe` cannot
-replace itself while running, so that one stays manual.
+**It updates itself.** BugSleuth checks signed updates at startup and every four
+hours. It waits for reviews, Apply and other active work to finish, saves settings,
+then installs and restarts automatically. About → Check for updates triggers the
+same process. Development builds never update themselves. Keep the Linux AppImage
+at a stable path so its updater can replace it in place.
 
 **Tagged releases publish Windows and Linux assets.** On Omarchy, use the
 Linux AppImage. Windows needs WebView2; the unpackaged Linux executable needs
