@@ -289,6 +289,14 @@ describe("BugSleuth desktop app", () => {
       timeout: 60_000,
       timeoutMsg: "the Stop button never appeared during a run",
     });
+    await browser.waitUntil(
+      async () => (await $("#status").getText()).startsWith("Running —"),
+      {
+        timeout: 120_000,
+        timeoutMsg:
+          "Provider pre-checks never completed, so no lane was available to cancel",
+      },
+    );
     await browser.waitUntil(async () => providerCliProcesses().length > 0, {
       timeout: 60_000,
       timeoutMsg: "Stop appeared but no provider CLI process ever started",

@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { prepareWorkspace, appPids, live } from "./workspace.ts";
+import { prepareWorkspace, appPids, providerPids, live } from "./workspace.ts";
 import { assertVerificationSucceeded } from "./driver-security.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -45,6 +45,35 @@ function assertProductionBuild(exe: string): void {
 }
 
 let tauriDriver: ChildProcess | undefined;
+
+function stopDriver(): void {
+  if (tauriDriver?.pid) {
+    const pid = tauriDriver.pid;
+    if (process.platform === "win32") {
+      const result = spawnSync(
+        "taskkill",
+        ["/pid", String(tauriDriver.pid), "/T", "/F"],
+        { stdio: "pipe" },
+      );
+      if (result.status !== 0 && tauriDriver.exitCode === null)
+        throw new Error("Owned driver cleanup failed");
+    } else {
+      for (const provider of providerPids(application)) {
+        try {
+          process.kill(-provider, "SIGTERM");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+        }
+      }
+      try {
+        process.kill(-pid, "SIGTERM");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+    }
+  }
+  tauriDriver = undefined;
+}
 
 const driverStatus = () =>
   fetch("http://127.0.0.1:4444/status", {
@@ -196,6 +225,7 @@ export const config: WebdriverIO.Config = {
         },
         detached: process.platform !== "win32",
       });
+      process.once("exit", stopDriver);
       await waitForDriver();
     } catch (error) {
       if (tauriDriver?.pid) tauriDriver.kill();
@@ -205,23 +235,7 @@ export const config: WebdriverIO.Config = {
   },
 
   onComplete: () => {
-    if (tauriDriver?.pid) {
-      if (process.platform === "win32") {
-        const result = spawnSync(
-          "taskkill",
-          ["/pid", String(tauriDriver.pid), "/T", "/F"],
-          { stdio: "pipe" },
-        );
-        if (result.status !== 0 && tauriDriver.exitCode === null)
-          throw new Error("Owned driver cleanup failed");
-      } else {
-        try {
-          process.kill(-tauriDriver.pid, "SIGTERM");
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-        }
-      }
-    }
+    stopDriver();
     console.log(
       `E2E evidence (${live ? "live" : "fixture"}): ${process.env["BUGSLEUTH_E2E_ROOT"]}`,
     );

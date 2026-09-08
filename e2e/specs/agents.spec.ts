@@ -16,6 +16,9 @@ describe("parallel review agents", () => {
     const effort = () => $("#matrix-body tr:first-child td.effort-cell select");
 
     await provider().selectByAttribute("value", "claude");
+    // Selecting an already-selected provider does not clear a filtered model
+    // field. Pick the capability-bearing alias explicitly in live mode too.
+    await $("#matrix-body tr:first-child td.model-id input").setValue("fable");
     await browser.waitUntil(
       async () =>
         await $(

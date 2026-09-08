@@ -47,7 +47,12 @@ function actionRef(action: string, source = workflow): string {
     const at = ref.lastIndexOf("@");
     return at > 0 && ref.slice(0, at) === action;
   });
-  assert.equal(matches.length, 1, `expected one ${action} use`);
+  assert.ok(matches.length > 0, `expected a ${action} use`);
+  assert.equal(
+    new Set(matches).size,
+    1,
+    `${action} uses inconsistent revisions`,
+  );
   const ref = matches[0]!;
   return ref.slice(ref.lastIndexOf("@") + 1);
 }
@@ -158,4 +163,26 @@ test("checksum fallback excludes and verifies its own manifest", () => {
 
 test("the verification checkout is pinned to an immutable revision", () => {
   assert.match(actionRef("actions/checkout", verifyWorkflow), /^[0-9a-f]{40}$/);
+});
+
+test("every external workflow action is pinned to an immutable revision", () => {
+  const directory = path.join(root, ".github", "workflows");
+  const files = fs
+    .readdirSync(directory)
+    .filter((file) => /\.ya?ml$/.test(file));
+  assert.ok(files.length > 0);
+  for (const file of files) {
+    const actions = usesValues(
+      parseYaml(fs.readFileSync(path.join(directory, file), "utf8")),
+    );
+    assert.ok(actions.length > 0, `${file} contains no action references`);
+    for (const action of actions) {
+      if (action.startsWith("./")) continue;
+      assert.match(
+        action,
+        /^[^\s@]+@[a-f0-9]{40}$/,
+        `${file}: ${action} can change without a repository commit`,
+      );
+    }
+  }
 });

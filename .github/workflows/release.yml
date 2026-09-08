@@ -77,8 +77,8 @@ jobs:
           cache: npm
       - run: npm ci
 
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: release-${{ matrix.os }}
 
@@ -162,28 +162,15 @@ jobs:
           [ -n "$bundles" ] || { echo "no installer was produced"; exit 1; }
           while IFS= read -r b; do cp "$b" "$out/"; done <<< "$bundles"
 
-          # The update manifest, Windows only: that is the platform a tag
-          # publishes, and a manifest naming a platform this run did not build
-          # would offer an update that 404s.
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            sig=$(find target/release/bundle -name '*-setup.exe.sig' | head -1)
-            if [ -z "$sig" ]; then
-              echo "no signature was produced. TAURI_SIGNING_PRIVATE_KEY and"
-              echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD must be set as repository secrets;"
-              echo "without them every client refuses the update."
-              exit 1
-            fi
-            bundle="${sig%.sig}"
-            [ -f "$bundle" ] || { echo "signature $sig has no bundle beside it"; exit 1; }
-
-            version="${GITHUB_REF_NAME#v}"
-            asset=$(basename "$bundle")
-            printf '{\n  "version": "%s",\n  "pub_date": "%s",\n  "platforms": {\n    "windows-x86_64": {\n      "signature": "%s",\n      "url": "https://github.com/Swatto86/BugSleuth/releases/download/%s/%s"\n    }\n  }\n}\n' \
-              "$version" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(tr -d '\n' < "$sig")" \
-              "${GITHUB_REF_NAME}" "$asset" > "$out/latest.json"
-
-            python -c "import json,sys;json.load(open(sys.argv[1]));print('latest.json is valid JSON')" "$out/latest.json"
-          fi
+          version="${GITHUB_REF_NAME#v}"
+          case "${{ matrix.os }}" in
+            windows-latest) platform=windows-x86_64; pattern="*_${version}_*-setup.exe.sig" ;;
+            ubuntu-latest) platform=linux-x86_64; pattern="*_${version}_*.AppImage.sig" ;;
+            macos-latest) platform=darwin-aarch64; pattern='*.app.tar.gz.sig' ;;
+          esac
+          sig=$(find target/release/bundle -name "$pattern")
+          [ -f "$sig" ] || { echo "Expected one signed updater bundle for $platform"; exit 1; }
+          node scripts/update-manifest.mjs fragment "$out" "$version" "$platform" "${sig%.sig}" "$sig"
 
           ./scripts/release-checksums.sh "$out" "${{ matrix.suffix }}"
           ls -la "$out"
@@ -202,12 +189,27 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
       - name: Download release artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: release-artifacts
           pattern: release-*
           merge-multiple: true
+
+      - name: Merge signed updater platforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.platforms }}" in
+            windows) required=windows-x86_64 ;;
+            all) required=windows-x86_64,linux-x86_64,darwin-aarch64 ;;
+            *) required=windows-x86_64,linux-x86_64 ;;
+          esac
+          (cd release-artifacts && sha256sum -c SHA256SUMS-*.txt)
+          node scripts/update-manifest.mjs merge release-artifacts "${GITHUB_REF_NAME#v}" "$required"
+          (cd release-artifacts && sha256sum latest.json > SHA256SUMS-updater.txt)
 
       - name: Publish
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2

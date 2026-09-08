@@ -1,30 +1,38 @@
 # Release acceptance runbook
 
 The journey to drive before shipping a change to the app, the provider adapters,
-the run lifecycle, or packaging. It takes about ten minutes and two cheap model
-invocations: one provider pre-check and one lane sweep.
+the run lifecycle, or packaging. The routine suite uses subprocess fixtures and
+spends no provider quota. Live mode performs real reviews and Apply, which can
+take several minutes and uses the selected provider account.
 
-`~/.agents/tauri.md` asks for one live acceptance task through the real webview.
-**The WebDriver harness does not currently satisfy that**: it creates a session
-and launches the app but never sees its page. Until that is solved, this manual
-journey is the acceptance test, and it is the one that has actually caught
-things.
+The routine gate drives the real debug webview on Windows and Linux with an
+isolated repository, app settings and subprocess fixtures. It covers review,
+cancellation, clipboard, file-changing Apply, dirty-tree refusal, restart and
+exit. Real provider acceptance runs separately with native authentication.
 
-## Build the thing you are shipping
-
-```bash
-cargo clean --release
-```
+## Verify before packaging
 
 ```bash
-cargo tauri build
+npm ci
+bash scripts/setup-tauri-driver.sh
+# Windows also needs scripts/setup-e2e.ps1 for the matching EdgeDriver.
+# Linux needs WebKitWebDriver, an X11 display (or Xvfb), and xclip.
+bash scripts/verify.sh
 ```
 
-**Both steps, in that order.** A plain `cargo build --release` produces a binary
-that points at the Vite dev server instead of embedding the frontend, and cargo
-caches that decision in Tauri's *dependency* build script — so a later
-`cargo tauri build` will happily reuse it. The result looks perfect with a dev
-server running and shows a blank window without one.
+The gate embeds the frontend with `tauri build --debug --no-bundle`. A plain
+Cargo application build is insufficient because it can point at the dev server.
+Caches do not need to be deleted.
+
+For real-provider acceptance, run the same suite with a supported model:
+
+```bash
+BUGSLEUTH_E2E_LIVE=1 BUGSLEUTH_E2E_MODEL=haiku npm run e2e:run
+```
+
+This uses paid provider quota and edits only a disposable fixture repository.
+After debug verification, package the release with `AGENT_RELEASE=1` set;
+use an unsigned local configuration when the signing key is unavailable.
 
 ## Install it
 

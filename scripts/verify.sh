@@ -148,6 +148,14 @@ npx --no-install tauri build --debug --no-bundle
 
 case "$(uname -s)" in
   Darwin) echo "WebDriver is unavailable on macOS; Windows and Linux run the suite." ;;
+  MINGW*|MSYS*|CYGWIN*)
+    say "native WebDriver acceptance"
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+      powershell.exe -NoProfile -NonInteractive -File e2e/windows-ci.ps1
+    else
+      npm run --silent e2e:run
+    fi
+    ;;
   *)
     say "native WebDriver acceptance"
     if [ -z "${DISPLAY:-}" ] && command -v xvfb-run >/dev/null 2>&1; then

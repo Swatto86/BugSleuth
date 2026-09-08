@@ -2,6 +2,7 @@ platform macos
 node OpenCode local model tags survive selection and storage
 node Run refuses a model whose CLI is not installed
 node Tab with focus outside the dialog's buttons re-enters the trap
+node Windows CI debugging policy is app scoped and removed after acceptance
 node a bare Claude model never gains a redundant prefix
 node a bare and a prefixed Claude model on one lane count as a single unit
 node a bare voided call is not handled
@@ -145,6 +146,7 @@ node every command the page calls exists in Rust and is exposed
 node every control the matrix rebuilds can be found again afterwards
 node every element the code looks up exists in the markup
 node every event has both an emitter and a listener
+node every external workflow action is pinned to an immutable revision
 node every lane header explains what that lane hunts
 node every platform the release builds for is offered in the README
 node every quit into Rust reports its failure rather than looking broken
@@ -175,6 +177,7 @@ node long-running actions wait for their completion listeners
 node manual sign-in cannot be overwritten by startup preflight
 node menus only offer vendors whose CLI is installed
 node names are joined the way English does
+node native cancellation finds every provider only inside the owned app process tree
 node no CSS rule styles a class nothing uses
 node no call into Rust can fail without the user being told
 node no command is exposed to the page that the page never calls
@@ -185,6 +188,9 @@ node only the release publisher receives repository write authority
 node quit flushes pending settings before it can invoke exit
 node quit rechecks active work after its settings flush
 node release asset names exactly match the download table
+node release metadata combines signed Windows and Linux artifacts with encoded URLs
+node release metadata refuses a missing required platform or a different version
+node release metadata refuses unsigned entries, escaped paths and foreign download URLs
 node removing a configured model row is guarded by a confirmation
 node render redirects focus when the focused row was just removed
 node resident update checks run every four hours without changing idle status
@@ -206,7 +212,7 @@ node the E2E harness waits for its driver cleanup and rejects a stale port
 node the E2E run verifies the native driver before spawning it
 node the E2E stop check observes a real provider before and after cancellation
 node the E2E verifier rejects every unsuccessful process result
-node the README still promises a single file that runs with nothing installed
+node the README documents portable artifacts and their runtime prerequisites
 node the acceptance journey accounts for the provider pre-check
 node the clear handler disables its button and re-enables it on both outcomes
 node the clear handler shows a running status while the delete is in flight

@@ -15,6 +15,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { providerPids } from "../workspace.ts";
 import { splitId } from "../../ui/src/model.ts";
 
 export const REPO =
@@ -113,38 +114,12 @@ export async function configureOneSweep(modelSpec: string): Promise<void> {
 
 /** Provider processes carrying BugSleuth's production-only flag combinations. */
 export function providerCliProcesses(): string {
-  if (process.platform !== "win32") {
-    return fs
-      .readdirSync("/proc")
-      .filter((pid) => /^\d+$/.test(pid))
-      .flatMap((pid) => {
-        try {
-          const args = fs
-            .readFileSync(`/proc/${pid}/cmdline`, "utf8")
-            .split("\0");
-          return args.includes("--agent") &&
-            args.some((arg) => arg.startsWith(REPO))
-            ? [pid]
-            : [];
-        } catch (error) {
-          if (
-            ["ENOENT", "EACCES", "EPERM", "ESRCH"].includes(
-              (error as NodeJS.ErrnoException).code ?? "",
-            )
-          )
-            return [];
-          throw error;
-        }
-      })
-      .join(" ");
-  }
-  const command =
-    "$root = [regex]::Escape($env:BUGSLEUTH_E2E_REPO); Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match $root -and $_.CommandLine -match '--agent|--output-format|--output-last-message' } | ForEach-Object { $_.ProcessId }";
-  return execFileSync(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-Command", command],
-    { encoding: "utf8" },
-  ).trim();
+  const application =
+    process.env["BUGSLEUTH_E2E_APPLICATION"] ??
+    path.resolve(
+      `target/debug/bugsleuth-app${process.platform === "win32" ? ".exe" : ""}`,
+    );
+  return providerPids(application).join(" ");
 }
 
 /** Text placed on the Windows clipboard by the real webview. */

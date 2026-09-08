@@ -12,9 +12,9 @@ ranked list.
 
 ## Install
 
-Every release ships a **single file that runs with nothing installed** — no
-runtime, no admin, no installer — for each platform. Take that one unless you
-want the app in your start menu.
+Every release ships a **directly runnable portable file** for each supported
+platform. The platform runtimes listed below are prerequisites. Use the installer
+if you want the app added to your start menu.
 
 | You want | Download |
 |---|---|
@@ -31,10 +31,19 @@ same process. Development builds never update themselves. Keep the Linux AppImag
 at a stable path so its updater can replace it in place.
 
 **Tagged releases publish Windows and Linux assets.** On Omarchy, use the
-Linux AppImage. Windows needs WebView2; the unpackaged Linux executable needs
-WebKitGTK 4.1 and the GTK/AppIndicator runtime libraries. macOS artifacts can be
+Linux AppImage. Windows needs the [Evergreen WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/); the unpackaged Linux executable needs
+[WebKitGTK 4.1 and the GTK/AppIndicator runtime libraries](https://v2.tauri.app/start/prerequisites/#linux). macOS artifacts can be
 added by running the release workflow against the release tag with platforms
 set to `all`.
+
+On Omarchy, keep the AppImage at `~/.local/share/bugsleuth/BugSleuth.AppImage`,
+make it executable, and point your desktop launcher at that path. Replace that
+file to upgrade manually; keep the previous file separately if you need rollback.
+Remove the file and its desktop launcher to uninstall; saved settings are retained.
+If an NVIDIA/Wayland launch exits with a protocol error or shows a blank window,
+launch with `WEBKIT_DISABLE_DMABUF_RENDERER=1` (use `Exec=env
+WEBKIT_DISABLE_DMABUF_RENDERER=1 /absolute/path/BugSleuth.AppImage` on one line in
+the desktop entry). This was required on the Omarchy acceptance machine.
 
 **You also need at least one configured coding CLI** on your `PATH`: `claude`,
 `codex`, `agent` (Cursor), or `opencode`. BugSleuth uses each

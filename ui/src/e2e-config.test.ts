@@ -109,7 +109,14 @@ test("the E2E harness waits for its driver cleanup and rejects a stale port", ()
   );
 
   let taskkill: ts.CallExpression | undefined;
-  walk(onComplete, (node) => {
+  assert.match(onComplete.getText(source), /stopDriver\(\)/);
+  assert.match(text, /process\.once\("exit", stopDriver\)/);
+  const cleanup = source.statements.find(
+    (node): node is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(node) && node.name?.text === "stopDriver",
+  );
+  assert.ok(cleanup, "the shared cleanup function disappeared");
+  walk(cleanup, (node) => {
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
@@ -124,4 +131,18 @@ test("the E2E harness waits for its driver cleanup and rejects a stale port", ()
     taskkill.arguments[1]?.getText(source),
     '["/pid", String(tauriDriver.pid), "/T", "/F"]',
   );
+});
+
+test("Windows CI debugging policy is app scoped and removed after acceptance", () => {
+  const script = fs.readFileSync(path.join(root, "e2e/windows-ci.ps1"), "utf8");
+  assert.match(script, /GITHUB_ACTIONS -ne 'true'/);
+  assert.match(script, /HKLM:/);
+  assert.match(script, /GetValue\('bugsleuth-app.exe'\)/);
+  assert.match(script, /Existing BugSleuth policy must not be overwritten/);
+  assert.match(
+    script,
+    /finally\s*\{[\s\S]*Remove-ItemProperty -Path \$key -Name 'bugsleuth-app.exe'/,
+  );
+  assert.match(script, /\[guid\]::NewGuid\(\)/);
+  assert.doesNotMatch(script, /-Name ['"]\*['"]/);
 });

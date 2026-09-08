@@ -103,3 +103,78 @@ export function appPids(application: string): number[] {
       }
     });
 }
+
+export interface ProcessRow {
+  pid: number;
+  parent: number;
+  args: string;
+}
+/** Match invocations only after proving descent from this test's app. */
+export function providerDescendants(
+  rows: ProcessRow[],
+  roots: number[],
+): number[] {
+  const owned = new Set(roots);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of rows) {
+      if (owned.has(row.parent) && !owned.has(row.pid)) {
+        owned.add(row.pid);
+        changed = true;
+      }
+    }
+  }
+  return rows
+    .filter(
+      (row) =>
+        owned.has(row.pid) &&
+        !roots.includes(row.pid) &&
+        /(?:^|\s)--(?:agent|output-format|output-last-message|print)(?:\s|=|$)/.test(
+          row.args,
+        ),
+    )
+    .map((row) => row.pid);
+}
+
+export function providerPids(application: string): number[] {
+  const roots = appPids(application);
+  if (!roots.length) return [];
+  let rows: ProcessRow[];
+  if (process.platform === "win32") {
+    const raw = execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "@(Get-CimInstance Win32_Process | ForEach-Object { @{ pid = [int]$_.ProcessId; parent = [int]$_.ParentProcessId; args = [string]$_.CommandLine } }) | ConvertTo-Json -Compress",
+      ],
+      { encoding: "utf8" },
+    );
+    rows = JSON.parse(raw);
+  } else {
+    rows = fs
+      .readdirSync("/proc")
+      .filter((pid) => /^\d+$/.test(pid))
+      .flatMap((pid) => {
+        try {
+          const status = fs.readFileSync(`/proc/${pid}/status`, "utf8");
+          const parent = Number(status.match(/^PPid:\s+(\d+)/m)?.[1]);
+          const args = fs
+            .readFileSync(`/proc/${pid}/cmdline`, "utf8")
+            .replaceAll("\0", " ");
+          return [{ pid: Number(pid), parent, args }];
+        } catch (error) {
+          if (
+            ["ENOENT", "EACCES", "EPERM", "ESRCH"].includes(
+              (error as NodeJS.ErrnoException).code ?? "",
+            )
+          )
+            return [];
+          throw error;
+        }
+      });
+  }
+  return providerDescendants(rows, roots);
+}

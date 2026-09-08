@@ -76,15 +76,12 @@ test("every platform the release builds for is offered in the README", () => {
   );
 });
 
-test("the README still promises a single file that runs with nothing installed", () => {
-  // The project's own release rule, and the reason the portable binary exists
-  // at all. If this sentence goes, the rule has quietly been dropped.
+test("the README documents portable artifacts and their runtime prerequisites", () => {
   const text = readme().toLowerCase();
-  assert.ok(
-    text.includes("runs with nothing installed") ||
-      text.includes("no installer"),
-    "the README no longer promises a standalone binary",
-  );
+  assert.ok(text.includes("directly runnable portable file"));
+  assert.ok(text.includes("webview2") && text.includes("webkitgtk 4.1"));
+  assert.ok(text.includes("prerequisites"));
+  assert.ok(!text.includes("runs with nothing installed"));
   assert.ok(
     workflow().includes("BugSleuth-portable-"),
     "the release workflow no longer publishes a portable binary",
@@ -299,7 +296,8 @@ test("the acceptance journey accounts for the provider pre-check", () => {
     "the test no longer found the known checked default",
   );
   const runbook = read("RUNBOOK.md");
-  assert.ok(runbook.includes("two cheap model\ninvocations"));
+  assert.ok(runbook.includes("spends no provider quota"));
+  assert.ok(runbook.includes("uses the selected provider account"));
   assert.ok(runbook.includes("provider pre-check"));
   assert.ok(runbook.includes("Untick **Re-grade every severity**"));
 });
