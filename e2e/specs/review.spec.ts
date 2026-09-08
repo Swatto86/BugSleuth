@@ -33,6 +33,13 @@ import {
 
 describe("BugSleuth desktop app", () => {
   const repoBefore = treeDigest(REPO);
+  const cancelMarker = path.join(
+    process.env["BUGSLEUTH_E2E_ROOT"]!,
+    "hold-sweep",
+  );
+  afterEach(() => {
+    if (fs.existsSync(cancelMarker)) fs.unlinkSync(cancelMarker);
+  });
 
   it("shows its window with the shell mounted", async () => {
     // The window starts hidden and the frontend reveals it. If that ever breaks
@@ -273,6 +280,9 @@ describe("BugSleuth desktop app", () => {
     // the CLI processes, and leaves a report that does not pretend to be
     // complete. Cancelling is only worth having if it actually stops spending.
     this.timeout(6 * 60_000);
+    // The fixture must still be alive when the process observer reaches it.
+    // Live providers ignore this test-only file.
+    fs.writeFileSync(cancelMarker, "");
 
     await $("#repo").setValue(REPO);
     // Every lane, so there is certain to be work still queued when we stop.

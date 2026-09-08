@@ -12,6 +12,11 @@ if (args.includes("--version")) {
   for await (const chunk of process.stdin) prompt += chunk;
   await new Promise((resolve) => setTimeout(resolve, 2000));
   const editing = writable();
+  const hold = path.join(path.dirname(process.env.APPDATA ?? ""), "hold-sweep");
+  const deadline = Date.now() + 300000;
+  while (!editing && !prompt.includes("Reply with exactly OK and nothing else.") && fs.existsSync(hold) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
   if (editing) await pauseApply();
   const text = prompt.includes("Reply with exactly OK and nothing else.")
     ? "OK"
