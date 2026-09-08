@@ -118,8 +118,8 @@ function renderPlanSummary(): void {
   (document.getElementById("clone-open") as HTMLButtonElement).disabled = busy;
   ui.stop.textContent = isApplying() ? "Stop all fixes" : "Stop";
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
+  applyBinding.refreshButton();
 }
-
 function render(): void {
   withRestoredFocus(settings.models.length, renderRows);
 }
@@ -152,7 +152,6 @@ function renderWithoutPersisting(): void {
   }
 }
 
-/** Re-render everything that depends on state but not on the table's identity. */
 function refresh(): void {
   renderCoverage(settings.models);
   renderPlanSummary();

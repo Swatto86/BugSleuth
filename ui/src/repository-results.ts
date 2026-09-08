@@ -13,11 +13,14 @@ export interface RepositoryResult {
   results?: RepositoryResult[];
 }
 
+export let repositoryReports: RepositoryResult[] = [];
+
 /** Keep the overview and every report available without changing the run inputs. */
 export function offerRepositoryResults(
   payload: RepositoryResult,
   show: (result: RepositoryResult) => void,
 ): void {
+  repositoryReports = payload.results ?? [payload];
   const label = document.getElementById("repository-result-label");
   const select = document.getElementById(
     "repository-result",

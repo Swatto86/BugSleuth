@@ -8,19 +8,23 @@ const summaries = new Map<string, string>();
 export const applyLog = (repo: string): string =>
   (logs.get(repo) ?? []).join("\n\n");
 
+const choices = new Map<string, Settings>();
+export function repositorySettings(root: Settings, repo: string): Settings {
+  if (!repo) return root;
+  let stored = choices.get(repo);
+  if (!stored) {
+    stored = { ...root, ...root.apply_repositories?.[repo] };
+    choices.set(repo, stored);
+  }
+  return stored;
+}
+
 /** Persist each report's choices without changing the scan target or defaults. */
 export function repositoryDeps(original: ApplyDeps): ApplyDeps {
-  const choices = new Map<string, Settings>();
   const settings = (): Settings => {
     const root = original.settings();
     const repo = original.promptRepo();
-    if (!repo) return root;
-    let stored = choices.get(repo);
-    if (!stored) {
-      stored = { ...root, ...root.apply_repositories?.[repo] };
-      choices.set(repo, stored);
-    }
-    return stored;
+    return repositorySettings(root, repo);
   };
   return {
     ...original,
@@ -68,3 +72,6 @@ export function clearApplyReports(): void {
   summaries.clear();
   document.getElementById("apply-jobs")?.remove();
 }
+
+export const applySummary = (repo: string): string =>
+  summaries.get(repo) ?? "Ready to fix";

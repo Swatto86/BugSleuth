@@ -131,7 +131,7 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     let slot = tokio::select! {
         biased;
         () = request.cancel.cancelled() => anyhow::bail!("the apply was stopped before editing started"),
-        slot = crate::vendor_slots::acquire(vendor) => slot,
+        slot = crate::vendor_slots::acquire_apply(vendor) => slot?,
     };
     let repo = request.repo;
     bugsleuth_verify::validate_repository_identity(repo).map_err(|error| {

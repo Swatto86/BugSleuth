@@ -4,7 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
-export const live = process.env["BUGSLEUTH_E2E_LIVE"] === "1";
+const liveCodex = process.env["BUGSLEUTH_E2E_LIVE_CODEX"] === "1";
+export const live = process.env["BUGSLEUTH_E2E_LIVE"] === "1" || liveCodex;
 export function prepareWorkspace(root: string): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bugsleuth-e2e-"));
   process.env["BUGSLEUTH_E2E_ROOT"] = dir;
@@ -28,7 +29,13 @@ export function prepareWorkspace(root: string): void {
     "-m",
     "Acceptance fixture",
   ]);
-  if (!live) {
+  if (!live || liveCodex) {
+    // Codex also searches known installations under USERPROFILE before PATH.
+    // Keep those lookups inside the fixture so it cannot launch a real account.
+    if (!live) {
+      process.env["USERPROFILE"] = path.join(dir, "home");
+      fs.mkdirSync(process.env["USERPROFILE"], { recursive: true });
+    }
     const bin = path.join(dir, "bin");
     fs.mkdirSync(bin);
     const fixture = path.join(root, "e2e/fixture-provider.mjs");
@@ -36,7 +43,9 @@ export function prepareWorkspace(root: string): void {
     const script = windows
       ? `@echo off\r\n"${process.execPath}" "${fixture}" %*\r\n`
       : `#!/bin/sh\nexec '${process.execPath.replaceAll("'", "'\\''")}' '${fixture.replaceAll("'", "'\\''")}' "$@"\n`;
-    for (const vendor of ["opencode", "claude", "codex", "agent"]) {
+    for (const vendor of liveCodex
+      ? ["opencode"]
+      : ["opencode", "claude", "codex", "agent"]) {
       fs.writeFileSync(
         path.join(bin, windows ? `${vendor}.cmd` : vendor),
         script,

@@ -277,8 +277,13 @@ editable run inputs. This adds no automatic batch write or publication action.
 
 Apply reservations are keyed by canonical repository paths and shared Git
 metadata. Separate repositories can be fixed concurrently with different
-providers; each vendor retains one process slot. Completion releases only its
+providers; Codex applies have three slots because their sessions are ephemeral
+and their answer files are private per invocation. Other vendors retain one
+process slot, and review sweeps keep their existing vendor locks. Completion releases only its
 own repository, while Stop cancels all active and queued applies. The report
 selector keeps per-repository model/effort preferences and result text; settings
 save these preferences in the additive `apply_repositories` map. Publishing
 options stay session-only, and the confirmation snapshots each exact request.
+The repository assignment board reuses the same settings and confirmed Apply
+action as the detailed report. Assignments and statuses remain visible across
+report selection; repositories without a saved prompt cannot start a fix.

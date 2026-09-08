@@ -21,6 +21,10 @@ if (args.includes("--version")) {
   for await (const chunk of process.stdin) { /* consume the real prompt */ }
   await pauseApply();
   console.log(JSON.stringify({ type: "result", result: apply(), is_error: false }));
+} else if (args.includes("--sandbox") && args.includes("workspace-write")) {
+  for await (const chunk of process.stdin) { /* consume the real prompt */ }
+  await pauseApply();
+  fs.writeFileSync(args[args.indexOf("--output-last-message") + 1], apply());
 } else {
   console.error("Unexpected fixture invocation");
   process.exitCode = 1;
@@ -55,5 +59,5 @@ async function pauseApply() {
   const root = path.dirname(process.cwd());
   if (!root || !fs.existsSync(path.join(root, "parallel-apply"))) return;
   fs.appendFileSync(path.join(root, "applies.jsonl"), JSON.stringify({ repo: process.cwd(), args, at: Date.now() }) + "\n");
-  await new Promise(resolve => setTimeout(resolve, args[0] === "run" ? 30000 : 20000));
+  await new Promise(resolve => setTimeout(resolve, process.cwd().endsWith("second") ? 30000 : 20000));
 }

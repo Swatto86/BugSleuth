@@ -47,10 +47,17 @@ including repositories waiting to start. Each repository retains its own cache,
 coverage, findings and fix prompt; the report selector binds Apply to that
 report's repository. Each report remembers its own fixing provider/model and
 effort. Explicit Apply actions may run concurrently in separate repositories;
-provider slots serialize jobs using the same vendor. Results remain attached to
+up to three Codex fixes run simultaneously using ephemeral sessions and private
+answer files; other vendors retain one slot each. A repository assignment board
+exposes each saved report's provider, model, effort, start action and fix status.
+Results remain attached to
 their repository. Stop all fixes cancels active and queued jobs. Duplicate,
 nested and linked worktrees sharing Git metadata cannot apply together. Scans,
 clearing, cloning and updates remain blocked until every apply finishes.
 Publishing choices are session-only and confirmed separately for each apply.
+Live simultaneous Codex acceptance uses `BUGSLEUTH_E2E_LIVE_CODEX=1 npm run e2e:run
+-- --spec e2e/specs/codex-live.spec.ts` after the debug build. It reviews two
+disposable repositories with a deterministic scan fixture, overlaps real Codex fixes,
+and runs an independent acceptance test outside both writable repositories.
 Additional folders are saved compatibly alongside the existing primary folder.
 Clear saved sweeps still targets only the primary folder.

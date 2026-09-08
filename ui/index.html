@@ -236,6 +236,11 @@
               Copy fix prompt
             </button>
           </div>
+          <div id="fix-board" class="hidden">
+            <h2>Fix repositories</h2>
+            <p class="hint">Choose a provider and model for each scanned repository, then start its fixes. Up to three Codex instances can fix separate repositories at the same time. Other providers run one fix at a time each. Start another repository while fixes are running; Stop all fixes cancels active and queued jobs.</p>
+            <div id="fix-repositories"></div>
+          </div>
           <label id="repository-result-label" class="field hidden">
             <span>Repository report</span>
             <select id="repository-result"></select>

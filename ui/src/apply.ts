@@ -16,6 +16,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import { confirmDialog } from "./dialog";
+import { bindFixBoard } from "./fix-board";
 import {
   applyStatus,
   effortIsValid,
@@ -76,6 +77,7 @@ export interface ApplyBinding {
 
 /** Wire the panel up and expose its two focused redraw operations. */
 export function bindApply(deps: ApplyDeps): ApplyBinding {
+  const board = bindFixBoard(deps, () => draw());
   deps = repositoryDeps(deps);
   const { ui } = deps;
 
@@ -83,6 +85,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
 
   /** Draw the provider, model and effort controls from the stored settings. */
   const draw = (): void => {
+    board.draw();
     const focused = document.activeElement;
     const focusKey =
       focused instanceof HTMLElement &&
@@ -112,6 +115,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
           live.apply_effort = allowedEffort(id, live.apply_effort);
           deps.refresh();
           drawEffort();
+          board.draw();
           setButtonState();
         },
       }),
@@ -160,6 +164,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
         onChange: (effort) => {
           deps.settings().apply_effort = effort;
           deps.refresh();
+          board.draw();
           setButtonState();
         },
       }),
@@ -184,6 +189,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
    * this only saves the click.
    */
   const setButtonState = (): void => {
+    board.refresh(completionEventsReady);
     const live = deps.settings();
     const chosen = live.apply_model.trim() !== "";
     const validEffort = effortIsValid(
@@ -349,7 +355,6 @@ function start(deps: ApplyDeps, repo: string): void {
   deps.setStatus("Applying the fixes — this edits your repository", "running");
   if (document.activeElement === deps.ui.button) deps.focusStatus();
   deps.ui.button.disabled = true;
-  deps.refresh();
   deps.ui.stop.disabled = false;
   append(deps.ui.output, "Applying the fixes…");
   recordApply(
@@ -358,6 +363,7 @@ function start(deps: ApplyDeps, repo: string): void {
     "Applying the fixes…",
     "Running or waiting for this provider",
   );
+  deps.refresh();
   const settings = settingsForApply(deps.settings(), repo);
   invoke("apply_fixes", { settings }).catch((error: unknown) => {
     activeApplies.delete(repo);
