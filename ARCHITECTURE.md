@@ -249,3 +249,15 @@ Apply uses the same execution path with edit/bash permissions added. Each
 selected model/variant receives its own precheck, using the sweep invocation
 in an empty private directory. NDJSON error events override text even when the
 CLI exits zero; duplicate text parts are replaced and distinct parts retained.
+
+## Repository cloning
+
+The desktop clone command delegates to the engine's Git clone operation. It
+reserves the existing cancellable run state, so reviews, applies, deletion and
+updates cannot overlap it. The subprocess uses the shared bounded capture,
+timeout and process-tree cancellation code, with Git credential helpers and
+SSH agent/session environment preserved. Clone diagnostics are not forwarded
+because Git or helpers may include credentials. The destination must be new;
+failed or stopped destinations are retained rather than recursively deleted.
+Only a successful clone replaces the selected repository and clears its scope.
+Clone suppresses template hooks and automatic submodule initialization.

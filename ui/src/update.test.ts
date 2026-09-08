@@ -102,8 +102,8 @@ test("the updater is blocked while a review or an apply is in flight", () => {
   for (const call of calls) {
     assert.deepEqual(
       predicateCalls(call, "busy")?.sort(),
-      ["isApplying", "isClearing", "isRunning"],
-      `the updater's busy predicate is not exactly three ORed activity checks: ${propertyInitializer(call, "busy")}`,
+      ["isApplying", "isClearing", "isCloning", "isRunning"],
+      `the updater's busy predicate is not exactly four ORed activity checks: ${propertyInitializer(call, "busy")}`,
     );
   }
 });

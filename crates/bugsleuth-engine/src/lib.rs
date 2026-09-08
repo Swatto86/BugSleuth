@@ -15,6 +15,7 @@ pub mod brief;
 pub mod bulk;
 pub mod cancel;
 mod caveats;
+pub mod clone;
 pub mod handoff;
 pub mod merge;
 /// What each vendor can be asked to run, and how hard.

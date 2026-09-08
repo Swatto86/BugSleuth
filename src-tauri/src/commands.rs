@@ -112,6 +112,28 @@ pub fn frontend_ready(app: tauri::AppHandle) {
     let _ = app.get_webview_window("main");
 }
 
+#[tauri::command]
+pub async fn clone_repository(
+    control: tauri::State<'_, RunControl>,
+    source: String,
+    parent: String,
+    name: String,
+) -> CommandResult<String> {
+    let cancel = bugsleuth_engine::cancel::Cancel::new();
+    control.try_start_run(cancel.clone())?;
+    let result = bugsleuth_engine::clone::clone_repository(
+        &source,
+        std::path::Path::new(&parent),
+        &name,
+        &cancel,
+    )
+    .await;
+    control.finish_run();
+    result
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|error| format!("{error:#}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::run::{checked_repo, run_output_dir, to_config};

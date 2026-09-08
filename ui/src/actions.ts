@@ -1,3 +1,4 @@
+import { isCloning } from "./clone";
 /**
  * The actions that ask before they act.
  *
@@ -224,6 +225,13 @@ export function bindGuardedActions(deps: ActionDeps): void {
   // rejects, say so in the live status region rather than looking broken.
   function requestQuit(acknowledged = false): void {
     if (quitting) return;
+    if (isCloning()) {
+      deps.setStatus(
+        "Stop cloning or wait for it to finish before quitting.",
+        "error",
+      );
+      return;
+    }
     quitting = true;
     deps.setStatus("Saving settings before quitting…", "running");
     if (document.activeElement === ui.quit) deps.focusStatus();

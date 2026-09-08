@@ -35,7 +35,7 @@ function handsFocusOffBefore(scope: ts.Node, position: number): boolean {
     const callee = node.expression;
     if (
       (ts.isPropertyAccessExpression(callee) &&
-        callee.name.text === "focusStatus") ||
+        (callee.name.text === "focusStatus" || callee.name.text === "focus")) ||
       (ts.isIdentifier(callee) && callee.text === "focusStatus")
     ) {
       found = true;
@@ -124,6 +124,7 @@ test("every active control hands focus off before it disables or hides itself", 
       "actions.ts:ui.quit.disabled",
       "actions.ts:ui.stop.disabled",
       "apply.ts:deps.ui.button.disabled",
+      "clone.ts:control.disabled",
       "controls.ts:ui.checkSignin.disabled",
       "update.ts:button.disabled",
     ],

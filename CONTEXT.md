@@ -30,3 +30,11 @@ remain readable.
 Installed releases check signed updates at startup and every four hours. Updates
 wait for repository operations to finish and settings to save before restarting.
 Development builds never check for or install updates.
+
+Repository cloning uses the installed Git CLI and existing credential helpers or
+SSH agent. Clone creates a new folder beneath a chosen parent, selects it only
+on success, and clears the previous path scope. Existing folders are refused;
+failed/cancelled destinations are retained. HTTPS, SSH and absolute local sources
+are supported; embedded HTTPS credentials are refused. Clones use the shared
+operation lock and cancellation, with a 30-minute timeout. Submodules are not
+initialized automatically. No credentials are stored by BugSleuth.

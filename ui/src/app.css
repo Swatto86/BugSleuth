@@ -606,3 +606,17 @@ label.checkline input[type="checkbox"] {
   border-color: var(--critical);
   color: var(--critical);
 }
+
+#clone-dialog {
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  color: var(--text);
+  background: var(--bg-raised);
+}
+#clone-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+#clone-dialog .field { margin-bottom: 12px; }
+#clone-status { overflow-wrap: anywhere; }

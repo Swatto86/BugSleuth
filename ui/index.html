@@ -93,6 +93,7 @@
               <span>Folder</span>
               <input id="repo" type="text" spellcheck="false" placeholder="C:\\path\\to\\repo" />
             </label>
+            <button id="clone-open" type="button" style="align-self: end">Clone…</button>
             <button id="browse" type="button" style="align-self: end">Browse…</button>
           </div>
           <div class="row">
@@ -323,5 +324,15 @@
     </div>
 
     <script type="module" src="/src/main.ts"></script>
+  <dialog id="clone-dialog" aria-labelledby="clone-title">
+      <h2 id="clone-title">Clone repository</h2>
+      <p class="hint">Use your existing Git credential helper or SSH agent for private repositories. Do not paste tokens or passwords into the address.</p>
+      <label class="field"><span>Repository address</span><input type="text" id="clone-source" required autocomplete="off" spellcheck="false" placeholder="https://github.com/owner/repo.git or git@host:owner/repo.git" /></label>
+      <div class="row"><label class="field"><span>Destination parent folder</span><input type="text" id="clone-parent" required spellcheck="false" /></label><button id="clone-browse" type="button">Browse…</button></div>
+      <label class="field"><span>New folder name</span><input type="text" id="clone-name" required spellcheck="false" placeholder="my-repo" /></label>
+      <p class="hint">Creates a full checkout of the default branch. Existing folders are never overwritten. Submodules are not downloaded automatically.</p>
+      <p id="clone-status" role="status" aria-live="polite"></p>
+      <div class="dialog-buttons"><button id="clone-close" type="button">Close</button><button id="clone-start" type="button">Clone and select</button></div>
+    </dialog>
   </body>
 </html>

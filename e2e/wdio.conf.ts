@@ -151,7 +151,7 @@ export const config: WebdriverIO.Config = {
   runner: "local",
   framework: "mocha",
   specs: [
-    ["review", "agents", "dialog-focus", "shell", "apply", "journey"].map(
+    ["review", "clone", "agents", "dialog-focus", "shell", "apply", "journey"].map(
       (name) => path.resolve(here, `specs/${name}.spec.ts`),
     ),
   ],

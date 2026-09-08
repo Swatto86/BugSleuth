@@ -80,6 +80,7 @@ pub fn run() {
             commands::apply::cancel_apply,
             commands::saved::clear_saved,
             commands::pick_directory,
+            commands::clone_repository,
             commands::frontend_ready,
             commands::quit,
             catalogue::available_models,

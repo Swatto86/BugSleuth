@@ -246,3 +246,22 @@ Dependencies point one way: everything may depend on `domain`, and `domain`
 depends on nothing. `judge` does not know `provider` exists. Both front ends run
 the same engine rather than two implementations of it — the alternative is
 exactly the kind of quiet divergence this tool exists to catch elsewhere.
+
+### Clone a repository
+
+Choose **Clone…** beside the repository folder, enter its HTTPS or SSH address,
+choose a destination parent and a new folder name, then **Clone and select**.
+BugSleuth downloads a full default-branch checkout and selects it for review.
+Git must be installed. Private repositories use your existing Git credential
+helper or SSH agent; signing into a model provider does not authenticate Git.
+For GitHub CLI users, `gh auth setup-git` connects an existing GitHub login to
+Git's credential helper. Do not put tokens or passwords in repository addresses.
+
+Existing destination folders are never overwritten. Stop cloning cancels the
+operation; incomplete destinations are kept for inspection, so use a new folder
+name when retrying. Submodules are not downloaded automatically.
+
+The desktop clone acceptance uses a real local Git repository. To additionally
+check private-repository access with your existing credentials, set
+`BUGSLEUTH_E2E_CLONE_URL` to an accessible, small private repository with committed
+files before running `npm run e2e`. The clone stays in the disposable E2E workspace.

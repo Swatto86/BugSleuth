@@ -1,3 +1,4 @@
+import { bindClone, isCloning } from "./clone";
 /** Wiring: DOM in, commands out. */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -90,7 +91,8 @@ function renderPlanSummary(): void {
       : `${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`;
   if (ui.planSummary.textContent !== summary)
     ui.planSummary.textContent = summary;
-  const busy = isRunning() || isApplying() || isClearing() || isUpdating();
+  const busy =
+    isRunning() || isApplying() || isClearing() || isCloning() || isUpdating();
   // The completion listener too: without it a started run never finishes as
   // far as this window is concerned, and every action stays blocked.
   const runDisabled = !runEventsReady() || busy || blocked !== null;
@@ -114,6 +116,7 @@ function renderPlanSummary(): void {
     ui.run.removeAttribute("aria-describedby");
   }
   ui.clearSaved.disabled = busy;
+  (document.getElementById("clone-open") as HTMLButtonElement).disabled = busy;
   ui.stop.classList.toggle("hidden", !isRunning() && !isApplying());
 }
 
@@ -197,8 +200,6 @@ const runDeps = (): RunDeps => ({
   settings: () => settings,
 });
 
-// ── Boot ────────────────────────────────────────────────────────────────────
-
 let applyBinding: ApplyBinding = {
   redraw: () => {},
   refreshButton: () => {},
@@ -207,6 +208,11 @@ let applyBinding: ApplyBinding = {
 let startUpdates: () => void = () => {};
 
 function bind(): void {
+  bindClone({
+    settings: () => settings,
+    refresh,
+    busy: () => isRunning() || isApplying() || isClearing() || isUpdating(),
+  });
   applyBinding = bindApply({
     ui: {
       vendor: ui.applyVendor,
@@ -222,7 +228,7 @@ function bind(): void {
     settings: () => settings,
     promptRepo: currentFixPromptRepo,
     catalogue: () => catalogue,
-    busy: () => isRunning() || isClearing() || isUpdating(),
+    busy: () => isRunning() || isClearing() || isCloning() || isUpdating(),
     refresh,
     setStatus,
     focusStatus,
@@ -252,7 +258,7 @@ function bind(): void {
       notice: ui.updateNotice,
       setStatus,
       focusStatus,
-      busy: () => isRunning() || isApplying() || isClearing(),
+      busy: () => isRunning() || isApplying() || isClearing() || isCloning(),
       flushSettings: () => settingsSaver.flush(),
       setSettingsLocked: (locked) => {
         ui.main.inert = locked;
