@@ -165,6 +165,7 @@ fn live_sweep_metadata_reaches_the_aggregate_report() {
         triage: Default::default(),
         swept: vec![swept],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     }
     .to_text();
@@ -238,6 +239,7 @@ fn a_sweep_whose_task_died_is_reported_as_a_gap_not_omitted() {
             model: None,
             reason: "a sweep failed to complete and produced nothing: task panicked".into(),
         }],
+        interrupted: None,
         cancelled: false,
     };
     let text = report.to_text();

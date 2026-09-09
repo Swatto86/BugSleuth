@@ -15,6 +15,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { applyConfirmation } from "./apply-confirm";
 import { confirmDialog } from "./dialog";
 import { bindFixBoard } from "./fix-board";
 import {
@@ -28,6 +29,7 @@ import {
 } from "./model";
 import { offeredVendors, vendorCliPresent } from "./cli-offer.ts";
 import { effortPicker, modelPicker, option } from "./pickers";
+import { bindApplyProgress } from "./apply-progress";
 import type { Catalogue } from "./view";
 
 import {
@@ -83,6 +85,16 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
 
   let completionEventsReady = false;
 
+  // How far each repository's fixes have got, and how far an interrupted run
+  // had got before it stopped. Kept beside the panel rather than inside it
+  // because both answers come from Rust — one live, one off disk — and the only
+  // thing this file does with them is label a button.
+  const fixes = bindApplyProgress({
+    promptRepo: () => deps.promptRepo(),
+    setStatus: deps.setStatus,
+    onChange: () => setButtonState(),
+  });
+
   /** Draw the provider, model and effort controls from the stored settings. */
   const draw = (): void => {
     board.draw();
@@ -124,6 +136,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
     ui.push.checked = deps.settings().push_after_apply;
     drawTag();
     setButtonState();
+    fixes.refresh(deps.promptRepo());
     if (focusKey) {
       const selector = `[data-focus-key="${CSS.escape(focusKey)}"]`;
       (
@@ -182,11 +195,14 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
   };
 
   /**
-   * The button is offered only when it would do something.
+   * The button is offered only when it would do something, and says which thing.
    *
    * No model chosen and it has nothing to run; a review in flight and it would
    * edit the code that review is reading. Both are refused by Rust as well —
-   * this only saves the click.
+   * this only saves the click. Its label switches to Resume when a previous fix
+   * run left defects finished, because pressing Apply after a run that died on
+   * a usage limit is otherwise indistinguishable from paying for all of them
+   * again.
    */
   const setButtonState = (): void => {
     board.refresh(completionEventsReady);
@@ -205,6 +221,9 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
       !chosen ||
       !validEffort ||
       !cliPresent;
+    const resuming = fixes.alreadyFixed(deps.promptRepo());
+    ui.button.textContent =
+      resuming > 0 ? `Resume fixes (${resuming} done)` : "Apply fixes";
     ui.button.title = !completionEventsReady
       ? "Applying is unavailable until its result listener is ready."
       : !chosen
@@ -212,7 +231,9 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
         : !cliPresent
           ? "This provider's CLI is not installed on this machine."
           : validEffort
-            ? "Run the fix prompt against this repository, editing files in place."
+            ? resuming > 0
+              ? `${resuming} defects are already fixed and committed. This continues at the ones still outstanding rather than starting over.`
+              : "Run the fix prompt against this repository, editing files in place."
             : "This model does not accept the stored effort; choose Default first.";
   };
 
@@ -245,38 +266,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
       return;
     }
     const confirmed = { ...deps.settings() };
-    const publishing = confirmed.push_after_apply;
-    const releasing = publishing && confirmed.tag_release_after_push;
-    void confirmDialog({
-      title: releasing
-        ? "Apply these fixes, push them, and tag a release?"
-        : publishing
-          ? "Apply these fixes and push them?"
-          : "Apply these fixes to your code?",
-      message:
-        `This runs the displayed fix prompt against "${repo}" using ${confirmed.apply_model} with write access, ` +
-        "editing files in place and running your tests. It is refused unless " +
-        "the working tree is clean, so everything it does will show up in " +
-        "`git diff` and `git log` — but nothing it writes has been checked by " +
-        "anyone. Read the changes before you keep them." +
-        (publishing
-          ? " Whatever it commits will then be pushed to this branch's " +
-            "upstream. That part cannot be undone: once the commits are on " +
-            "the remote, anyone watching it can fetch them, and a later " +
-            "rewrite does not recall them."
-          : "") +
-        (releasing
-          ? " The pushed commits will then be tagged with the next patch " +
-            "version, which starts your CI — so this can build and publish a " +
-            "release of code nobody has read yet."
-          : ""),
-      confirmLabel: releasing
-        ? "Apply, push and tag"
-        : publishing
-          ? "Apply and push"
-          : "Apply the fixes",
-      destructive: true,
-    }).then((yes) => {
+    void confirmDialog(applyConfirmation(repo, confirmed)).then((yes) => {
       if (!yes) return;
       start(
         {
@@ -322,6 +312,10 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
         failed ? "error" : "",
       );
     if (document.activeElement === ui.stop) deps.focusStatus();
+    // Whatever the outcome, the journal on disk has changed: a finished run
+    // discarded it, a stopped or failed one added to it. Read it again rather
+    // than infer, so the button's promise matches what Rust would actually do.
+    fixes.refresh(repo);
     deps.refresh();
     draw();
   }).then(

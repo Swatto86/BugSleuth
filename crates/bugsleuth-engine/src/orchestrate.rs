@@ -26,7 +26,7 @@ mod gaps;
 pub(crate) mod persist;
 pub mod progress;
 pub mod render;
-use persist::{reusable, write_report};
+use persist::reusable;
 
 /// Something that happened during a run, as it happens.
 ///
@@ -46,6 +46,12 @@ pub enum RunEvent {
     },
     /// A sweep already paid for by an earlier run was reused rather than repeated.
     Reused { model: String, lane: String },
+    /// The run stopped early because the provider will not serve it right now.
+    ///
+    /// Distinct from a sweep failing. One failed sweep is a hole in the report;
+    /// this says the rest of the run would be holes too, so it was not paid
+    /// for — and that everything already swept is on disk and will be reused.
+    Interrupted { reason: String, remaining: usize },
     /// A sweep finished. `swept` false means it did not run — `reason` says why,
     /// and it must never be presented as "found nothing".
     SweepFinished {
@@ -115,6 +121,14 @@ pub struct RunReport {
     pub swept: Vec<Swept>,
     /// Every hole, with why. Both kinds: no model assigned, and sweep failed.
     pub gaps: Vec<Gap>,
+    /// Why the run stopped early without being cancelled, if it did.
+    ///
+    /// Separate from `cancelled`, which means the user pressed Stop. This is
+    /// the run deciding for itself that continuing would only buy more failures
+    /// — the usual cause being a spent usage allowance — and it is the
+    /// difference between a report that reads as a finished review full of
+    /// holes and one that says it was interrupted and can be picked up.
+    pub interrupted: Option<String>,
     /// Whether the run was stopped part-way rather than reaching its end.
     ///
     /// Captured here, in the engine, at the moment the gaps are written — not
@@ -186,98 +200,19 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
 
     gaps::caution(plan, options.repo);
 
-    // Sweeps whose task died outright. Carried out of the batch loop so they
-    // can be reported as gaps rather than only logged. Lane and model travel
-    // with the error so a panic is not mis-labelled as Correctness.
-    let mut panicked: Vec<(Lane, String, String)> = Vec::new();
-    // Durable-write failures from the current batch. Collected rather than
-    // printed and forgotten: out_dir explicitly asks for recoverable per-sweep
-    // output, so a report that did not reach disk is a failed run, not a
-    // warning on a stream the desktop app never shows.
-    let mut persistence_errors: Vec<anyhow::Error> = Vec::new();
-
     let outstanding = take_reusable(plan, &options, &mut findings, &mut swept);
 
     let remaining = Plan {
         units: outstanding,
         uncovered: vec![],
     };
-    // Kept so a cancelled run can name what it never got to. Sweeps remove
-    // themselves as they land.
-    let mut remaining_units: Vec<Unit> = remaining.units.clone();
-    let batches = remaining.batches();
-    for (index, batch) in batches.iter().enumerate() {
-        emit(
-            &options.progress,
-            RunEvent::BatchStarted {
-                index: index + 1,
-                total: batches.len(),
-                units: batch
-                    .iter()
-                    .map(|u| format!("{} x {}", u.model, u.lane.title()))
-                    .collect(),
-            },
-        );
-
-        // Checked between batches as well as during one: a cancel that arrives
-        // while a batch is finishing must not start the next.
-        if options.cancel.stopped() {
-            break;
-        }
-
-        // Everything in a batch is a different vendor, so these run at once.
-        for report in run_batch(batch, &options, &mut panicked).await {
-            if let (Some(dir), Some(name)) = (options.out_dir, report.file_name.as_ref())
-                && let Err(error) = write_report(dir, name, &report.lane_report)
-            {
-                persistence_errors.push(error);
-            }
-
-            emit(
-                &options.progress,
-                match &report.lane_report.status {
-                    Status::Swept { .. } => RunEvent::SweepFinished {
-                        model: report.lane_report.model.clone(),
-                        lane: report.lane.title().to_string(),
-                        findings: report.lane_report.findings.len(),
-                        swept: true,
-                        reason: String::new(),
-                    },
-                    Status::NotSwept { reason } => RunEvent::SweepFinished {
-                        model: report.lane_report.model.clone(),
-                        lane: report.lane.title().to_string(),
-                        findings: 0,
-                        swept: false,
-                        reason: reason.clone(),
-                    },
-                },
-            );
-
-            // Both sides resolved. A unit configured as `sonnet` produced a
-            // report saying `claude:sonnet`, so this comparison was never true
-            // and every finished sweep stayed on the outstanding list — a
-            // cancelled run reported lanes it had already swept as not reached.
-            strike_off(&mut remaining_units, report.lane, &report.lane_report.model);
-
-            match &report.lane_report.status {
-                Status::Swept { .. } => {
-                    swept.push(Swept::from_report(report.lane, &report.lane_report));
-                    findings.extend(report.lane_report.findings);
-                }
-                Status::NotSwept { reason } => gaps.push(Gap {
-                    lane: report.lane,
-                    model: Some(report.lane_report.model.clone()),
-                    reason: reason.clone(),
-                }),
-            }
-        }
-
-        // Every completed sweep in this batch has had its write attempted. A
-        // report that did not reach disk is not recoverable by resume, so the
-        // run fails here rather than charging ahead and losing more work that
-        // the user would have to pay for again.
-        fail_unless_persisted(&mut persistence_errors)?;
-    }
+    let executed = sweep_batches(remaining, &options).await?;
+    let remaining_units = executed.remaining;
+    let interrupted = executed.interrupted;
+    let panicked = executed.panicked;
+    findings.extend(executed.findings);
+    swept.extend(executed.swept);
+    gaps.extend(executed.gaps);
 
     if common_scope(&swept).is_err() {
         anyhow::bail!(
@@ -294,6 +229,10 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
     // two cannot disagree about whether this run was stopped.
     let cancelled = options.cancel.stopped();
     gaps::note_cancelled(cancelled, &remaining_units, &mut gaps);
+    // Not both: a cancelled run has already named every unit it never reached,
+    // and naming them twice would report each missing lane as two holes.
+    let interrupted = interrupted.filter(|_| !cancelled);
+    gaps::note_interrupted(interrupted.as_deref(), &remaining_units, &mut gaps);
     gaps::note_panicked(&panicked, &mut gaps);
 
     Ok(RunReport {
@@ -301,6 +240,7 @@ pub async fn run(plan: &Plan, options: RunOptions<'_>) -> Result<RunReport> {
         triage,
         swept,
         gaps,
+        interrupted,
         cancelled,
     })
 }
@@ -370,11 +310,15 @@ fn emit(progress: &Progress, event: RunEvent) {
 }
 
 mod batch;
-use batch::run_batch;
+use batch::sweep_batches;
 
 #[cfg(test)]
 #[path = "orchestrate/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "orchestrate/interruption_tests.rs"]
+mod interruption_tests;
 
 #[cfg(test)]
 #[path = "orchestrate/persist_failure_tests.rs"]

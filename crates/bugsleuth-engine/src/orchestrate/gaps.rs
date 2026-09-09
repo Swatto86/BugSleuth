@@ -121,6 +121,30 @@ pub(super) fn note_cancelled(cancelled: bool, remaining: &[Unit], gaps: &mut Vec
     }
 }
 
+/// Name every sweep a run stopped short of, when the provider refused it.
+///
+/// Its own wording rather than the cancellation one, because the two ask for
+/// different things from the reader. A cancelled lane was a choice; this one
+/// means the allowance ran out, and the answer is to wait and run again — which
+/// costs nothing for the lanes already swept, and is worth saying plainly in
+/// the report itself rather than only in a status line that scrolls away.
+pub(super) fn note_interrupted(reason: Option<&str>, remaining: &[Unit], gaps: &mut Vec<Gap>) {
+    let Some(reason) = reason else {
+        return;
+    };
+    for unit in remaining {
+        gaps.push(Gap {
+            lane: unit.lane,
+            model: Some(unit.model.clone()),
+            reason: format!(
+                "not attempted: the provider stopped serving this run ({reason}). Everything \
+                 already swept is saved — run again once your usage allowance resets and
+                 only the lanes still missing will be paid for."
+            ),
+        });
+    }
+}
+
 /// Name every sweep whose task died outright.
 ///
 /// The comment beside the `JoinSet` demanded this for weeks while the code only

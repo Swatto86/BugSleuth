@@ -1,6 +1,7 @@
 //! Tests for what a report says *about itself*: how severities were graded,
-//! what the method could not see, which sweeps were recovered, and how
-//! agreement is counted. Split from the body tests at the hard line cap.
+//! what the method could not see, and which sweeps were recovered. Split from
+//! the body tests at the hard line cap; the agreement counting that used to sit
+//! here crossed the same cap and moved to `agreement.rs` beside it.
 
 use crate::orchestrate::{Gap, RunReport, Swept};
 use crate::triage::Outcome;
@@ -24,6 +25,7 @@ fn report(gaps: Vec<Gap>) -> RunReport {
             salvaged: false,
         }],
         gaps,
+        interrupted: None,
         cancelled: false,
     }
 }
@@ -80,6 +82,7 @@ fn a_fully_graded_multi_lane_report_stops_warning_that_lanes_cannot_be_compared(
             },
         ],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     };
     // Nothing graded: the warning stands.
@@ -158,6 +161,7 @@ fn a_moved_grade_is_shown_with_what_it_moved_from_and_why() {
             salvaged: false,
         }],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     };
     let text = unchanged.to_text();
@@ -198,6 +202,7 @@ fn rejected_findings_are_counted_in_the_sweep_line() {
             salvaged: false,
         }],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     };
     let text = with_rejects.to_text();
@@ -243,6 +248,7 @@ fn a_salvaged_sweep_does_not_read_like_a_clean_one() {
             salvaged: true,
         }],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     };
     let text = salvaged.to_text();
@@ -273,6 +279,7 @@ fn a_run_that_used_an_unsandboxable_vendor_says_so_in_the_report() {
             salvaged: false,
         }],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     };
     let text = with_kilo.to_text();
@@ -287,113 +294,4 @@ fn a_run_that_used_an_unsandboxable_vendor_says_so_in_the_report() {
     // And a run of only sandboxable vendors says nothing, or the caution
     // becomes background noise nobody reads.
     assert!(!report(Vec::new()).to_text().contains("Caution:"));
-}
-
-#[test]
-fn agreement_is_counted_against_models_not_sweeps() {
-    // Two models covering two lanes is four sweeps, and a defect found by one
-    // of them printed "found by 1 of 4 models" - understating agreement against
-    // a total that never existed. Only models that swept the defect's own lane
-    // could have found it.
-    let two_models_two_lanes = vec![
-        Swept {
-            model: "claude:sonnet".into(),
-            lane: Lane::Correctness,
-            commit: Some("aaaaaaaa".into()),
-            cache_revision: Some("aaaaaaaa".into()),
-            scope: None,
-            excluded_paths: vec![],
-            usage: None,
-            findings: 1,
-            rejected: 0,
-            salvaged: false,
-        },
-        Swept {
-            model: "codex:".into(),
-            lane: Lane::Correctness,
-            commit: Some("aaaaaaaa".into()),
-            cache_revision: Some("aaaaaaaa".into()),
-            scope: None,
-            excluded_paths: vec![],
-            usage: None,
-            findings: 0,
-            rejected: 0,
-            salvaged: false,
-        },
-        Swept {
-            model: "claude:sonnet".into(),
-            lane: Lane::Ux,
-            commit: Some("aaaaaaaa".into()),
-            cache_revision: Some("aaaaaaaa".into()),
-            scope: None,
-            excluded_paths: vec![],
-            usage: None,
-            findings: 0,
-            rejected: 0,
-            salvaged: false,
-        },
-        Swept {
-            model: "codex:".into(),
-            lane: Lane::Ux,
-            commit: Some("aaaaaaaa".into()),
-            cache_revision: Some("aaaaaaaa".into()),
-            scope: None,
-            excluded_paths: vec![],
-            usage: None,
-            findings: 0,
-            rejected: 0,
-            salvaged: false,
-        },
-    ];
-    let report = RunReport {
-        ranked: vec![],
-        triage: Default::default(),
-        swept: two_models_two_lanes,
-        gaps: vec![],
-        cancelled: false,
-    };
-    assert_eq!(report.models_on("correctness"), 2);
-    assert_eq!(report.models_on("ux"), 2);
-    // A lane nobody swept has no models, rather than borrowing another lane's.
-    assert_eq!(report.models_on("security"), 0);
-}
-
-#[test]
-fn repeating_a_model_does_not_inflate_the_model_count() {
-    // Two passes of one model is two sweeps and still one model. Counting
-    // sweeps would say a lone finding was "1 of 2 models" when no second model
-    // ever looked.
-    let repeated = RunReport {
-        ranked: vec![],
-        triage: Default::default(),
-        swept: vec![
-            Swept {
-                model: "claude:sonnet".into(),
-                lane: Lane::Correctness,
-                commit: Some("aaaaaaaa".into()),
-                cache_revision: Some("aaaaaaaa".into()),
-                scope: None,
-                excluded_paths: vec![],
-                usage: None,
-                findings: 1,
-                rejected: 0,
-                salvaged: false,
-            },
-            Swept {
-                model: "claude:sonnet".into(),
-                lane: Lane::Correctness,
-                commit: Some("aaaaaaaa".into()),
-                cache_revision: Some("aaaaaaaa".into()),
-                scope: None,
-                excluded_paths: vec![],
-                usage: None,
-                findings: 1,
-                rejected: 0,
-                salvaged: false,
-            },
-        ],
-        gaps: vec![],
-        cancelled: false,
-    };
-    assert_eq!(repeated.models_on("correctness"), 1);
 }

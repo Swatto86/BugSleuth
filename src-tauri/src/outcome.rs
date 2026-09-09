@@ -91,6 +91,12 @@ pub(crate) fn run_payload(
         "ok": true,
         "complete": complete,
         "cancelled": cancelled,
+        // Separate from `cancelled`, which the user chose. This is the run
+        // giving up because the provider stopped serving it, and the window
+        // says so rather than presenting a report full of holes as finished —
+        // the lanes it never reached are still there to be paid for later, and
+        // the ones it swept are on disk and will be reused.
+        "interrupted": report.interrupted,
         "text": text,
         "prompt": prompt,
         "promptPath": prompt_path,
@@ -122,6 +128,7 @@ mod tests {
                 triage: Default::default(),
                 swept: vec![],
                 gaps: vec![],
+                interrupted: None,
                 cancelled: true,
             }),
             true,
@@ -150,6 +157,7 @@ mod tests {
                 triage: Default::default(),
                 swept: vec![],
                 gaps: vec![],
+                interrupted: None,
                 cancelled: false,
             }),
             false,
@@ -169,6 +177,7 @@ mod tests {
                     model: Some("test-model".to_string()),
                     reason: "rate limited".to_string(),
                 }],
+                interrupted: None,
                 cancelled: false,
             }),
             false,

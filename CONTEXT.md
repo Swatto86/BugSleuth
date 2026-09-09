@@ -73,7 +73,16 @@ paying matches the run. Stop cancels the entire batch,
 including repositories waiting to start. Each repository retains its own cache,
 coverage, findings and fix prompt; the report selector binds Apply to that
 report's repository. Each report remembers its own fixing provider/model and
-effort. Explicit Apply actions may run concurrently in separate repositories;
+effort. Fixes run one defect at a time from the per-defect prompts, recording
+each in `apply-progress.json` beside them as soon as its commit lands, so an
+interrupted fix run resumes at the defect it died on instead of re-reading the
+whole report; the journal carries the original baseline, so attribution
+stripping, the changed-file report and any push still cover the earlier
+attempt's commits. It is discarded only once the report is built. A journal is
+refused when the prompts or the fixing model have changed, and a run stopped by
+a spent allowance says how many defects are done — the Apply button then reads
+"Resume fixes (N done)". Nothing resumes on its own; it waits to be pressed,
+because the usual reason a run stopped is a limit that has not reset yet. Explicit Apply actions may run concurrently in separate repositories;
 up to three Codex fixes run simultaneously using ephemeral sessions and private
 answer files; other vendors retain one slot each. A repository assignment board
 exposes each saved report's provider, model, effort, start action and fix status.
@@ -91,6 +100,11 @@ folder and additional folders in settings. Clear saved sweeps explicitly targets
 the first folder. Progress groups completed, reused and failed reviews by repository;
 batch entries say reviewing/queued because provider slots are shared.
 Each finished repository saves last-report.json atomically beside its sweep cache.
+A scan whose whole batch is refused by its provider stops rather than spending
+the remaining units discovering the same refusal one at a time. That is reported
+as interrupted, distinct from cancelled and from incomplete: those lanes were
+never attempted, so nothing was paid for them and running again sweeps exactly
+them. Sweeps already on disk are reused as always.
 Startup restores reports without invoking providers; older runs reopen their saved
 fix-prompt.md with a historical-coverage notice. Viewing a saved report does not
 make its sweeps eligible for reuse or revalidate its findings against changed code.

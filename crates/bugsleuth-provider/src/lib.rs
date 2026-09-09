@@ -27,5 +27,5 @@ pub mod process;
 pub mod signin;
 
 pub use claude::{ClaudeSweep, SweepResult, Usage};
-pub use error::ProviderError;
+pub use error::{ProviderError, looks_exhausted};
 pub use process::{CliOutput, Invocation, ProcessError};

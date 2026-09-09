@@ -135,6 +135,7 @@ async fn a_single_defect_is_not_paid_to_be_compared_with_nothing() {
         triage: outcome,
         swept: vec![],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     }
     .to_text();

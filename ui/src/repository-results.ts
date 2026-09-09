@@ -5,6 +5,15 @@ export interface RepositoryResult {
   ok: boolean;
   complete: boolean;
   cancelled: boolean;
+  /**
+   * Why the run gave up, when nobody stopped it.
+   *
+   * Distinct from `cancelled` and from `complete`. A spent usage allowance
+   * leaves lanes that were never attempted rather than lanes that failed, so
+   * nothing has been paid for them and running again picks up exactly those.
+   * Absent on a run that reached its end.
+   */
+  interrupted?: string | null;
   text: string;
   prompt?: string;
   promptPath?: string | null;

@@ -150,10 +150,11 @@ async fn a_repository_without_git_is_refused_before_anything_is_spent() {
         repo: &dir,
         model: "haiku",
         effort: "",
-        prompt: "fix it",
+        prompts: &dir,
         timeout: Duration::from_secs(1),
         max_turns: 1,
         cancel: crate::cancel::Cancel::new(),
+        progress: None,
         push: false,
         tag: false,
     })
@@ -209,10 +210,11 @@ async fn a_git_file_pointing_at_another_repository_is_refused_before_anything_is
         repo: &attacker,
         model: "haiku",
         effort: "",
-        prompt: "fix it",
+        prompts: &attacker,
         timeout: Duration::from_secs(1),
         max_turns: 1,
         cancel: crate::cancel::Cancel::new(),
+        progress: None,
         push: false,
         tag: false,
     })
@@ -226,4 +228,113 @@ async fn a_git_file_pointing_at_another_repository_is_refused_before_anything_is
         error.contains("not an independent git repository"),
         "the cross-repository `.git` indirection was accepted: {error}"
     );
+}
+
+/// A resumed apply skips what an earlier attempt already fixed.
+///
+/// The journal has its own tests, but they prove it records and reloads — not
+/// that `apply` actually consults it. The whole claim being made to the user is
+/// that pressing Apply after a run that died on a usage limit continues rather
+/// than starting over, and that claim lives here, in the loop that decides
+/// which work orders to hand to a model.
+///
+/// No provider runs: the model is deliberately one that cannot be started, so
+/// the first defect this reaches fails immediately. Which defect that is, and
+/// what the failure says about the ones before it, is exactly what is under
+/// test.
+#[tokio::test]
+async fn a_resumed_apply_continues_at_the_defect_the_last_attempt_died_on() {
+    let dir = std::env::temp_dir().join(format!(
+        "bugsleuth-apply-resume-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("scratch");
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .output()
+            .expect("git")
+    };
+    git(&["init", "-q", "-b", "main"]);
+    git(&["config", "user.email", "t@example.invalid"]);
+    git(&["config", "user.name", "test"]);
+    std::fs::write(dir.join("a.txt"), "hello\n").expect("write");
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "base"]);
+
+    // Outside the checkout, as the real run directory is: prompts written into
+    // the repository would make its tree dirty and be refused before any of
+    // this is reached.
+    let prompts = dir.with_extension("prompts");
+    let _ = std::fs::remove_dir_all(&prompts);
+    std::fs::create_dir_all(&prompts).expect("prompts");
+    std::fs::write(prompts.join("fix-prompt-01.md"), "fix the first").expect("write");
+    std::fs::write(prompts.join("fix-prompt-02.md"), "fix the second").expect("write");
+
+    let model = "no-such-model-please";
+    let request = || bugsleuth_engine_apply_request(&dir, &prompts, model);
+
+    // First attempt: nothing is recorded, so it dies on the first defect and
+    // must not claim any progress.
+    let first = apply(request())
+        .await
+        .err()
+        .map(|error| error.to_string())
+        .expect("no provider is installed, so the apply must fail");
+    assert!(
+        first.contains("No defect was completed"),
+        "a failed first defect claimed progress: {first}"
+    );
+
+    // Now stand in for an attempt that got the first defect done and then hit a
+    // usage limit, which is what the journal would hold.
+    let steps = steps::load(&prompts).expect("work orders");
+    let mut journal =
+        journal::Journal::open(&prompts, model, &steps, baseline(&dir).expect("base"));
+    journal
+        .record(1, "fixed the first")
+        .expect("record the finished defect");
+    drop(journal);
+
+    let second = apply(request())
+        .await
+        .err()
+        .map(|error| error.to_string())
+        .expect("no provider is installed, so the apply must fail");
+    assert!(
+        second.contains("1 of 2 defects are fixed"),
+        "the resumed run did not report the earlier attempt's work: {second}"
+    );
+    assert!(
+        second.contains("continues at the 1 still outstanding"),
+        "the resumed run did not say what is left: {second}"
+    );
+    // And it is still recorded afterwards: a second failure must not discard
+    // the defect the first attempt paid for.
+    assert_eq!(unfinished(&prompts), Some(1));
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&prompts);
+}
+
+/// Builds the request twice over without repeating nine fields.
+fn bugsleuth_engine_apply_request<'a>(
+    repo: &'a std::path::Path,
+    prompts: &'a std::path::Path,
+    model: &'a str,
+) -> ApplyRequest<'a> {
+    ApplyRequest {
+        repo,
+        model,
+        effort: "",
+        prompts,
+        timeout: Duration::from_secs(5),
+        max_turns: 1,
+        cancel: crate::cancel::Cancel::new(),
+        progress: None,
+        push: false,
+        tag: false,
+    }
 }

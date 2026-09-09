@@ -165,6 +165,18 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     },
   );
 
+  /**
+   * What to say about a review the provider stopped serving.
+   *
+   * Names the cause, because "incomplete" would send someone looking at their own
+   * repository for a problem that is not there — and says the sweeps are kept,
+   * because the reason to run again rather than start from scratch is the whole
+   * point of the message.
+   */
+  function interruptedStatus(reason: string): string {
+    return `Review interrupted — ${reason}. Sweeps already done are saved; run again to continue.`;
+  }
+
   await listen<RepositoryResult>("run-finished", (event) => {
     finishProgress();
     clearApplyReports();
@@ -177,11 +189,13 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
           ? "Review stopped"
           : !result.ok
             ? "Run failed"
-            : !result.complete
-              ? "Review incomplete — some lanes were not swept"
-              : result.saveError
-                ? "Finished, but the fix prompts were not completely saved"
-                : "Finished",
+            : result.interrupted
+              ? interruptedStatus(result.interrupted)
+              : !result.complete
+                ? "Review incomplete — some lanes were not swept"
+                : result.saveError
+                  ? "Finished, but the fix prompts were not completely saved"
+                  : "Finished",
         result.ok && result.complete && !result.saveError ? "" : "error",
       );
     });
@@ -199,6 +213,12 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
       deps.setStatus("Review stopped");
     } else if (!event.payload.ok) {
       deps.setStatus("Run failed", "error");
+    } else if (event.payload.interrupted) {
+      // Checked before "incomplete", which it would otherwise be reported as.
+      // The two look identical in the report and are not the same thing to
+      // act on: incomplete means those lanes failed, this means they were
+      // never attempted and nothing has been paid for them.
+      deps.setStatus(interruptedStatus(event.payload.interrupted), "error");
     } else if (!event.payload.complete && event.payload.saveError) {
       deps.setStatus(
         "Review incomplete — some lanes were not swept, and the fix prompts were not completely saved",

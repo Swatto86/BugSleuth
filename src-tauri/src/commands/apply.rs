@@ -78,17 +78,32 @@ pub async fn apply_fixes(
     // apply, while apply consumes pre-clear state. Repository and model checks
     // stay above because they touch nothing shared.
     let cancel = bugsleuth_engine::cancel::Cancel::new();
-    let prompt = reserve_and_load(&control, &repo, cancel.clone())?;
+    let prompts = reserve_and_load(&control, &repo, cancel.clone())?;
     crate::tray::work_started(&app, crate::tray::BackgroundWork::Apply);
     tauri::async_runtime::spawn(async move {
+        // Forwarded to the window as each defect starts and finishes. A fix run
+        // is minutes to hours of a model editing a real repository; without
+        // this the window shows one spinner for all of it, and stopping is a
+        // decision made blind about how much would be thrown away.
+        let (progress, mut events) = tokio::sync::mpsc::unbounded_channel();
+        let forwarder = app.clone();
+        let identity = repo.display().to_string();
+        let forwarding = tauri::async_runtime::spawn(async move {
+            while let Some(event) = events.recv().await {
+                let mut payload = serde_json::json!(event);
+                payload["repo"] = serde_json::json!(identity);
+                let _ = forwarder.emit("apply-progress", payload);
+            }
+        });
         let request = bugsleuth_engine::apply::apply(bugsleuth_engine::apply::ApplyRequest {
             repo: &repo,
             model: &model,
             effort: &effort,
-            prompt: &prompt,
+            prompts: &prompts,
             timeout: APPLY_TIMEOUT,
             max_turns: APPLY_MAX_TURNS,
             cancel: cancel.clone(),
+            progress: Some(progress.clone()),
             push: settings.push_after_apply,
             tag: settings.tag_release_after_push,
         });
@@ -96,6 +111,8 @@ pub async fn apply_fixes(
         // remote accepted before it returns. Dropping that future here loses
         // the changed-file and uncertain-publication report.
         let (report, cancelled) = await_engine_apply(request, &cancel).await;
+        drop(progress);
+        let _ = forwarding.await;
 
         let (payload, changed_files) = match report {
             Ok(report) => {
@@ -158,20 +175,46 @@ fn reserve_and_load(
     control: &RunControl,
     repo: &std::path::Path,
     cancel: bugsleuth_engine::cancel::Cancel,
-) -> Result<String, String> {
+) -> Result<std::path::PathBuf, String> {
     control.try_start_apply(repo, cancel)?;
     load_prompt(repo).inspect_err(|_| control.finish_apply(repo))
 }
 
-/// The fix prompt the last run wrote for this repository.
-fn load_prompt(repo: &std::path::Path) -> Result<String, String> {
-    let prompt_path = run_output_dir(repo)?.join("fix-prompt.md");
-    std::fs::read_to_string(&prompt_path).map_err(|e| {
-        format!(
-            "no fix prompt for this repository at {}: {e}. Run a review first.",
-            prompt_path.display()
-        )
-    })
+/// Where the last run wrote this repository's fix prompts.
+///
+/// The directory, not the prompts. The engine reads the individual work orders
+/// itself, because it applies them one defect at a time and because this is the
+/// one command whose argument becomes instructions to an agent with write
+/// access — the files the run wrote are the only source that cannot have been
+/// substituted on the way here.
+///
+/// The bundle is still what is checked for. `handoff` writes it before any
+/// per-defect prompt, so its absence is the honest "no review has produced a
+/// fix prompt for this repository yet" — and answering that here keeps the app
+/// out of the applying state instead of reserving it and failing a moment later.
+fn load_prompt(repo: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let dir = run_output_dir(repo)?;
+    let bundle = dir.join("fix-prompt.md");
+    if !bundle.is_file() {
+        return Err(format!(
+            "no fix prompt for this repository at {}. Run a review first.",
+            bundle.display()
+        ));
+    }
+    Ok(dir)
+}
+
+/// How many defects an interrupted fix run for this repository already fixed.
+///
+/// Zero, and no entry at all, are different answers and both are `None` here:
+/// there is nothing to resume in either case. The window uses this to offer a
+/// resume rather than silently re-applying a whole report — which, after a run
+/// that stopped on a quota limit, is what the Apply button would otherwise
+/// appear to be doing.
+#[tauri::command]
+pub fn unfinished_apply(repo: String) -> Option<usize> {
+    let repo = checked_repo(&repo).ok()?;
+    bugsleuth_engine::apply::unfinished(&run_output_dir(&repo).ok()?)
 }
 
 /// Stop the apply in flight. The provider process is killed; commits it had
@@ -245,9 +288,9 @@ mod tests {
         std::fs::write(output.join("fix-prompt.md"), "fix it\n").expect("prompt");
 
         let control = RunControl::default();
-        let prompt = reserve_and_load(&control, &dir, bugsleuth_engine::cancel::Cancel::new())
+        let prompts = reserve_and_load(&control, &dir, bugsleuth_engine::cancel::Cancel::new())
             .expect("the prompt is there");
-        assert_eq!(prompt, "fix it\n");
+        assert_eq!(prompts, output);
         // The state is already reserved on return, so no clear can have slipped
         // in between taking it and reading the directory it protects.
         assert!(

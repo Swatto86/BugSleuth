@@ -25,13 +25,20 @@ use anyhow::Context;
 use crate::sweep::Vendor;
 
 mod attribution;
+mod fixing;
+mod journal;
+mod messages;
 mod network;
 mod observed;
 mod preflight;
 mod push;
 mod remote;
+mod steps;
 mod tag;
 use attribution::{attributed_since, strip_attribution};
+use fixing::fix_each;
+pub use journal::unfinished;
+use messages::cancelled_message;
 use observed::{changed_since, commits_since, summarise};
 use preflight::{baseline, refuse_if_dirty};
 pub use push::PushOutcome;
@@ -44,7 +51,7 @@ pub use tag::TagOutcome;
 /// first is a real starting point — the empty tree — that the model can commit
 /// against, and treating it as "no baseline" made a freshly committed initial
 /// commit read as no change at all.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) enum Baseline {
     /// HEAD resolved to this commit before the apply.
     Commit(String),
@@ -60,13 +67,23 @@ pub struct ApplyRequest<'a> {
     pub model: &'a str,
     /// Reasoning effort. Empty means the vendor's own default.
     pub effort: &'a str,
-    /// The handoff prompt, as written by [`crate::handoff`].
-    pub prompt: &'a str,
+    /// The directory [`crate::handoff`] wrote this report's fix prompts into.
+    ///
+    /// A directory rather than the prompt text, for two reasons. The work is
+    /// per defect, so there is more than one prompt to read; and this command
+    /// is the one whose argument becomes instructions to an agent with write
+    /// access to the user's checkout, so it reads them from the files the run
+    /// itself wrote rather than from anything a caller assembled.
+    pub prompts: &'a Path,
     pub timeout: Duration,
     /// Turn ceiling, for the vendor that has one.
     pub max_turns: u32,
     /// Stops the provider and any in-flight remote publication.
     pub cancel: crate::cancel::Cancel,
+    /// Receives an event as each defect is reached and finished. Sends are
+    /// best-effort: a window that has gone away must not stop the fixes it
+    /// started, which are already editing a real repository.
+    pub progress: Option<tokio::sync::mpsc::UnboundedSender<ApplyEvent>>,
     /// Push what the model committed to the branch's existing upstream.
     ///
     /// Off unless the user turned it on. Everything else an apply does is
@@ -146,36 +163,34 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
 
     refuse_if_dirty(repo)?;
 
+    // One work order per defect, so an interruption costs the defect in flight
+    // and nothing already finished.
+    let work = steps::load(request.prompts)?;
     // Where the repository started. Compared against afterwards, because the
     // prompt asks the model to commit each fix and a committed change leaves
     // `git status` clean — reporting from status alone would say nothing
     // happened after a model had rewritten half the tree.
-    let base = baseline(repo)?;
+    //
+    // On a resume this is the *earlier* attempt's starting point, carried in the
+    // journal, so everything measured from it covers the defects that attempt
+    // committed as well.
+    let mut progress =
+        journal::Journal::open(request.prompts, request.model, &work, baseline(repo)?);
+    let base = progress.baseline().clone();
+    let total = work.len();
+    let already = progress.completed();
+    emit(
+        &request.progress,
+        ApplyEvent::Started {
+            defects: total,
+            already,
+        },
+    );
 
-    let provider = run_provider(&request, vendor, model);
-    tokio::pin!(provider);
-    let attempt = tokio::select! {
-        biased;
-        () = request.cancel.cancelled() => anyhow::bail!(cancelled_message()),
-        attempt = &mut provider => attempt,
-    };
+    fix_each(&request, vendor, model, &work, &mut progress, &base).await?;
 
     drop(slot);
-
-    // A failure is not "nothing happened". The invocation is killed on timeout
-    // and can fail after the model has already rewritten half the tree, and an
-    // error on its own would send someone away believing their repository was
-    // untouched. Whatever git can see is named in the error too.
-    let text = match attempt {
-        Ok(text) => text,
-        // A failure is not "nothing happened" — name whatever git can still see.
-        // If git itself cannot be read afterwards, say the state is unknown
-        // rather than claim nothing changed.
-        Err(error) => match changed_since(repo, &base) {
-            Ok(changed) => anyhow::bail!(failure_message(&error.to_string(), &changed)),
-            Err(_) => anyhow::bail!(failure_message_unknown(&error.to_string())),
-        },
-    };
+    let text = progress.text();
 
     // Attribution comes off before anything else is reported, so what the user
     // reads describes the repository as it now stands. Only commits this apply
@@ -252,6 +267,12 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         None => TagOutcome::NotRequested,
     };
 
+    // Only now: everything above can still fail, and a journal removed before
+    // the report exists would turn a recoverable tail failure into a rerun of
+    // every defect. Resuming a run whose defects are all done costs nothing —
+    // it finds nothing to do and reaches this same end.
+    progress.discard();
+
     Ok(ApplyReport {
         text,
         changed_files,
@@ -263,59 +284,36 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
     })
 }
 
-async fn run_provider(
-    request: &ApplyRequest<'_>,
-    vendor: Vendor,
-    model: &str,
-) -> Result<String, bugsleuth_provider::ProviderError> {
-    match vendor {
-        Vendor::Claude => {
-            bugsleuth_provider::claude::apply(bugsleuth_provider::claude::ApplyRequest {
-                repo: request.repo,
-                model,
-                effort: request.effort,
-                prompt: request.prompt,
-                timeout: request.timeout,
-                max_turns: request.max_turns,
-                binary: None,
-            })
-            .await
-        }
-        Vendor::Codex => {
-            bugsleuth_provider::codex::apply(
-                request.repo,
-                model,
-                request.effort,
-                request.prompt,
-                request.timeout,
-            )
-            .await
-        }
-        Vendor::OpenCode => {
-            bugsleuth_provider::opencode::apply(
-                request.repo,
-                model,
-                request.effort,
-                request.prompt,
-                request.timeout,
-            )
-            .await
-        }
-        Vendor::Cursor => {
-            bugsleuth_provider::cursor::apply(
-                request.repo,
-                model,
-                request.effort,
-                request.prompt,
-                request.timeout,
-            )
-            .await
-        }
-    }
+/// Something that happened while the fixes were being applied.
+///
+/// A fix run is minutes to hours of somebody else's tool editing their
+/// repository. Reporting only the outcome leaves a window showing a spinner
+/// with no way to tell a long defect from a stuck one, and no way to know what
+/// would be lost by stopping.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ApplyEvent {
+    /// The run has its work orders. `already` is how many defects a previous
+    /// attempt finished, so a resumed run does not read as starting over.
+    Started { defects: usize, already: usize },
+    /// A defect has been handed to the model.
+    DefectStarted {
+        position: usize,
+        done: usize,
+        defects: usize,
+    },
+    /// A defect is fixed, committed, and recorded as done.
+    DefectFinished {
+        position: usize,
+        done: usize,
+        defects: usize,
+    },
 }
 
-fn cancelled_message() -> &'static str {
-    "the apply was stopped. The model was killed part-way through editing the repository — check `git status` and `git log` to see what it had already changed."
+fn emit(progress: &Option<tokio::sync::mpsc::UnboundedSender<ApplyEvent>>, event: ApplyEvent) {
+    if let Some(sender) = progress {
+        let _ = sender.send(event);
+    }
 }
 
 /// The upstream a tag may be published to, or `None` when this must not be

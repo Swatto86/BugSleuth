@@ -148,6 +148,13 @@ pub(super) fn aggregate(results: Vec<Value>) -> Value {
     }
     let complete = results.iter().all(|r| r["complete"] == true);
     let cancelled = results.iter().any(|r| r["cancelled"] == true);
+    // One repository stopped by a spent allowance is enough to make the batch
+    // resumable, and the reason is worth carrying: it is the same allowance for
+    // every repository, so the answer is to wait once rather than per folder.
+    let interrupted = results
+        .iter()
+        .find_map(|r| r["interrupted"].as_str())
+        .map(str::to_string);
     let save_error = results.iter().any(|r| !r["saveError"].is_null());
     let text = results
         .iter()
@@ -159,6 +166,8 @@ pub(super) fn aggregate(results: Vec<Value>) -> Value {
                     "Stopped"
                 } else if r["ok"] != true {
                     "Failed"
+                } else if !r["interrupted"].is_null() {
+                    "Interrupted — run again to continue"
                 } else if r["complete"] != true {
                     "Incomplete"
                 } else if !r["saveError"].is_null() {
@@ -171,7 +180,7 @@ pub(super) fn aggregate(results: Vec<Value>) -> Value {
         .collect::<Vec<_>>()
         .join("\n");
     json!({"ok": results.iter().any(|r| r["ok"] == true), "complete": complete,
-        "cancelled": cancelled, "text": text, "results": results,
+        "cancelled": cancelled, "interrupted": interrupted, "text": text, "results": results,
         "saveError": save_error.then_some("Some repository prompts could not be saved.")})
 }
 

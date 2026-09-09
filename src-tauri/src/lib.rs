@@ -77,6 +77,7 @@ pub fn run() {
             commands::run::cancel_run,
             commands::apply::apply_fixes,
             commands::apply::cancel_apply,
+            commands::apply::unfinished_apply,
             commands::saved::clear_saved,
             commands::pick_directory,
             commands::clone_repository,

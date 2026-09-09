@@ -11,6 +11,7 @@
 export type RunEvent =
   | { kind: "batch_started"; index: number; total: number; units: string[] }
   | { kind: "reused"; model: string; lane: string }
+  | { kind: "interrupted"; reason: string; remaining: number }
   | {
       kind: "sweep_finished";
       model: string;
@@ -32,6 +33,8 @@ export function describe(event: RunEvent): string {
       return `Review batch ${event.index}/${event.total} (queued across providers): ${event.units.join(", ")}`;
     case "reused":
       return `  reused ${event.model} × ${event.lane} from an earlier run`;
+    case "interrupted":
+      return `Stopped: ${event.reason}. ${event.remaining} review${event.remaining === 1 ? " was" : "s were"} left unattempted and nothing was paid for ${event.remaining === 1 ? "it" : "them"}. Everything already swept is saved — run again to continue.`;
     case "sweep_finished":
       return event.swept
         ? `  ${event.model} × ${event.lane}: ${event.findings} finding${event.findings === 1 ? "" : "s"}`

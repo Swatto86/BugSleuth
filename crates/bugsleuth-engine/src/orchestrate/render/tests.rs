@@ -21,6 +21,7 @@ fn report(gaps: Vec<Gap>) -> RunReport {
             salvaged: false,
         }],
         gaps,
+        interrupted: None,
         cancelled: false,
     }
 }
@@ -90,6 +91,7 @@ fn a_multi_lane_report_warns_that_severities_are_not_comparable() {
         ],
         triage: Default::default(),
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     };
     assert_eq!(multi.lanes_swept(), 2);
@@ -128,6 +130,7 @@ fn two_models_on_one_lane_is_still_one_lane() {
         ],
         triage: Default::default(),
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     };
     assert_eq!(same_lane.lanes_swept(), 1);
@@ -191,6 +194,7 @@ fn graded_report(triage: Outcome) -> RunReport {
             salvaged: false,
         }],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     }
 }
@@ -210,6 +214,9 @@ fn a_report_says_when_its_severities_were_never_graded_together() {
 
 #[path = "annotations.rs"]
 mod annotations;
+
+#[path = "agreement.rs"]
+mod agreement;
 
 #[path = "metadata_tests.rs"]
 mod metadata_tests;

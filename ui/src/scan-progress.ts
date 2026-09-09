@@ -22,6 +22,14 @@ export function advance(progress: Progress, event: RunEvent): void {
     progress.batch = `Reviewing / queued: ${event.units.join(", ")}`;
     return;
   }
+  if (event.kind === "interrupted") {
+    // Deliberately not counted as failures. Those reviews were never
+    // attempted, so nothing was paid for them and the totals would otherwise
+    // say the run tried and could not — which is what sends someone looking at
+    // their own repository for a problem that is not there.
+    progress.batch = `Stopped: ${event.reason} · ${event.remaining} not attempted · run again to continue`;
+    return;
+  }
   const label = `${event.model} · ${event.lane}`;
   if (event.kind === "reused") {
     progress.reused++;

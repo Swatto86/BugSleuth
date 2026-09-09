@@ -72,6 +72,35 @@ pub enum ProviderError {
     },
 }
 
+/// Whether a message reads as "this provider will not serve you right now".
+///
+/// A rate limit, a spent usage allowance, an overload. Deliberately one
+/// definition, because two callers need it and they must agree: a single sweep
+/// uses it to decide whether one more attempt is worth making, and a run uses
+/// it to decide whether to stop rather than spend the rest of its units
+/// discovering the same thing one refusal at a time.
+///
+/// Matched on the message text because that is what these CLIs give us — none
+/// of them reports a machine-readable reason, and the text is also all that
+/// survives into a stored report. Erring towards matching is the safe
+/// direction here: the consequence of a false positive is one extra attempt, or
+/// a run that stops early and says exactly how to continue it.
+#[must_use]
+pub fn looks_exhausted(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    [
+        "rate limit",
+        "rate-limit",
+        "usage limit",
+        "quota",
+        "overloaded",
+        "429",
+        "503",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+}
+
 impl ProviderError {
     /// Whether retrying might succeed. A silent non-zero exit is the shape these
     /// CLIs use for an overload or rate-limit blip, and a timeout may simply
@@ -87,16 +116,8 @@ impl ProviderError {
             ProviderError::Process(ProcessError::Timeout { .. }) => true,
             ProviderError::Failed { message, .. } => {
                 let lower = message.to_lowercase();
-                [
-                    "rate limit",
-                    "overloaded",
-                    "429",
-                    "503",
-                    "timeout",
-                    "try again",
-                ]
-                .iter()
-                .any(|needle| lower.contains(needle))
+                looks_exhausted(message)
+                    || ["timeout", "try again"].iter().any(|n| lower.contains(n))
             }
             _ => false,
         }
@@ -105,6 +126,36 @@ impl ProviderError {
 
 #[cfg(test)]
 mod tests {
+
+    /// One definition of "this provider will not serve you right now", because
+    /// two very different decisions rest on it: whether a single sweep is worth
+    /// one more attempt, and whether a whole run should stop rather than
+    /// rediscover the same refusal once per remaining unit.
+    #[test]
+    fn a_spent_allowance_is_recognised_however_the_cli_words_it() {
+        for message in [
+            "429 Too Many Requests",
+            "You have exceeded your rate limit",
+            "rate-limited; retry after 60s",
+            "usage limit reached for this month",
+            "Quota exceeded for this organization",
+            "Error 503: the service is overloaded",
+        ] {
+            assert!(looks_exhausted(message), "not recognised: {message}");
+        }
+
+        // These are failures, but not the provider refusing to serve — treating
+        // them as a spent allowance would abandon a run over a bad prompt or a
+        // missing binary, which no amount of waiting fixes.
+        for message in [
+            "Model not found: claude:nope",
+            "the response did not match the required schema",
+            "ENOENT: no such file or directory",
+            "permission denied",
+        ] {
+            assert!(!looks_exhausted(message), "wrongly recognised: {message}");
+        }
+    }
     use super::*;
 
     #[test]

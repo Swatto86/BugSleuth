@@ -197,6 +197,7 @@ mod tests {
             ranked: vec![],
             triage: Default::default(),
             swept: vec![],
+            interrupted: None,
             cancelled: false,
             gaps: vec![
                 orchestrate::Gap {

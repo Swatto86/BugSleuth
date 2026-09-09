@@ -296,6 +296,11 @@ rust apply::attribution::tests::a_credit_in_the_subject_line_is_still_reported
 rust apply::attribution::tests::an_unborn_repositorys_initial_commit_is_stripped_as_a_root
 rust apply::attribution::tests::stripping_removes_the_trailer_and_changes_nothing_else
 rust apply::attribution::tests::the_format_string_is_the_one_git_actually_produces
+rust apply::journal::tests::a_corrupt_journal_costs_the_fixes_again_rather_than_refusing_to_run
+rust apply::journal::tests::a_finished_defect_survives_the_process_that_fixed_it
+rust apply::journal::tests::a_finished_run_leaves_nothing_to_resume
+rust apply::journal::tests::a_journal_is_never_applied_to_work_it_was_not_written_for
+rust apply::journal::tests::recording_the_same_defect_twice_does_not_double_count_it
 rust apply::observed::fsmonitor_tests::a_repo_fsmonitor_hook_is_not_run_during_apply
 rust apply::observed::ownership::tests::an_unreadable_worktree_listing_filters_nothing
 rust apply::observed::ownership::tests::user_files_under_the_worktree_container_are_not_hidden
@@ -322,6 +327,9 @@ rust apply::push::tests::the_commits_actually_reach_the_remote
 rust apply::remote::tests::a_desired_object_on_the_remote_is_a_landing_whatever_was_there_before
 rust apply::remote::tests::a_remote_that_moved_elsewhere_or_could_not_be_read_is_unknown
 rust apply::remote::tests::an_unchanged_remote_is_a_genuine_rejection
+rust apply::steps::tests::a_directory_with_no_prompt_at_all_is_an_error_rather_than_an_empty_run
+rust apply::steps::tests::a_report_with_only_a_bundle_still_applies_as_one_step
+rust apply::steps::tests::defects_run_in_report_order_however_the_directory_lists_them
 rust apply::tag::safety_tests::an_unreadable_remote_tag_view_is_refused_before_selecting_a_version
 rust apply::tag::safety_tests::release_tag_targets_the_exact_confirmed_push_when_head_advances
 rust apply::tag::safety_tests::same_name_tags_with_different_objects_are_refused
@@ -342,6 +350,7 @@ rust apply::tests::a_credential_in_an_apply_failure_is_redacted_like_a_sweep_err
 rust apply::tests::a_failed_apply_still_says_what_it_had_already_changed
 rust apply::tests::a_git_file_pointing_at_another_repository_is_refused_before_anything_is_spent
 rust apply::tests::a_repository_without_git_is_refused_before_anything_is_spent
+rust apply::tests::a_resumed_apply_continues_at_the_defect_the_last_attempt_died_on
 rust apply::tests::an_unreadable_repository_after_a_failure_is_not_reported_as_clean
 rust apply::tests::only_a_push_that_succeeded_can_lead_to_a_tag
 rust apply::tests::orphan_branch_with_other_history_is_an_unborn_baseline
@@ -523,6 +532,7 @@ rust cursor::tests::the_selected_model_is_passed_and_an_empty_one_is_omitted
 rust defects_only_one_vendor_found_survive_the_merge
 rust error::tests::a_rate_limit_message_is_recognised_however_it_is_worded
 rust error::tests::a_silent_failure_is_worth_retrying_but_a_missing_binary_is_not
+rust error::tests::a_spent_allowance_is_recognised_however_the_cli_words_it
 rust find::tests::finds_a_command_that_is_always_present
 rust find::tests::returns_none_for_a_command_that_cannot_exist
 rust finding::tests::a_finding_with_no_fix_plan_still_lands_rather_than_sinking_the_sweep
@@ -624,6 +634,8 @@ rust orchestrate::gaps::tests::a_failed_git_status_is_not_mistaken_for_a_clean_t
 rust orchestrate::gaps::tests::a_panicked_security_sweep_is_named_as_security_not_correctness
 rust orchestrate::gaps::tests::hidden_untracked_files_still_make_the_repository_dirty
 rust orchestrate::gaps::tests::the_unsandboxed_warning_is_about_kilo_not_about_every_isolated_vendor
+rust orchestrate::interruption_tests::a_run_stops_only_when_a_whole_batch_was_refused_and_work_is_left
+rust orchestrate::interruption_tests::an_interrupted_run_names_what_it_never_attempted
 rust orchestrate::persist::legacy_tests::a_legacy_file_belonging_to_a_different_model_is_not_adopted
 rust orchestrate::persist::legacy_tests::a_report_written_under_the_old_naming_is_still_reused
 rust orchestrate::persist::legacy_tests::an_ambiguous_historical_effort_pass_name_is_not_reused
@@ -661,15 +673,15 @@ rust orchestrate::render::tests::a_report_is_split_into_scanable_sections_with_a
 rust orchestrate::render::tests::a_report_says_when_its_severities_were_never_graded_together
 rust orchestrate::render::tests::a_single_lane_report_does_not_warn_about_comparing_lanes
 rust orchestrate::render::tests::a_swept_lane_that_found_nothing_is_not_confused_with_a_gap
+rust orchestrate::render::tests::agreement::agreement_is_counted_against_models_not_sweeps
+rust orchestrate::render::tests::agreement::repeating_a_model_does_not_inflate_the_model_count
 rust orchestrate::render::tests::annotations::a_fully_graded_multi_lane_report_stops_warning_that_lanes_cannot_be_compared
 rust orchestrate::render::tests::annotations::a_graded_report_says_how_much_moved
 rust orchestrate::render::tests::annotations::a_moved_grade_is_shown_with_what_it_moved_from_and_why
 rust orchestrate::render::tests::annotations::a_report_says_what_the_method_could_not_see_even_when_every_lane_ran
 rust orchestrate::render::tests::annotations::a_run_that_used_an_unsandboxable_vendor_says_so_in_the_report
 rust orchestrate::render::tests::annotations::a_salvaged_sweep_does_not_read_like_a_clean_one
-rust orchestrate::render::tests::annotations::agreement_is_counted_against_models_not_sweeps
 rust orchestrate::render::tests::annotations::rejected_findings_are_counted_in_the_sweep_line
-rust orchestrate::render::tests::annotations::repeating_a_model_does_not_inflate_the_model_count
 rust orchestrate::render::tests::metadata_tests::isolation_exclusions_make_coverage_incomplete_and_reach_the_handoff
 rust orchestrate::render::tests::metadata_tests::mixed_scopes_are_not_rendered_as_one_ordinary_run
 rust orchestrate::render::tests::metadata_tests::run_report_calls_out_mixed_revisions

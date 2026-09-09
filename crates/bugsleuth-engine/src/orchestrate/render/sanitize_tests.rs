@@ -65,6 +65,7 @@ fn a_moved_grade_reason_cannot_carry_raw_ansi_into_the_report() {
         },
         swept: vec![swept()],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     }
     .to_text();
@@ -90,6 +91,7 @@ fn already_documented_quotes_cannot_carry_raw_ansi_into_the_report() {
         triage: Default::default(),
         swept: vec![swept()],
         gaps: vec![],
+        interrupted: None,
         cancelled: false,
     }
     .to_text();

@@ -17,6 +17,10 @@ pub fn describe(event: &RunEvent) -> String {
         RunEvent::Reused { model, lane } => {
             format!("reusing {model} x {lane} from a previous run")
         }
+        RunEvent::Interrupted { reason, remaining } => format!(
+            "stopped after {remaining} sweeps were left unattempted: {reason}. \
+             Everything already swept is saved; run again to continue."
+        ),
         RunEvent::SweepFinished {
             model,
             lane,
