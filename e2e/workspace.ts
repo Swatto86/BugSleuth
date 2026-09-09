@@ -7,7 +7,9 @@ import { execFileSync } from "node:child_process";
 const liveCodex = process.env["BUGSLEUTH_E2E_LIVE_CODEX"] === "1";
 export const live = process.env["BUGSLEUTH_E2E_LIVE"] === "1" || liveCodex;
 export function prepareWorkspace(root: string): void {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bugsleuth-e2e-"));
+  const dir = fs.realpathSync.native(
+    fs.mkdtempSync(path.join(os.tmpdir(), "bugsleuth-e2e-")),
+  );
   process.env["BUGSLEUTH_E2E_ROOT"] = dir;
   process.env["BUGSLEUTH_E2E_REPO"] = path.join(dir, "seeded-repo");
   process.env["APPDATA"] = path.join(dir, "appdata");
