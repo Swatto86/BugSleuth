@@ -242,6 +242,43 @@ export const config: WebdriverIO.Config = {
     }
   },
 
+  afterTest: async (_test, _context, { passed }) => {
+    if (passed || live) return;
+    const evidence = path.join(
+      process.env["RUNNER_TEMP"] ?? process.env["BUGSLEUTH_E2E_ROOT"]!,
+      "bugsleuth-failure",
+    );
+    await browser.saveScreenshot(`${evidence}.png`);
+    const layout = await browser.execute(() => {
+      const main = document.querySelector("main")!;
+      return {
+        width: main.clientWidth,
+        content: main.scrollWidth,
+        left: main.scrollLeft,
+        elements: [...main.querySelectorAll("*")]
+          .filter(
+            (el) =>
+              el.getBoundingClientRect().width > 0 &&
+              el.scrollWidth > el.clientWidth + 1,
+          )
+          .map((el) => ({
+            element: `${el.tagName}#${el.id}.${el.className}`,
+            width: el.clientWidth,
+            content: el.scrollWidth,
+            left: el.getBoundingClientRect().left,
+            right: el.getBoundingClientRect().right,
+            overflow: getComputedStyle(el).overflowX,
+            text:
+              el.children.length === 0
+                ? el.textContent?.slice(0, 300)
+                : undefined,
+          })),
+      };
+    });
+    fs.writeFileSync(`${evidence}.json`, JSON.stringify(layout, null, 2));
+    console.error("Failure layout:", JSON.stringify(layout));
+  },
+
   onComplete: () => {
     stopDriver();
     console.log(
