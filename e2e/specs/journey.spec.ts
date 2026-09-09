@@ -50,6 +50,10 @@ describe("native persistence and exit", () => {
         lastControlReachable:
           remove.getBoundingClientRect().right <=
           matrixScroll.getBoundingClientRect().right + 1,
+        afterScrollWidth: main.scrollWidth,
+        matrixWidth: matrixScroll.clientWidth,
+        matrixOverflow: getComputedStyle(matrixScroll).overflowX,
+        matrixContain: getComputedStyle(matrixScroll).contain,
         overflowing: [...main.querySelectorAll("*")]
           .filter(
             (el) =>

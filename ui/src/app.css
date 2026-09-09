@@ -175,7 +175,7 @@ button.primary:hover:not(:disabled) {
 /* ── Lane matrix ─────────────────────────────────────────────────────────── */
 
 .matrix-scroll {
-  contain: inline-size layout;
+  contain: inline-size layout paint;
   min-width: 0;
   width: 100%;
   overflow-x: auto;
