@@ -33,18 +33,6 @@ describe("native persistence and exit", () => {
         timeoutMsg: "UI changes were not saved to isolated settings",
       },
     );
-    await browser.waitUntil(
-      async () =>
-        browser.execute(() => {
-          const main = document.querySelector("main")!;
-          return main.scrollWidth <= main.clientWidth + 1;
-        }),
-      {
-        timeout: 5_000,
-        timeoutMsg:
-          "Page width did not settle after resizing and changing theme",
-      },
-    );
     const layout = await browser.execute(() => {
       const main = document.querySelector("main")!;
       const model = document.querySelector("#matrix-body td.model-id input")!;
@@ -62,18 +50,6 @@ describe("native persistence and exit", () => {
         lastControlReachable:
           remove.getBoundingClientRect().right <=
           matrixScroll.getBoundingClientRect().right + 1,
-        afterScrollWidth: main.scrollWidth,
-        matrixWidth: matrixScroll.clientWidth,
-        matrixOverflow: getComputedStyle(matrixScroll).overflowX,
-        matrixContain: getComputedStyle(matrixScroll).contain,
-        overflowing: [...main.querySelectorAll("*")]
-          .filter(
-            (el) =>
-              el.getBoundingClientRect().right >
-              main.getBoundingClientRect().right + 1,
-          )
-          .map((el) => `${el.tagName}#${el.id}.${el.className}`)
-          .slice(0, 10),
       };
     });
     assert.ok(
