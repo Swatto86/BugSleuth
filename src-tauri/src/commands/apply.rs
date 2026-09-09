@@ -204,17 +204,19 @@ fn load_prompt(repo: &std::path::Path) -> Result<std::path::PathBuf, String> {
     Ok(dir)
 }
 
-/// How many defects an interrupted fix run for this repository already fixed.
+/// How many defects an interrupted fix run for this repository already fixed,
+/// counting only what a resume under `model` would actually skip.
 ///
 /// Zero, and no entry at all, are different answers and both are `None` here:
-/// there is nothing to resume in either case. The window uses this to offer a
-/// resume rather than silently re-applying a whole report — which, after a run
-/// that stopped on a quota limit, is what the Apply button would otherwise
-/// appear to be doing.
+/// there is nothing to resume in either case. So is a journal the engine would
+/// discard — one written for prompts that have since been re-swept, or under a
+/// different fixing model. The window uses this to offer a resume rather than
+/// silently re-applying a whole report — which, after a run that stopped on a
+/// quota limit, is what the Apply button would otherwise appear to be doing.
 #[tauri::command]
-pub fn unfinished_apply(repo: String) -> Option<usize> {
+pub fn unfinished_apply(repo: String, model: String) -> Option<usize> {
     let repo = checked_repo(&repo).ok()?;
-    bugsleuth_engine::apply::unfinished(&run_output_dir(&repo).ok()?)
+    bugsleuth_engine::apply::unfinished(&run_output_dir(&repo).ok()?, model.trim())
 }
 
 /// Stop the apply in flight. The provider process is killed; commits it had

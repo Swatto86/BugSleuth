@@ -177,15 +177,26 @@ fn contract(model: &str, steps: &[Step]) -> String {
     format!("{hash:016x}")
 }
 
-/// How far an unfinished fix run for this repository got, if there is one.
+/// How far an unfinished fix run for this repository got, if there is one
+/// that `model` would actually continue.
 ///
 /// Read by the desktop shell so a relaunched window can offer to resume rather
 /// than silently starting the whole report again. Deliberately says nothing
 /// about *which* defects: the numbers are what a person needs to decide, and
 /// the engine re-reads the journal itself when the resume actually happens.
+///
+/// Judged under the same [`contract`] a resume would use. A journal left by a
+/// report that has since been re-swept, or written under a different fixing
+/// model, is one the engine will discard and start over — and a button that
+/// says "Resume (2 done)" over that is promising work the run will not skip.
 #[must_use]
-pub fn unfinished(dir: &Path) -> Option<usize> {
-    let done = read(&dir.join(FILE))?.done.len();
+pub fn unfinished(dir: &Path, model: &str) -> Option<usize> {
+    let state = read(&dir.join(FILE))?;
+    let steps = super::steps::load(dir).ok()?;
+    if state.contract != contract(model, &steps) {
+        return None;
+    }
+    let done = state.done.len();
     (done > 0).then_some(done)
 }
 

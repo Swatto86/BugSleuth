@@ -314,7 +314,7 @@ async fn a_resumed_apply_continues_at_the_defect_the_last_attempt_died_on() {
     );
     // And it is still recorded afterwards: a second failure must not discard
     // the defect the first attempt paid for.
-    assert_eq!(unfinished(&prompts), Some(1));
+    assert_eq!(unfinished(&prompts, model), Some(1));
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&prompts);
 }

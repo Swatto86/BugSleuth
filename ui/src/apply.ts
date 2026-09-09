@@ -136,7 +136,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
     ui.push.checked = deps.settings().push_after_apply;
     drawTag();
     setButtonState();
-    fixes.refresh(deps.promptRepo());
+    fixes.refresh(deps.promptRepo(), deps.settings().apply_model);
     if (focusKey) {
       const selector = `[data-focus-key="${CSS.escape(focusKey)}"]`;
       (
@@ -315,7 +315,7 @@ export function bindApply(deps: ApplyDeps): ApplyBinding {
     // Whatever the outcome, the journal on disk has changed: a finished run
     // discarded it, a stopped or failed one added to it. Read it again rather
     // than infer, so the button's promise matches what Rust would actually do.
-    fixes.refresh(repo);
+    fixes.refresh(repo, model);
     deps.refresh();
     draw();
   }).then(

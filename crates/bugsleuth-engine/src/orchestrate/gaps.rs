@@ -138,7 +138,7 @@ pub(super) fn note_interrupted(reason: Option<&str>, remaining: &[Unit], gaps: &
             model: Some(unit.model.clone()),
             reason: format!(
                 "not attempted: the provider stopped serving this run ({reason}). Everything \
-                 already swept is saved — run again once your usage allowance resets and
+                 already swept is saved — run again once your usage allowance resets and \
                  only the lanes still missing will be paid for."
             ),
         });

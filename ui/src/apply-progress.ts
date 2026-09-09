@@ -25,8 +25,12 @@ export interface ApplyProgressDeps {
 export interface ApplyProgress {
   /** Defects a stopped or failed run already fixed and committed. */
   alreadyFixed: (repo: string) => number;
-  /** Ask Rust again, because the journal on disk has changed. */
-  refresh: (repo: string) => void;
+  /**
+   * Ask Rust again, because the journal on disk or the fixing model has
+   * changed. The model matters: a journal written under another model is one
+   * the engine starts over from, and the label must not promise otherwise.
+   */
+  refresh: (repo: string, model: string) => void;
 }
 
 export function bindApplyProgress(deps: ApplyProgressDeps): ApplyProgress {
@@ -41,9 +45,9 @@ export function bindApplyProgress(deps: ApplyProgressDeps): ApplyProgress {
    */
   const alreadyFixed = new Map<string, number>();
 
-  const refresh = (repo: string): void => {
+  const refresh = (repo: string, model: string): void => {
     if (repo === "") return;
-    invoke<number | null>("unfinished_apply", { repo })
+    invoke<number | null>("unfinished_apply", { repo, model })
       .then((done) => {
         if (done && done > 0) alreadyFixed.set(repo, done);
         else alreadyFixed.delete(repo);
