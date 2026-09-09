@@ -36,10 +36,18 @@ describe("native persistence and exit", () => {
     const layout = await browser.execute(() => {
       const main = document.querySelector("main")!;
       const model = document.querySelector("#matrix-body td.model-id input")!;
+      const matrixScroll = document.querySelector(".matrix-scroll")!;
+      matrixScroll.scrollLeft = matrixScroll.scrollWidth;
+      const remove = document.querySelector(
+        "#matrix-body tr:last-child button",
+      )!;
       return {
         width: main.clientWidth,
         content: main.scrollWidth,
         modelWidth: model.getBoundingClientRect().width,
+        lastControlReachable:
+          remove.getBoundingClientRect().right <=
+          matrixScroll.getBoundingClientRect().right + 1,
         overflowing: [...main.querySelectorAll("*")]
           .filter(
             (el) =>
@@ -57,6 +65,10 @@ describe("native persistence and exit", () => {
     assert.ok(
       layout.modelWidth >= 160,
       `Model ID field is squeezed to ${layout.modelWidth}px`,
+    );
+    assert.ok(
+      layout.lastControlReachable,
+      "The matrix's last control cannot be reached by scrolling",
     );
     const before = treeDigest(REPO);
     await browser.saveScreenshot(
