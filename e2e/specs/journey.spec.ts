@@ -33,6 +33,18 @@ describe("native persistence and exit", () => {
         timeoutMsg: "UI changes were not saved to isolated settings",
       },
     );
+    await browser.waitUntil(
+      async () =>
+        browser.execute(() => {
+          const main = document.querySelector("main")!;
+          return main.scrollWidth <= main.clientWidth + 1;
+        }),
+      {
+        timeout: 5_000,
+        timeoutMsg:
+          "Page width did not settle after resizing and changing theme",
+      },
+    );
     const layout = await browser.execute(() => {
       const main = document.querySelector("main")!;
       const model = document.querySelector("#matrix-body td.model-id input")!;
