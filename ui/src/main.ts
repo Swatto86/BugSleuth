@@ -6,14 +6,13 @@ import { invoke } from "@tauri-apps/api/core";
 
 import {
   type Settings,
-  batchCount,
   isShippedConfiguration,
-  preset,
   runBlockReason,
   supportsAgents,
   usesUltracode,
-  unitCount,
 } from "./model";
+import { TRIAGE_MODEL, startingSettings } from "./starting-settings";
+import { batchCount, unitCount } from "./units";
 import { bindGuardedActions, isClearing } from "./actions";
 import { bindControls } from "./controls";
 import { matrixHandlers } from "./matrix";
@@ -41,24 +40,8 @@ import {
   matrixRows,
 } from "./view";
 
-/**
- * Which model re-grades severities. Cheapest available: the pass compares
- * summaries against each other, it does not review code again.
- */
-const TRIAGE_MODEL = "haiku";
+let settings: Settings = startingSettings();
 
-let settings: Settings = {
-  repo: "",
-  scope: "",
-  models: preset("balanced"),
-  theme: "system",
-  reuse_completed: true,
-  triage_model: TRIAGE_MODEL,
-  apply_model: "",
-  apply_effort: "",
-  push_after_apply: false,
-  tag_release_after_push: false,
-};
 /**
  * What the model and effort dropdowns offer, keyed by vendor.
  *
@@ -83,7 +66,7 @@ function renderPlanSummary(): void {
   const blocked = runBlockReason(settings, catalogue);
   const repositories = repositoryList(settings).length;
   const units = unitCount(settings.models) * repositories;
-  const rounds = batchCount(settings.models);
+  const rounds = batchCount(settings.models, settings.claude_sessions);
   const summary =
     units === 0 || blocked
       ? ""
@@ -337,6 +320,7 @@ async function boot(): Promise<void> {
   ui.repo.value = repositoryList(settings).join("\n");
   ui.scope.value = settings.scope;
   ui.reuseCompleted.checked = settings.reuse_completed;
+  ui.claudeSessions.value = String(settings.claude_sessions);
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
   renderWithoutPersisting();
   applyBinding.redraw();

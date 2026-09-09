@@ -8,9 +8,9 @@ import {
   splitId,
   joinId,
   supportsAgents,
-  batchCount,
   effortIsValid,
 } from "./model.ts";
+import { batchCount } from "./units.ts";
 
 test("OpenCode local model tags survive selection and storage", () => {
   const id = "opencode:ollama/qwen3:8b";

@@ -1,6 +1,6 @@
 import { beginProgress, updateProgress, finishProgress } from "./scan-progress";
 import { repositories } from "./repositories";
-import { unitCount } from "./model";
+import { unitCount } from "./units";
 import { clearApplyReports } from "./apply-repositories";
 /**
  * The run lifecycle: starting a sweep, reflecting its progress, showing its

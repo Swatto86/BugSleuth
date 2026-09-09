@@ -91,6 +91,19 @@ export function joinId(vendor: Vendor, model: string): string {
   return vendor === "claude" ? trimmed : `${vendor}:${trimmed}`;
 }
 
+/**
+ * The most Claude sessions the app will run at once, matching Rust's own
+ * ceiling. Kept here so the control clamps to the same number Rust would, and
+ * the box never accepts a value that comes back changed.
+ */
+export const MAX_CLAUDE_SESSIONS = 8;
+
+/**
+ * What Rust uses when nothing has been saved. Only a fallback for the object
+ * the window starts with; the real value arrives from Rust with the settings.
+ */
+export const DEFAULT_CLAUDE_SESSIONS = 3;
+
 export interface Settings {
   repo: string;
   additional_repos?: string[];
@@ -146,6 +159,16 @@ export interface Settings {
    * such tag or names its releases some other way.
    */
   tag_release_after_push: boolean;
+  /**
+   * How many Claude CLI sessions may run at once.
+   *
+   * Claude only. Its invocations carry their own session id and load nothing
+   * from the machine, so two of them are two independent programs; the other
+   * CLIs share one signed-in session on disk and stay serial. The useful
+   * ceiling is the account's rate limit, which the app cannot see — so this is
+   * the user's number, clamped to 1..=8 by Rust, which returns what it applied.
+   */
+  claude_sessions: number;
 }
 
 export function settingsForApply(settings: Settings, repo: string): Settings {
@@ -162,80 +185,6 @@ export function settingsForApply(settings: Settings, repo: string): Settings {
  */
 export function uncoveredLanes(models: ModelSetting[]): Lane[] {
   return LANES.filter((lane) => !models.some((m) => m.lanes.includes(lane)));
-}
-
-/**
- * How many times a model sweeps each lane, tolerating settings written before
- * passes existed — those have no field at all, and must read as one rather than
- * turning the whole sweep estimate into NaN.
- */
-function passesOf(model: ModelSetting): number {
-  return Math.max(1, model.passes ?? 1);
-}
-
-/**
- * The pass counts a row's selector should offer: the usual 1–3, plus whatever
- * value is actually stored if it falls outside them.
- *
- * Rust deserializes `passes` as an unrestricted `usize` but caps it at
- * `MAX_PASSES` (25) and refuses the run above it. A stored value above the cap
- * is therefore not a valid backend instruction; clamping it to the cap keeps the
- * control honest and lets the user choose a runnable count.
- */
-export function passChoices(passes: number | undefined): number[] {
-  const chosen = Math.max(1, passes ?? 1);
-  const capped = Math.min(MAX_PASSES, chosen);
-  const choices = [1, 2, 3];
-  if (!choices.includes(capped)) choices.push(capped);
-  return choices.sort((left, right) => left - right);
-}
-
-/**
- * Every (model, lane, effort, agent mode, pass) unit this configuration implies.
- *
- * Mirrors plan.rs exactly, including its dedup: the engine enumerates these
- * tuples and drops exact duplicates, so a model listed twice against one lane
- * runs max(passes), not the sum. Summing per row here showed "4 sweeps" for a
- * run the engine executes as 3 — the pre-run estimate is only worth showing if
- * it counts what will actually run.
- */
-/**
- * The canonical spelling of a model id, so equivalent forms are one unit.
- *
- * `sonnet` and `claude:sonnet` are the same Claude model; counting them as two
- * showed a sweep and a charge the run never makes. Mirrors `canonical_spec` in
- * plan.rs. `claude:` alone is kept — it is the configured default, not a model.
- */
-function canonicalUnitId(raw: string): string {
-  const id = raw.trim();
-  if (!id) return "";
-  const { vendor, model } = splitId(id);
-  const normalized = model.trim();
-  if (vendor === "claude") {
-    return normalized || (id.startsWith("claude:") ? "claude:" : "");
-  }
-  return `${vendor}:${normalized}`;
-}
-
-function unitKeys(models: ModelSetting[]): Set<string> {
-  const keys = new Set<string>();
-  for (const model of models) {
-    const canonical = canonicalUnitId(model.id);
-    if (!canonical) continue;
-    const id = `${canonical}\0${model.use_agents ?? false}`;
-    for (const lane of model.lanes) {
-      if (!(LANES as readonly string[]).includes(lane)) continue;
-      for (let pass = 1; pass <= passesOf(model); pass++) {
-        keys.add(`${id} ${lane} ${(model.effort ?? "").trim()} ${pass}`);
-      }
-    }
-  }
-  return keys;
-}
-
-/** How many (model × lane × pass) sweeps a configuration implies. */
-export function unitCount(models: ModelSetting[]): number {
-  return unitKeys(models).size;
 }
 
 /**
@@ -277,21 +226,6 @@ export function usesUltracode(modelId: string): boolean {
       "claude-sonnet-5",
     ].some((family) => id.includes(family))
   );
-}
-
-/**
- * How many rounds a run takes.
- *
- * The engine runs one sweep per vendor at once, so the run's rounds are the most
- * any single vendor needs. Mirrors `Plan::batches` in plan.rs.
- */
-export function batchCount(models: ModelSetting[]): number {
-  const perVendor = new Map<string, number>();
-  for (const key of unitKeys(models)) {
-    const vendor = vendorOf(key.split(" ")[0] ?? "");
-    perVendor.set(vendor, (perVendor.get(vendor) ?? 0) + 1);
-  }
-  return perVendor.size === 0 ? 0 : Math.max(...perVendor.values());
 }
 
 /**

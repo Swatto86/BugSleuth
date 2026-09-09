@@ -95,13 +95,20 @@
             <button id="add-repository" type="button">Add local folder…</button>
             <button id="clone-open" type="button">Clone repositories…</button>
           </div>
-          <p class="hint">Add up to 16 separate repositories. Each uses the models, bug areas and path scope below. Three repositories can be active; each provider reviews one area at a time across the batch. Stop stops the whole batch. To remove a repository, delete its line.</p>
+          <p class="hint">Add up to 16 separate repositories. Each uses the models, bug areas and path scope below. Three repositories can be active; Claude reviews as many areas at once as the session limit below allows, and every other provider reviews one at a time across the batch. Stop stops the whole batch. To remove a repository, delete its line.</p>
           <div class="row">
             <label class="field">
               <span>Limit to paths (optional)</span>
               <input id="scope" type="text" spellcheck="false" placeholder="crates/core/src" />
             </label>
           </div>
+          <div class="row" style="margin-top: 12px">
+            <label class="field">
+              <span>Claude sessions at once</span>
+              <input id="claude-sessions" type="number" min="1" max="8" step="1" />
+            </label>
+          </div>
+          <p class="hint">Claude only. Its reviews are separate processes that share nothing, so several can run together; the limit that matters is your own Claude rate limit, which BugSleuth cannot see. Set it too high and sweeps fail after waiting rather than sooner. Every other provider reviews one area at a time because its CLI shares one signed-in session on disk.</p>
           <div class="row" style="margin-top: 12px">
             <label class="checkline">
               <input id="triage-severities" type="checkbox" checked />

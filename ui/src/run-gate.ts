@@ -12,11 +12,11 @@ import {
   MAX_PASSES,
   effortIsValid,
   supportsAgents,
-  unitCount,
   usesUltracode,
   vendorOf,
   type Settings,
 } from "./model.ts";
+import { unitCount } from "./units.ts";
 import type { Catalogue } from "./view.ts";
 
 /**

@@ -10,13 +10,8 @@
  * there is no import cycle at runtime.
  */
 
-import {
-  effortIsValid,
-  joinId,
-  passChoices,
-  splitId,
-  type ModelSetting,
-} from "./model";
+import { effortIsValid, joinId, splitId, type ModelSetting } from "./model";
+import { passChoices } from "./units";
 import type { Catalogue, MatrixHandlers, VendorModels } from "./view";
 
 export function option(

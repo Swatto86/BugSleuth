@@ -162,22 +162,40 @@ fn an_unknown_lane_name_is_rejected_rather_than_silently_skipped() {
 }
 
 #[test]
-fn every_provider_runs_at_most_one_sweep_per_batch() {
-    // No provider publishes a safe maximum for independent authenticated CLI
-    // processes, and two real OpenCode processes collided in its credential store.
-    // Different providers may overlap, but one provider must stay serial.
-    let plan = plan(&config(&[
+fn no_batch_schedules_a_provider_beyond_the_slots_it_has() {
+    // Most providers publish no safe maximum for independent authenticated CLI
+    // processes, and two real OpenCode processes collided in its credential
+    // store — so they stay serial. Claude's invocations are isolated and its
+    // limit is configured, so a batch may hold as many as the gate will admit
+    // and must hold no more: the extra would queue while progress called it
+    // running.
+    let claude = crate::vendor_slots::claude_sessions();
+    let mut requested = config(&[
         ("sonnet", &["security", "ux"]),
         ("cursor:model", &["security", "ux"]),
         ("opencode:model", &["security", "ux"]),
-    ]))
-    .unwrap_or_else(|e| panic!("plan failed: {e}"));
+    ]);
+    // Enough Claude units to fill any permitted limit, so this still proves the
+    // sessions are used rather than passing because there was nothing to group.
+    requested.models[0].passes = crate::vendor_slots::MAX_CLAUDE_SESSIONS;
+    let plan = plan(&requested).unwrap_or_else(|e| panic!("plan failed: {e}"));
 
+    let mut widest = 0;
     for batch in plan.batches() {
-        let vendors: Vec<String> = batch.iter().map(|unit| vendor_of(&unit.model)).collect();
-        let unique: BTreeSet<&str> = vendors.iter().map(String::as_str).collect();
-        assert_eq!(vendors.len(), unique.len(), "provider overlap: {batch:?}");
+        let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+        for unit in &batch {
+            *counts.entry(vendor_of(&unit.model)).or_default() += 1;
+        }
+        widest = widest.max(counts.get("claude").copied().unwrap_or(0));
+        for (vendor, used) in counts {
+            let allowed = if vendor == "claude" { claude } else { 1 };
+            assert!(
+                used <= allowed,
+                "{vendor} oversubscribed by {used}: {batch:?}"
+            );
+        }
     }
+    assert_eq!(widest, claude, "the configured Claude sessions went unused");
 }
 
 #[test]

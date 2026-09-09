@@ -60,7 +60,17 @@ async fn invoke_vendor(
     use_agents: bool,
 ) -> Result<(Vec<RawFinding>, Option<u32>, bool, Option<String>), bugsleuth_provider::ProviderError>
 {
-    let _slot = crate::vendor_slots::acquire(vendor).await;
+    // Held for the whole invocation below. Dropped with this scope, including
+    // when the sweep is cancelled, so a stopped run frees its slot immediately.
+    let _slot = crate::vendor_slots::acquire(vendor)
+        .await
+        .map_err(
+            |error| bugsleuth_provider::ProviderError::CapabilityUnavailable {
+                vendor: vendor.label(),
+                capability: "concurrency",
+                reason: error.to_string(),
+            },
+        )?;
     match vendor {
         Vendor::Claude => claude::sweep(ClaudeSweep {
             repo: reviewed,

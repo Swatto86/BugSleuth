@@ -73,11 +73,24 @@ pub async fn check_signin() -> Vec<VendorStatus> {
 
 #[tauri::command]
 pub fn load_settings() -> CommandResult<Settings> {
-    settings::load().map_err(|error| error.to_string())
+    let settings = settings::load().map_err(|error| error.to_string())?;
+    // The frontend loads settings once at startup, which is the app's only
+    // chance to put the saved Claude session limit into force before the first
+    // run is planned. The stored number stays the user's request; what is
+    // applied is reported back so the control shows the limit in force.
+    Ok(Settings {
+        claude_sessions: bugsleuth_engine::set_claude_sessions(settings.claude_sessions),
+        ..settings
+    })
 }
 
 #[tauri::command]
 pub fn save_settings(settings: Settings) -> CommandResult<()> {
+    // Applied as well as stored, so a change takes effect on the next run
+    // rather than the next launch. A reduction made while sweeps are running
+    // can only shrink as far as the slots that are free; the file keeps what
+    // was asked for, so the next launch applies it exactly.
+    bugsleuth_engine::set_claude_sessions(settings.claude_sessions);
     settings::save(&settings).map_err(|e| e.to_string())
 }
 

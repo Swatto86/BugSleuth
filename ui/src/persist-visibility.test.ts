@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import ts from "typescript";
 
-import type { Settings } from "./model.ts";
+import { DEFAULT_CLAUDE_SESSIONS, type Settings } from "./model.ts";
 import { savingSettings } from "./persist.ts";
 
 const root = path.join(
@@ -37,6 +37,7 @@ test("a save failure is shown in its own region, never gated on a run", async ()
     apply_effort: "",
     push_after_apply: false,
     tag_release_after_push: false,
+    claude_sessions: DEFAULT_CLAUDE_SESSIONS,
   };
   const errors: string[] = [];
   const saver = savingSettings({
@@ -126,6 +127,7 @@ test("flushing writes the latest pending settings exactly once", async () => {
     apply_effort: "",
     push_after_apply: false,
     tag_release_after_push: false,
+    claude_sessions: DEFAULT_CLAUDE_SESSIONS,
   };
   const saved: Settings[] = [];
   const saver = savingSettings({
@@ -159,6 +161,7 @@ test("flushing waits for edits made while an earlier save is pending", async () 
     apply_effort: "",
     push_after_apply: false,
     tag_release_after_push: false,
+    claude_sessions: DEFAULT_CLAUDE_SESSIONS,
   };
   let releaseFirst = (): void => undefined;
   let releaseSecond = (): void => undefined;
@@ -292,6 +295,7 @@ test("writes stay blocked when saved settings failed to load", async () => {
     apply_effort: "",
     push_after_apply: false,
     tag_release_after_push: false,
+    claude_sessions: DEFAULT_CLAUDE_SESSIONS,
   };
   const saved: string[] = [];
   const errors: string[] = [];

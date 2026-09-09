@@ -40,3 +40,14 @@ pub mod report;
 pub mod sweep;
 pub mod triage;
 mod vendor_slots;
+
+/// How many Claude CLI sessions the whole application may run at once.
+///
+/// Exposed rather than left internal because the number is the user's to
+/// choose: it is bounded by their Claude account's rate limit, which this tool
+/// cannot see. The desktop shell applies the saved value at startup and again
+/// whenever settings are saved, and the CLI applies its flag before planning.
+/// Every other vendor stays one-at-a-time and has nothing to configure.
+pub use vendor_slots::{
+    DEFAULT_CLAUDE_SESSIONS, MAX_CLAUDE_SESSIONS, claude_sessions, set_claude_sessions,
+};

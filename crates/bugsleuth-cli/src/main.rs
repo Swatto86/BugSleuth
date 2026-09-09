@@ -24,6 +24,10 @@ async fn main() -> Result<()> {
 }
 
 async fn run_all(args: RunArgs) -> Result<()> {
+    // Before the plan is grouped: the planner asks how many Claude sweeps may
+    // share a batch, and a limit applied afterwards would leave the run grouped
+    // for the old one.
+    bugsleuth_engine::set_claude_sessions(args.claude_sessions);
     let plan = plan::load(&args.config)?;
     let uses_claude = plan
         .units
@@ -351,6 +355,7 @@ mod tests {
             use_api_key: false,
             triage_model: String::new(),
             prompt_out: None,
+            claude_sessions: bugsleuth_engine::DEFAULT_CLAUDE_SESSIONS,
         })
         .await;
         std::fs::remove_file(config).expect("remove config");

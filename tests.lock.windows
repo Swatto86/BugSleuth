@@ -1,4 +1,5 @@
 platform windows
+node Claude's rounds divide by the sessions it is allowed
 node OpenCode local model tags survive selection and storage
 node Run refuses a model whose CLI is not installed
 node Tab with focus outside the dialog's buttons re-enters the trap
@@ -149,6 +150,7 @@ node every event has both an emitter and a listener
 node every external workflow action is pinned to an immutable revision
 node every lane header explains what that lane hunts
 node every platform the release builds for is offered in the README
+node every provider but Claude stays serial whatever Claude is allowed
 node every quit into Rust reports its failure rather than looking broken
 node every shipped preset covers every lane
 node every silent-failure opt-out gives a reason
@@ -183,7 +185,7 @@ node no call into Rust can fail without the user being told
 node no command is exposed to the page that the page never calls
 node no element asks for a class the stylesheet does not define
 node one repository list preserves legacy settings and validates clone destinations
-node one vendor doing everything is one round per lane
+node one serial vendor doing everything is one round per lane
 node only a complete shipped preset bypasses replacement confirmation
 node only the release publisher receives repository write authority
 node quit flushes pending settings before it can invoke exit
@@ -199,7 +201,6 @@ node retired provider settings remain readable but cannot run or apply
 node rounds are driven by the busiest vendor, not the total
 node run-directory documentation includes the backend path hash
 node safety docs describe the triage exception to lane-relative grades
-node same-provider rounds stay serial
 node scan progress separates completed zero findings, failures and reused reviews
 node settings saved before passes existed still estimate as one pass each
 node splitId agrees with vendorOf on every shape
@@ -702,8 +703,8 @@ rust plan::tests::claude_effort_is_validated_per_model
 rust plan::tests::claude_ultracode_replaces_a_separate_effort_setting
 rust plan::tests::cursor_vendor_and_effort_rules
 rust plan::tests::equivalent_claude_spellings_collapse_to_one_unit
-rust plan::tests::every_provider_runs_at_most_one_sweep_per_batch
 rust plan::tests::every_vendor_prefix_is_recognised
+rust plan::tests::no_batch_schedules_a_provider_beyond_the_slots_it_has
 rust plan::tests::opencode_cannot_request_agents_its_read_only_ask_agent_cannot_delegate_to
 rust plan::tests::plan_accepts_codex_repository_review
 rust plan::tests::the_same_model_assigned_a_lane_twice_is_not_paid_for_twice
@@ -738,6 +739,7 @@ rust report::tests::findings_rank_most_severe_first
 rust report::tests::rejected_finding_fields_are_stripped_of_terminal_control_characters
 rust settings::tests::a_missing_settings_file_is_first_launch_and_yields_defaults
 rust settings::tests::a_read_error_that_is_not_a_missing_file_is_surfaced
+rust settings::tests::a_settings_file_from_before_claude_sessions_existed_keeps_working
 rust settings::tests::known_lane_spellings_are_canonical_on_the_wire
 rust settings::tests::malformed_settings_are_reported_and_left_in_place
 rust settings::tests::retired_provider_concurrency_is_removed_when_settings_load
@@ -840,8 +842,10 @@ rust triage::tests::the_prompt_says_what_each_defect_was_already_graded
 rust triage::tests::the_rubric_the_sweep_is_given_is_the_rubric_triage_applies
 rust unrelated_defects_in_the_same_real_crate_stay_separate
 rust update::tests::the_updater_is_configured_against_this_repository_and_a_real_key
+rust vendor_slots::tests::capacity_matches_the_gate_each_vendor_is_actually_given
 rust vendor_slots::tests::codex_applies_overlap_with_a_bound_and_release_cancelled_waiters
 rust vendor_slots::tests::different_vendors_overlap_but_same_vendor_waits_and_cancellation_releases
+rust vendor_slots::tests::sessions_resize_and_report_what_was_actually_applied
 rust worktree::ownership_tests::a_preexisting_exact_name_collision_is_not_deleted
 rust worktree::ownership_tests::a_user_branch_with_a_numeric_suffix_is_never_deleted
 rust worktree::ownership_tests::unregistered_git_directory_under_container_is_never_deleted

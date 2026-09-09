@@ -19,17 +19,17 @@ import {
   type ModelSetting,
   LANES,
   LANE_TITLES,
+  MAX_CLAUDE_SESSIONS,
   applyStatus,
-  batchCount,
   isShippedConfiguration,
   joinId,
   preset,
   splitId,
   toggleLane,
   uncoveredLanes,
-  unitCount,
   vendorOf,
 } from "./model.ts";
+import { batchCount, unitCount } from "./units.ts";
 
 /**
  * A matrix row, with the fields every row really has.
@@ -93,14 +93,14 @@ test("a bare and a prefixed Claude model on one lane count as a single unit", ()
     row("claude:sonnet", ["correctness"]),
   ];
   assert.equal(unitCount(models), 1);
-  assert.equal(batchCount(models), 1);
+  assert.equal(batchCount(models, 1), 1);
 });
 
 test("agent and single-agent prompts are distinct sweeps", () => {
   const single = row("sonnet", ["correctness"]);
   const agents = { ...single, use_agents: true };
   assert.equal(unitCount([single, agents]), 2);
-  assert.equal(batchCount([single, agents]), 2);
+  assert.equal(batchCount([single, agents], 1), 2);
 });
 
 test("only a complete shipped preset bypasses replacement confirmation", () => {
@@ -149,8 +149,29 @@ test("rounds are driven by the busiest vendor, not the total", () => {
   assert.equal(batchCount(models), 2);
 });
 
-test("one vendor doing everything is one round per lane", () => {
-  assert.equal(batchCount([row("sonnet", [...LANES])]), LANES.length);
+test("one serial vendor doing everything is one round per lane", () => {
+  assert.equal(batchCount([row("codex:", [...LANES])]), LANES.length);
+});
+
+test("Claude's rounds divide by the sessions it is allowed", () => {
+  // The window shows this number before anyone pays for the run, so it has to
+  // be the number of rounds the engine will actually take. Claude's sweeps run
+  // several at a time; every other vendor's do not, and a mixed run waits for
+  // whichever vendor needs the most rounds.
+  const claude = [row("sonnet", [...LANES])];
+  assert.equal(batchCount(claude, 1), LANES.length);
+  assert.equal(batchCount(claude, 2), Math.ceil(LANES.length / 2));
+  assert.equal(batchCount(claude, LANES.length), 1);
+  // More sessions than there is work for does not go below one round.
+  assert.equal(batchCount(claude, MAX_CLAUDE_SESSIONS), 1);
+  // A serial vendor is unaffected, and sets the floor for the run.
+  assert.equal(
+    batchCount([...claude, row("codex:", [...LANES])], MAX_CLAUDE_SESSIONS),
+    LANES.length,
+  );
+  // A nonsense stored value falls back to one rather than to no rounds.
+  assert.equal(batchCount(claude, 0), LANES.length);
+  assert.equal(batchCount(claude, Number.NaN), LANES.length);
 });
 
 test("an empty configuration needs no rounds", () => {
@@ -296,7 +317,7 @@ test("a repeated pass is a whole extra sweep, and an extra round", () => {
   // will never run at once — so it costs a round as well as a sweep.
   const models = [{ ...row("sonnet", ["correctness"]), passes: 2 }];
   assert.equal(unitCount(models), 2);
-  assert.equal(batchCount(models), 2);
+  assert.equal(batchCount(models, 1), 2);
 });
 
 test("settings saved before passes existed still estimate as one pass each", () => {
@@ -326,7 +347,7 @@ test("a model listed twice with different passes counts like the engine: max, no
     { ...row("sonnet", ["correctness"]), passes: 3 },
   ];
   assert.equal(unitCount(models), 3);
-  assert.equal(batchCount(models), 3);
+  assert.equal(batchCount(models, 1), 3);
 });
 
 test("an identical duplicate row adds nothing, exactly like the engine", () => {
@@ -337,9 +358,13 @@ test("an identical duplicate row adds nothing, exactly like the engine", () => {
   assert.equal(unitCount(models), 1);
 });
 
-test("same-provider rounds stay serial", () => {
-  for (const model of ["sonnet", "codex:model", "opencode:model"]) {
-    assert.equal(batchCount([row(model, ["security", "ux"])]), 2, model);
+test("every provider but Claude stays serial whatever Claude is allowed", () => {
+  for (const model of ["codex:model", "opencode:model", "cursor:model"]) {
+    assert.equal(
+      batchCount([row(model, ["security", "ux"])], MAX_CLAUDE_SESSIONS),
+      2,
+      model,
+    );
   }
 });
 

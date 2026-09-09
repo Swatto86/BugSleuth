@@ -15,7 +15,7 @@ import { repositories, repositoryLines, setRepositories } from "./repositories";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 
-import type { Settings } from "./model";
+import { MAX_CLAUDE_SESSIONS, type Settings } from "./model";
 import { signinPills } from "./view";
 
 /** The elements these handlers touch, and what they do to the rest. */
@@ -26,6 +26,7 @@ export interface ControlDeps {
     addRepository: HTMLButtonElement;
     scope: HTMLInputElement;
     reuseCompleted: HTMLInputElement;
+    claudeSessions: HTMLInputElement;
     triageSeverities: HTMLInputElement;
     checkSignin: HTMLButtonElement;
     vendors: HTMLDivElement;
@@ -133,6 +134,20 @@ export function bindControls(deps: ControlDeps): void {
   });
   ui.reuseCompleted.addEventListener("change", () => {
     settings().reuse_completed = ui.reuseCompleted.checked;
+    refresh();
+  });
+  // On `change` rather than `input`, so typing "12" on the way to "1" is not
+  // read as a request for twelve and clamped down to eight under the cursor.
+  ui.claudeSessions.addEventListener("change", () => {
+    const asked = Number.parseInt(ui.claudeSessions.value, 10);
+    // An empty or non-numeric box means the user cleared it, not that they
+    // want one session; keep what is in force rather than quietly halving
+    // their concurrency.
+    const chosen = Number.isFinite(asked)
+      ? Math.min(Math.max(asked, 1), MAX_CLAUDE_SESSIONS)
+      : settings().claude_sessions;
+    settings().claude_sessions = chosen;
+    ui.claudeSessions.value = String(chosen);
     refresh();
   });
   ui.triageSeverities.addEventListener("change", () => {

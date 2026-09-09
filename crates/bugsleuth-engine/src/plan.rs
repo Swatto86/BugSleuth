@@ -11,7 +11,7 @@
 //! always enumerated, and one with no model assigned is carried through the
 //! whole run as an explicit "not swept".
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 use bugsleuth_domain::Lane;
@@ -77,21 +77,29 @@ pub struct Plan {
 }
 
 impl Plan {
-    /// Units grouped so that no two for the same vendor run at once.
+    /// Units grouped so that no vendor exceeds the slots it actually has.
     ///
-    /// Different vendors may run concurrently. Independent processes of one
-    /// vendor stay serial because none publishes a safe process limit, and two
-    /// real Kilo processes collided while updating its credential database.
+    /// Different vendors may always run concurrently. Within one vendor the
+    /// group size is whatever [`crate::vendor_slots::capacity`] hands out, and
+    /// it is asked rather than assumed: a batch wider than the gate is not
+    /// extra concurrency, it is units queued behind a lock while the progress
+    /// display counts them as running. Most vendors answer one, because none of
+    /// them publishes a safe process limit and two real Kilo processes collided
+    /// while updating its shared credential database.
     pub fn batches(&self) -> Vec<Vec<Unit>> {
         let mut remaining = self.units.clone();
         let mut batches = Vec::new();
 
         while !remaining.is_empty() {
             let mut batch: Vec<Unit> = Vec::new();
-            let mut vendors = BTreeSet::new();
+            let mut taken: BTreeMap<String, usize> = BTreeMap::new();
             remaining.retain(|unit| {
-                let vendor = vendor_of(&unit.model);
-                if vendors.insert(vendor) {
+                let name = vendor_of(&unit.model);
+                let slots =
+                    crate::vendor_slots::capacity(crate::sweep::Vendor::parse(&unit.model).0);
+                let used = taken.entry(name).or_default();
+                if *used < slots {
+                    *used += 1;
                     batch.push(unit.clone());
                     return false;
                 }

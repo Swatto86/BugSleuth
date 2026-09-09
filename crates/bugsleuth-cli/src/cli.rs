@@ -90,6 +90,12 @@ pub(crate) struct RunArgs {
     /// a model that cannot hold the whole thing.
     #[arg(long)]
     pub(crate) prompt_out: Option<PathBuf>,
+    /// How many Claude CLI sessions may run at once. Claude's invocations are
+    /// isolated from each other, so the real ceiling is your account's rate
+    /// limit — a number only you know. Every other vendor stays serial because
+    /// its CLI shares session state on disk. Clamped to 1..=8.
+    #[arg(long, default_value_t = bugsleuth_engine::DEFAULT_CLAUDE_SESSIONS)]
+    pub(crate) claude_sessions: usize,
 }
 
 #[derive(Parser)]

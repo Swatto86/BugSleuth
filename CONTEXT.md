@@ -58,8 +58,18 @@ initialized automatically. No credentials are stored by BugSleuth.
 
 Desktop reviews accept up to 16 separate repository folders using one model
 matrix and relative scope. Three repository reviews can be active; shared
-provider slots serialize each vendor's sweeps and Claude triage across the
-batch. Different vendors can work concurrently. Stop cancels the entire batch,
+provider slots bound each vendor's sweeps and Claude triage across the batch.
+Different vendors can work concurrently. Claude runs several sessions at once
+because its invocations carry their own session id, exchange prompt and answer
+over pipes and load nothing from the machine or repository; the useful ceiling
+is the account's rate limit, which BugSleuth cannot see, so it is the
+`claude_sessions` setting (default 3, clamped 1-8) and the CLI's
+`--claude-sessions`. Every other vendor stays one-at-a-time because its CLI
+shares one signed-in session on disk — the retired `provider_concurrency`,
+which raised the limit for every vendor at once, is not what this is. The
+planner groups a batch by the same number the slot gate hands out, and the
+window's round estimate divides Claude's units by it, so the count shown before
+paying matches the run. Stop cancels the entire batch,
 including repositories waiting to start. Each repository retains its own cache,
 coverage, findings and fix prompt; the report selector binds Apply to that
 report's repository. Each report remembers its own fixing provider/model and

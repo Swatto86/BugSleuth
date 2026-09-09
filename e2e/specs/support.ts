@@ -132,9 +132,20 @@ export function clipboardText(): string {
       .replace(/\r\n/g, "\n")
       .trimEnd();
   }
+  // `[Console]::OutputEncoding` first, and not optional: PowerShell otherwise
+  // writes its stdout in the console's ANSI code page, so every character in
+  // the report that the code page lacks — every em dash in the caveats, for a
+  // start — arrives here as `-`. Read back as UTF-8 it then differs from what
+  // the window displayed, and the comparison failed for a difference this
+  // helper had introduced rather than one the app had.
   return execFileSync(
     "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-Command", "Get-Clipboard -Raw"],
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-Clipboard -Raw",
+    ],
     { encoding: "utf8" },
   )
     .replace(/\r\n/g, "\n")
