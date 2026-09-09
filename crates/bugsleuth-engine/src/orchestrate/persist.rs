@@ -27,7 +27,7 @@ struct StoredReport {
     report: LaneReport,
 }
 
-fn review_contract() -> String {
+fn review_contract(model: &str) -> String {
     let mut hash = 0xcbf29ce484222325_u64;
     let mut include = |text: &str| {
         for byte in text.bytes() {
@@ -55,6 +55,9 @@ fn review_contract() -> String {
         }
     }
     include(&serde_json::to_string(&bugsleuth_domain::finding_schema()).unwrap_or_default());
+    if model.starts_with("codex:") {
+        include(&bugsleuth_provider::codex::review_schema().to_string());
+    }
     format!("{hash:016x}")
 }
 
@@ -112,7 +115,7 @@ pub(super) fn reusable(unit: &Unit, options: &RunOptions<'_>) -> Option<LaneRepo
 fn read_swept(path: &Path) -> Option<LaneReport> {
     let text = std::fs::read_to_string(path).ok()?;
     let stored: StoredReport = serde_json::from_str(&text).ok()?;
-    if stored.bugsleuth_review_contract != review_contract() {
+    if stored.bugsleuth_review_contract != review_contract(&stored.report.model) {
         return None;
     }
     // A failed sweep is retried. The usual reason a run died is a rate limit,
@@ -303,7 +306,7 @@ pub(super) fn write_report(dir: &Path, name: &str, report: &LaneReport) -> Resul
     std::fs::create_dir_all(dir)?;
     let path: PathBuf = dir.join(name);
     let stored = StoredReportRef {
-        bugsleuth_review_contract: review_contract(),
+        bugsleuth_review_contract: review_contract(&report.model),
         report,
     };
     let json = serde_json::to_string_pretty(&stored)?;

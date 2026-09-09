@@ -134,7 +134,16 @@ test("the release uses the lockfile's Tauri CLI", () => {
 test("the E2E build uses the locked local Tauri CLI", () => {
   const pkg = JSON.parse(read("package.json"));
   const lock = JSON.parse(read("package-lock.json"));
-  assert.equal(pkg.scripts["e2e:build"], "tauri build --debug --no-bundle");
+  assert.equal(
+    pkg.scripts["e2e:build"],
+    "tauri build --debug --no-bundle --config e2e/tauri.conf.json",
+  );
+  const acceptance = JSON.parse(fs.readFileSync("e2e/tauri.conf.json", "utf8"));
+  const production = JSON.parse(
+    fs.readFileSync("src-tauri/tauri.conf.json", "utf8"),
+  );
+  assert.deepEqual(Object.keys(acceptance), ["identifier"]);
+  assert.notEqual(acceptance.identifier, production.identifier);
   assert.equal(pkg.devDependencies["@tauri-apps/cli"], "2.11.4");
   assert.equal(lock.packages["node_modules/@tauri-apps/cli"].version, "2.11.4");
 });

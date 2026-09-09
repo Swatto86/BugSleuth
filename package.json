@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "node --experimental-strip-types --test --test-reporter=spec ui/src/*.test.ts",
     "e2e": "npm run e2e:build && wdio run e2e/wdio.conf.ts",
-    "e2e:build": "tauri build --debug --no-bundle",
+    "e2e:build": "tauri build --debug --no-bundle --config e2e/tauri.conf.json",
     "e2e:run": "wdio run e2e/wdio.conf.ts"
   },
   "dependencies": {

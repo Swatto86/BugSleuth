@@ -33,10 +33,8 @@ pub fn run() {
     // open together, and the repository the user had chosen to review was
     // replaced by the other's stale idea of it, with nothing said.
     //
-    // The acceptance suite runs against this, guard and all, rather than
-    // against a specially-built binary: it kills any stray instance first. A
-    // test build that differs from the shipped one is a test of something
-    // nobody ships.
+    // Acceptance keeps this guard enabled, with a separate bundle identifier
+    // and isolated settings so it can run beside an installed review.
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
         reveal(app);
     }));

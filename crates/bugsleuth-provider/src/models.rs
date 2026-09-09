@@ -4,7 +4,7 @@
 //! that you spelled it wrong — or worse, that you spelled a *real* model that
 //! bills somewhere you did not intend. So the app offers a list.
 //!
-//! Claude offers documented aliases. Codex, Cursor and OpenCode expose model
+//! Claude offers documented versions and aliases. Codex, Cursor and OpenCode expose model
 //! catalogues; OpenCode includes globally configured local provider routes.
 //!
 //! Every list is a *suggestion*. A model id that is not on it must still be
@@ -80,6 +80,16 @@ pub(crate) use efforts::validate_effort;
 /// Claude's documented aliases. Each always points at the newest of its family.
 const CLAUDE_MODELS: &[&str] = &["fable", "opus", "sonnet", "haiku"];
 
+// Claude Code accepts full model IDs but exposes no non-interactive catalogue.
+// https://platform.claude.com/docs/en/models/overview (2026-09-09)
+const CLAUDE_VERSIONS: &[(&str, &str)] = &[
+    ("Fable 5.1", "claude-fable-5-1"),
+    ("Fable 5", "claude-fable-5"),
+    ("Opus 5", "claude-opus-5"),
+    ("Sonnet 5", "claude-sonnet-5"),
+    ("Haiku 4.5", "claude-haiku-4-5-20251001"),
+];
+
 /// Whether Claude Code documents Ultracode for this model selection.
 #[must_use]
 pub fn supports_ultracode(model: &str) -> bool {
@@ -97,11 +107,24 @@ pub fn supports_ultracode(model: &str) -> bool {
 }
 
 fn claude_models() -> VendorCatalogue {
-    let mut catalogue = fixed("Claude", CLAUDE_MODELS);
-    for model in CLAUDE_MODELS {
+    let mut catalogue = VendorCatalogue::default();
+    for (label, model) in CLAUDE_VERSIONS {
+        catalogue.groups.push(ModelGroup {
+            label: (*label).into(),
+            models: vec![(*model).into()],
+        });
+    }
+    catalogue
+        .groups
+        .extend(fixed("Latest family aliases", CLAUDE_MODELS).groups);
+    for model in CLAUDE_MODELS
+        .iter()
+        .copied()
+        .chain(CLAUDE_VERSIONS.iter().map(|(_, id)| *id))
+    {
         if let Some(levels) = efforts_for("claude", model) {
             catalogue.efforts_by_model.insert(
-                (*model).to_string(),
+                model.to_string(),
                 levels.iter().map(|level| (*level).to_string()).collect(),
             );
         }

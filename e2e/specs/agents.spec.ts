@@ -29,6 +29,24 @@ describe("parallel review agents", () => {
         timeoutMsg: "the Claude catalogue never offered Fable",
       },
     );
+    for (const [id, label] of [
+      ["claude-fable-5", "Fable 5"],
+      ["claude-fable-5-1", "Fable 5.1"],
+    ]) {
+      assert.equal(
+        await $(
+          `#matrix-body tr:first-child datalist option[value="${id}"]`,
+        ).getAttribute("label"),
+        label,
+      );
+    }
+    await $("#matrix-body tr:first-child td.model-id input").setValue(
+      "claude-fable-5-1",
+    );
+    assert.equal(
+      await $("#matrix-body tr:first-child td.model-id input").getValue(),
+      "claude-fable-5-1",
+    );
     await expect(agents()).toBeEnabled();
     await agents().click();
     await expect(agents()).toBeSelected();

@@ -1,13 +1,8 @@
 use super::*;
 
-#[tokio::test]
-async fn repository_review_launches_codex() {
-    let dir = std::env::temp_dir().join(format!(
-        "bugsleuth-enabled-codex-review-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create fixture repository");
+async fn run_review(answer: &str) -> Result<CodexResult, ProviderError> {
+    let dir = scratch::scratch_dir().unwrap();
+    let _cleanup = scratch::Cleanup(dir.clone());
 
     #[cfg(windows)]
     let (stub, script) = (
@@ -19,8 +14,9 @@ async fn repository_review_launches_codex() {
         dir.join("codex"),
         "#!/bin/sh\ncat >/dev/null\nprintf launched > launched.txt\nwhile [ \"$#\" -gt 0 ]; do\n  if [ \"$1\" = \"--output-last-message\" ]; then\n    printf '%s\\n' '{\"findings\":[]}' > \"$2\"\n    exit 0\n  fi\n  shift\ndone\nexit 2\n",
     );
+    let script = script.replace(r#"{"findings":[]}"#, answer);
     #[cfg(windows)]
-    std::fs::write(&stub, script).expect("write fake Codex CLI");
+    std::fs::write(&stub, &script).expect("write fake Codex CLI");
     #[cfg(unix)]
     {
         // Write in a separate process: another parallel test may fork while a
@@ -58,11 +54,33 @@ async fn repository_review_launches_codex() {
     })
     .await;
     let launched = dir.join("launched.txt").exists();
-    let _ = std::fs::remove_dir_all(&dir);
-
     assert!(launched, "the review never launched Codex: {outcome:?}");
+    outcome
+}
+
+#[tokio::test]
+async fn repository_review_launches_codex() {
+    let outcome = run_review(r#"{"findings":[],"review_error":""}"#).await;
     assert!(
         outcome.is_ok(),
         "the review did not return findings: {outcome:?}"
     );
+}
+
+#[tokio::test]
+async fn a_blocked_review_is_not_an_empty_success() {
+    let outcome =
+        run_review(r#"{"findings":[],"review_error":"Repository reads blocked by policy"}"#).await;
+    let error = outcome.expect_err("blocked review was accepted as clean");
+    assert!(
+        error
+            .to_string()
+            .contains("Repository reads blocked by policy")
+    );
+    assert!(!error.is_transient());
+}
+
+#[tokio::test]
+async fn a_review_without_completion_status_is_rejected() {
+    assert!(run_review(r#"{"findings":[]}"#).await.is_err());
 }

@@ -2,7 +2,7 @@
 
 Living document. Code is ground truth; correct this when they diverge.
 
-**Last updated:** 8 September 2026.
+**Last updated:** 9 September 2026.
 
 ## The constraint everything follows from
 
@@ -55,6 +55,12 @@ absorbing them is most of that crate's job:
 | Codex | Schema as a file | `--sandbox read-only` | Final message to a file |
 | OpenCode | Prompt-described JSON | Deny-by-default agent + worktree | NDJSON text parts |
 | Cursor (`agent`) | **None** — described in the prompt | `--mode ask` + worktree (no ignore-rules) | Text reply |
+
+Codex's provider-only response schema requires `review_error`: an empty string
+means the review completed; a reason or missing field fails the sweep. Its
+Windows read-only invocation explicitly selects the elevated sandbox backend
+while ignoring user configuration. The cache contract includes this schema only
+for Codex, preserving other vendors' compatible results.
 
 Three consequences worth knowing:
 

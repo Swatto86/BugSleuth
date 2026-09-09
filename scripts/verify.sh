@@ -144,7 +144,7 @@ echo "file sizes OK (none over $hard lines)"
 
 say "debug application and CLI"
 cargo build --locked --workspace --exclude bugsleuth-app
-npx --no-install tauri build --debug --no-bundle
+npx --no-install tauri build --debug --no-bundle --config e2e/tauri.conf.json
 
 case "$(uname -s)" in
   Darwin) echo "WebDriver is unavailable on macOS; Windows and Linux run the suite." ;;

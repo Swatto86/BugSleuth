@@ -7,6 +7,10 @@ frontend. `ARCHITECTURE.md` describes the current boundaries; older
 Provider settings retain the compatible `vendor:model` format. Supported vendors
 are Claude, Codex, Cursor and OpenCode. OpenCode model IDs are opaque,
 including local tags, and catalogues are suggestions rather than an allowlist.
+Claude offers version-pinned IDs (including Fable 5 and 5.1) as well as latest
+family aliases; saved aliases retain their meaning. The version list follows
+Anthropic's documented model IDs because Claude Code has no non-interactive
+catalogue command.
 OpenCode providers must be configured globally because reviewed project
 configuration is excluded from disposable review checkouts.
 
@@ -18,6 +22,9 @@ artifacts. Unit tests or a successful compile alone do not establish this.
 The routine full gate uses debug builds and native WebDriver on Windows/Linux.
 E2E runs in a disposable repository with isolated app settings and deterministic
 CLI fixtures; `BUGSLEUTH_E2E_LIVE=1` enables separate real-provider acceptance.
+`e2e/tauri.conf.json` gives debug acceptance its own bundle identifier while
+keeping the production single-instance guard enabled, so an installed scan can
+continue during verification. Build with `npm run e2e:build`.
 Only processes owned by the harness may be terminated. Pinned driver archives
 are checksum-verified before extraction; EdgeDriver must match WebView2.
 Release packaging is a separate step after the debug gate. Tagged releases build Windows and Linux by default; manual releases can also
@@ -26,6 +33,14 @@ include macOS.
 Kilo and Kimi adapters have been retired. Existing saved rows are preserved but
 refused explicitly until the user selects a supported provider. Historical reports
 remain readable.
+
+Codex read-only runs explicitly enable the elevated Windows sandbox backend:
+ignoring user config otherwise rejects even file reads with approval set to never.
+Review responses must include `review_error`; blocked or missing completion status
+becomes NOT SWEPT. Codex's wire schema is part of its cache contract, so older
+Codex sweeps rerun while compatible Claude/Cursor caches remain reusable.
+Live Astra review acceptance: `BUGSLEUTH_E2E_LIVE=1 npm run e2e:run -- --spec
+e2e/specs/astra-review.spec.ts` after the debug build, with isolated test settings.
 
 Installed releases check signed updates at startup and every four hours. Updates
 wait for repository operations to finish and settings to save before restarting.

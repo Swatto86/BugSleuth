@@ -57,6 +57,34 @@ fn a_failed_sweep_is_retried_not_reused() {
 }
 
 #[test]
+fn old_codex_sweeps_are_retried_while_other_vendors_keep_their_contract() {
+    let dir = scratch("codex-completion-contract");
+    for model in ["codex:gpt-6-astra", "claude:sonnet", "cursor:auto"] {
+        let mut report = lane_report(Status::Swept {
+            turns: None,
+            salvaged: false,
+        });
+        report.model = model.into();
+        let path = dir.join("report.json");
+        write_report(&dir, "report.json", &report).unwrap();
+        assert!(
+            read_swept(&path).is_some(),
+            "new {model} result must be reusable"
+        );
+        let mut stored: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        stored["bugsleuth_review_contract"] = review_contract("claude:sonnet").into();
+        std::fs::write(&path, stored.to_string()).unwrap();
+        assert_eq!(
+            read_swept(&path).is_some(),
+            !model.starts_with("codex:"),
+            "{model}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn nothing_is_reused_unless_resume_was_asked_for() {
     let dir = scratch("no-resume");
     let report = lane_report(Status::Swept {

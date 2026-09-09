@@ -21,10 +21,10 @@ const NO_EFFORTS: &[&str] = &[];
 #[must_use]
 pub fn efforts_for(vendor: &str, model: &str) -> Option<&'static [&'static str]> {
     match (vendor, model.trim()) {
-        ("claude", "fable") => Some(CLAUDE_FABLE_EFFORTS),
-        ("claude", "opus") => Some(CLAUDE_OPUS_EFFORTS),
-        ("claude", "sonnet") => Some(CLAUDE_SONNET_EFFORTS),
-        ("claude", "haiku") => Some(NO_EFFORTS),
+        ("claude", "fable" | "claude-fable-5" | "claude-fable-5-1") => Some(CLAUDE_FABLE_EFFORTS),
+        ("claude", "opus" | "claude-opus-5") => Some(CLAUDE_OPUS_EFFORTS),
+        ("claude", "sonnet" | "claude-sonnet-5") => Some(CLAUDE_SONNET_EFFORTS),
+        ("claude", "haiku" | "claude-haiku-4-5-20251001") => Some(NO_EFFORTS),
         // Effort is encoded in Cursor model ids (e.g. `...-high`), not a separate flag.
         ("cursor", _) => Some(NO_EFFORTS),
         _ => None,

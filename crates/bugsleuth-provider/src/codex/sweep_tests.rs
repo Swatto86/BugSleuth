@@ -35,6 +35,8 @@ fn a_sweep_runs_read_only_and_ignores_the_reviewed_repos_own_config() {
     assert!(joined.contains("--ignore-user-config"));
     assert!(joined.contains("--ignore-rules"));
     assert!(!joined.contains("dangerously"));
+    #[cfg(windows)]
+    assert!(joined.contains("-c windows.sandbox=\"elevated\""));
 }
 
 #[test]
@@ -69,8 +71,8 @@ fn the_signin_probe_and_a_sweep_share_one_flag_list() {
         "the sign-in probe must use SHARED_FLAGS"
     );
     assert!(
-        sweep.contains("SHARED_FLAGS"),
-        "build_args must use SHARED_FLAGS, or the check stops testing what a run does"
+        sweep.contains("read_only_args()"),
+        "build_args must use the same read-only flags as the sign-in check"
     );
 }
 
@@ -139,7 +141,7 @@ async fn a_timed_out_sweep_resumes_the_thread_reported_by_the_cli() {
          shift\r\n\
          goto args\r\n\
          :answer\r\n\
-         >\"%~2\" echo {\"findings\":[]}\r\n\
+         >\"%~2\" echo {\"findings\":[],\"review_error\":\"\"}\r\n\
          echo {\"type\":\"turn.completed\"}\r\n",
     )
     .expect("write CLI stub");
@@ -180,7 +182,7 @@ async fn failed_recovery_keeps_a_complete_initial_answer() {
          shift\r\n\
          goto args\r\n\
          :answer\r\n\
-         >\"%~2\" echo {\"findings\":[]}\r\n\
+         >\"%~2\" echo {\"findings\":[],\"review_error\":\"\"}\r\n\
          echo {\"type\":\"thread.started\",\"thread_id\":\"codex-thread-fallback\"}\r\n\
          ping -n 10 127.0.0.1 > nul\r\n\
          exit /b 1\r\n",
@@ -227,7 +229,7 @@ async fn a_transient_failed_turn_resumes_the_thread_reported_by_the_cli() {
          shift\r\n\
          goto args\r\n\
          :answer\r\n\
-         >\"%~2\" echo {\"findings\":[]}\r\n\
+         >\"%~2\" echo {\"findings\":[],\"review_error\":\"\"}\r\n\
          echo {\"type\":\"turn.completed\"}\r\n",
     )
     .expect("write CLI stub");

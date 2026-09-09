@@ -3,6 +3,30 @@
 use super::*;
 
 #[test]
+fn claude_versions_are_distinct_choices_with_efforts_and_existing_aliases() {
+    let catalogue = claude_models();
+    for (label, id, alias) in [
+        ("Fable 5.1", "claude-fable-5-1", "fable"),
+        ("Fable 5", "claude-fable-5", "fable"),
+        ("Opus 5", "claude-opus-5", "opus"),
+        ("Sonnet 5", "claude-sonnet-5", "sonnet"),
+        ("Haiku 4.5", "claude-haiku-4-5-20251001", "haiku"),
+    ] {
+        assert!(
+            catalogue
+                .groups
+                .iter()
+                .any(|g| g.label == label && g.models.contains(&id.to_string()))
+        );
+        assert_eq!(
+            catalogue.efforts_by_model.get(id),
+            catalogue.efforts_by_model.get(alias)
+        );
+        assert!(catalogue.efforts_by_model.contains_key(id));
+    }
+}
+
+#[test]
 fn a_failed_codex_listing_uses_the_fallback() {
     let live = r#"{"models":[{"slug":"live-only","visibility":"list","supported_reasoning_levels":[{"effort":"high"}]}]}"#;
     let output = |code| process::CliOutput {

@@ -27,6 +27,7 @@ pub(crate) mod scratch;
 mod sweep;
 
 pub use apply::apply;
+pub use sweep::review_schema;
 pub use sweep::sweep;
 
 pub(crate) const VENDOR: &str = "codex";
@@ -70,11 +71,22 @@ pub(crate) const SHARED_FLAGS: [&str; 8] = [
     "never",
 ];
 
+pub(super) fn read_only_args() -> Vec<String> {
+    let mut args: Vec<String> = SHARED_FLAGS.iter().map(|arg| (*arg).into()).collect();
+    // Ignoring user config also disables the Windows sandbox backend. Without
+    // this explicit backend, approval=never rejects even read-only commands.
+    if cfg!(windows) {
+        args.extend(["-c".into(), "windows.sandbox=\"elevated\"".into()]);
+    }
+    args
+}
+
 fn signin_args() -> Vec<String> {
-    SHARED_FLAGS
+    read_only_args()
         .iter()
-        .chain(["--sandbox", "read-only", "-"].iter())
-        .map(|arg| (*arg).to_string())
+        .map(String::as_str)
+        .chain(["--sandbox", "read-only", "-"])
+        .map(str::to_string)
         .collect()
 }
 

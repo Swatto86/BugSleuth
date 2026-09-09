@@ -9,7 +9,7 @@ use crate::error::ProviderError;
 use crate::process::{self, Invocation};
 
 use super::scratch::{Cleanup, scratch_dir, write_file};
-use super::{CodexResult, CodexSweep, SHARED_FLAGS, VENDOR, not_found};
+use super::{CodexResult, CodexSweep, VENDOR, not_found, read_only_args};
 
 #[path = "recover.rs"]
 mod recover;
@@ -26,17 +26,49 @@ pub(super) struct Invoke<'a> {
 
 /// Run one read-only lane sweep through Codex.
 pub async fn sweep(spec: CodexSweep<'_>) -> Result<CodexResult, ProviderError> {
-    let (findings, salvaged) = invoke(Invoke {
+    let brief = format!(
+        "{}\n\nSet review_error to an empty string only after inspecting the source and completing the requested review. If repository access, tools, or another blocker prevents the review, put the reason in review_error, even if findings is empty. Do not represent an unperformed review as clean.",
+        spec.brief
+    );
+    let (review, salvaged): (Review, bool) = invoke(Invoke {
         dir: spec.repo,
         model: spec.model,
         effort: spec.effort,
-        brief: spec.brief,
+        brief: &brief,
         timeout: spec.timeout,
         binary: spec.binary,
-        schema: finding_schema(),
+        schema: review_schema(),
     })
     .await?;
-    Ok(CodexResult { findings, salvaged })
+    if !review.review_error.trim().is_empty() {
+        return Err(ProviderError::CapabilityUnavailable {
+            vendor: VENDOR,
+            capability: "repository review",
+            reason: review.review_error,
+        });
+    }
+    Ok(CodexResult {
+        findings: review.findings,
+        salvaged,
+    })
+}
+
+#[derive(serde::Deserialize)]
+struct Review {
+    review_error: String,
+    #[serde(flatten)]
+    findings: bugsleuth_domain::RawFindings,
+}
+
+/// Provider wire contract, also used to invalidate pre-completion-check caches.
+pub fn review_schema() -> serde_json::Value {
+    let mut schema = finding_schema();
+    schema["required"] = serde_json::json!(["findings", "review_error"]);
+    schema["properties"]["review_error"] = serde_json::json!({
+        "type": "string",
+        "description": "Empty only when the requested source review completed. Otherwise explain what prevented review, including blocked repository reads or unavailable tools."
+    });
+    schema
 }
 
 async fn invoke<T: serde::de::DeserializeOwned>(
@@ -92,7 +124,7 @@ pub(super) async fn invoke_text(spec: Invoke<'_>) -> Result<(String, bool), Prov
 /// repository's own rules. `--sandbox read-only` is the write boundary — the
 /// operating system refuses the write, not the agent.
 pub(super) fn build_args(spec: &Invoke<'_>, schema: &Path, answer: &Path) -> Vec<String> {
-    let mut args: Vec<String> = SHARED_FLAGS.iter().map(|s| (*s).to_string()).collect();
+    let mut args = read_only_args();
     args.push("--json".into());
     args.push("--sandbox".into());
     args.push("read-only".into());
