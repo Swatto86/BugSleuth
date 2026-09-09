@@ -36,14 +36,16 @@ describe("native persistence and exit", () => {
     const layout = await browser.execute(() => {
       const main = document.querySelector("main")!;
       const model = document.querySelector("#matrix-body td.model-id input")!;
+      const width = main.clientWidth;
+      const content = main.scrollWidth;
       const matrixScroll = document.querySelector(".matrix-scroll")!;
       matrixScroll.scrollLeft = matrixScroll.scrollWidth;
       const remove = document.querySelector(
         "#matrix-body tr:last-child button",
       )!;
       return {
-        width: main.clientWidth,
-        content: main.scrollWidth,
+        width,
+        content,
         modelWidth: model.getBoundingClientRect().width,
         lastControlReachable:
           remove.getBoundingClientRect().right <=
