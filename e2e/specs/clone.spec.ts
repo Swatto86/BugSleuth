@@ -7,6 +7,41 @@ import path from "node:path";
 import { REPO, MODEL, RUNS_ROOT, configureOneSweep } from "./support.ts";
 
 describe("cloning repositories", () => {
+  it("adds multiple clones without replacing existing repositories", async () => {
+    const parent = path.dirname(REPO);
+    const sources = ["source-one", "source-two"].map((name) =>
+      path.join(parent, name),
+    );
+    for (const source of sources)
+      execFileSync("git", ["clone", "--", REPO, source], { stdio: "pipe" });
+    const destination = path.join(parent, "multiple-clones");
+    fs.mkdirSync(destination);
+    await $("#clone-open").click();
+    await browser.execute((text: string) => {
+      const input = document.getElementById(
+        "clone-source",
+      ) as HTMLTextAreaElement;
+      input.value = text;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }, sources.join("\n"));
+    await $("#clone-parent").setValue(destination);
+    await $("#clone-name").clearValue();
+    await browser.saveScreenshot(path.join(parent, "multiple-clones.png"));
+    await $("#clone-start").click();
+    await browser.waitUntil(
+      async () => !(await $("#clone-dialog").isDisplayed()),
+      { timeout: 30_000 },
+    );
+    const expected = [
+      REPO,
+      ...sources.map((source) => path.join(destination, path.basename(source))),
+    ];
+    assert.equal(await $("#repo").getValue(), expected.join("\n"));
+    for (const repo of expected)
+      assert.ok(fs.existsSync(path.join(repo, "Cargo.toml")));
+    await browser.saveScreenshot(path.join(parent, "repositories-to-scan.png"));
+    await $("#repo").setValue(REPO);
+  });
   it("protects existing folders and selects a full cloned checkout", async () => {
     const parent = path.dirname(REPO);
     const destination = path.join(parent, "cloned repo");
@@ -30,7 +65,7 @@ describe("cloning repositories", () => {
       async () => !(await $("#clone-dialog").isDisplayed()),
       { timeout: 30_000 },
     );
-    assert.equal(await $("#repo").getValue(), destination);
+    assert.equal(await $("#repo").getValue(), [REPO, destination].join("\n"));
     const git = (repo: string, args: string[]) =>
       execFileSync("git", ["-C", repo, ...args], { encoding: "utf8" }).trim();
     assert.equal(
@@ -45,7 +80,8 @@ describe("cloning repositories", () => {
     );
     await browser.waitUntil(
       async () =>
-        JSON.parse(fs.readFileSync(settings, "utf8")).repo === destination,
+        JSON.parse(fs.readFileSync(settings, "utf8")).additional_repos?.[0] ===
+        destination,
     );
     await configureOneSweep(MODEL);
     await $("#run").click();
@@ -102,7 +138,9 @@ describe("cloning repositories", () => {
       for (const socket of sockets) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       if (await $("#clone-dialog").isDisplayed()) {
-        await browser.waitUntil(async () => await $("#clone-start").isEnabled());
+        await browser.waitUntil(
+          async () => await $("#clone-start").isEnabled(),
+        );
         await $("#clone-close").click();
       }
     }
@@ -125,7 +163,7 @@ describe("authenticated Git clone acceptance", () => {
         async () => !(await $("#clone-dialog").isDisplayed()),
         { timeout: 180_000, timeoutMsg: "Authenticated clone did not finish" },
       );
-      assert.equal(await $("#repo").getValue(), destination);
+      assert.equal(await $("#repo").getValue(), [REPO, destination].join("\n"));
       const files = execFileSync("git", ["-C", destination, "ls-files", "-z"], {
         encoding: "utf8",
       })

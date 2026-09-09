@@ -182,6 +182,7 @@ node no CSS rule styles a class nothing uses
 node no call into Rust can fail without the user being told
 node no command is exposed to the page that the page never calls
 node no element asks for a class the stylesheet does not define
+node one repository list preserves legacy settings and validates clone destinations
 node one vendor doing everything is one round per lane
 node only a complete shipped preset bypasses replacement confirmation
 node only the release publisher receives repository write authority
@@ -199,6 +200,7 @@ node rounds are driven by the busiest vendor, not the total
 node run-directory documentation includes the backend path hash
 node safety docs describe the triage exception to lane-relative grades
 node same-provider rounds stay serial
+node scan progress separates completed zero findings, failures and reused reviews
 node settings saved before passes existed still estimate as one pass each
 node splitId agrees with vendorOf on every shape
 node splitting a model spec and rejoining it settles on one spelling
@@ -480,6 +482,7 @@ rust commands::run::control::tests::run_control_only_one_of_two_runs_can_start
 rust commands::run::control::tests::run_control_run_and_apply_cannot_both_start
 rust commands::run::control::tests::separate_applies_finish_independently_and_stop_cancels_all_remaining
 rust commands::run::control::tests::update_cannot_overlap_repository_work_in_either_direction
+rust commands::run::history::tests::restores_reports_and_legacy_handoffs_without_rewriting_them
 rust commands::run::tests::a_directory_under_the_old_hash_is_migrated_to_the_stable_name
 rust commands::run::tests::the_stable_hash_is_a_fixed_contract_that_a_toolchain_bump_cannot_move
 rust commands::run::tests::unc_verbatim_path

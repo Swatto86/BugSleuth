@@ -1,3 +1,4 @@
+import { setRepositoryList } from "./repository-input.ts";
 /** Release acceptance: real Codex sessions writing two disposable repositories. */
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
@@ -69,8 +70,7 @@ describe("live simultaneous Codex fixes", () => {
       git("commit", "-m", "Fixture");
       check(repo, false);
     }
-    await $("#repo").setValue(repos[0]);
-    await $("#additional-repos").setValue(repos[1]);
+    await setRepositoryList(repos);
     await configureOneSweep(MODEL);
     await $("#run").click();
     await browser.waitUntil(async () => !(await $("#stop").isDisplayed()), {

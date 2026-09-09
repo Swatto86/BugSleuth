@@ -71,6 +71,7 @@ pub fn run() {
             commands::preflight,
             commands::check_signin,
             commands::load_settings,
+            commands::run::history::load_saved_reports,
             commands::save_settings,
             commands::run::start_run,
             commands::run::cancel_run,

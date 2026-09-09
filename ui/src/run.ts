@@ -1,3 +1,6 @@
+import { beginProgress, updateProgress, finishProgress } from "./scan-progress";
+import { repositories } from "./repositories";
+import { unitCount } from "./model";
 import { clearApplyReports } from "./apply-repositories";
 /**
  * The run lifecycle: starting a sweep, reflecting its progress, showing its
@@ -62,6 +65,10 @@ export async function startRun(deps: RunDeps): Promise<void> {
   resultLabel?.classList.add("hidden");
   running = true;
   progressLog = [];
+  beginProgress(
+    repositories(deps.settings()),
+    unitCount(deps.settings().models),
+  );
   deps.renderPlanSummary();
   deps.setStatus("Checking selected providers…", "running");
   const previousCards = [...deps.findings.children];
@@ -90,6 +97,7 @@ export async function startRun(deps: RunDeps): Promise<void> {
   try {
     await invoke("start_run", { settings: deps.settings() });
   } catch (error) {
+    document.getElementById("scan-progress")?.classList.add("hidden");
     activeRunRepo = "";
     if (resultsWereShown) resultLabel?.classList.remove("hidden");
     running = false;
@@ -131,6 +139,7 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
     // against a large repository the progress event arrived second and
     // replaced twenty ranked defects with a log of what had just happened.
     if (!running) return;
+    updateProgress(event.payload.repo ?? activeRunRepo, event.payload);
     if (progressLog.length === 1) {
       deps.setStatus("Running — this takes tens of minutes", "running");
       deps.output.textContent = "Selected providers passed pre-checks.";
@@ -151,6 +160,7 @@ export async function listenForRunEvents(deps: RunDeps): Promise<void> {
   });
 
   await listen<RepositoryResult>("run-finished", (event) => {
+    finishProgress();
     clearApplyReports();
     running = false;
     const selectedRepo = event.payload.repo ?? activeRunRepo;
@@ -232,4 +242,26 @@ function showReport(
     ? `Also saved to ${fixPromptPath}`
     : "";
   document.dispatchEvent(new Event("repository-report-shown"));
+}
+
+/** Saved reports are historical; reopening them never invokes a provider. */
+export async function restoreReports(deps: RunDeps): Promise<void> {
+  try {
+    const payload = await invoke<RepositoryResult | null>(
+      "load_saved_reports",
+      {
+        settings: deps.settings(),
+      },
+    );
+    if (!payload || running) return;
+    offerRepositoryResults(payload, (result) =>
+      showReport(result, result.repo ?? "", deps),
+    );
+    showReport(payload, payload.repo ?? "", deps);
+    deps.setStatus(
+      "Saved reports restored — Run reviews missing or changed sweeps",
+    );
+  } catch (error) {
+    deps.setStatus(`Could not reopen saved reports: ${String(error)}`, "error");
+  }
 }

@@ -1,3 +1,4 @@
+import { repositories as repositoryList } from "./repositories";
 import { bindClone, isCloning } from "./clone";
 /** Wiring: DOM in, commands out. */
 
@@ -27,6 +28,7 @@ import {
   isRunning,
   listenForRunEvents,
   runEventsReady,
+  restoreReports,
 } from "./run";
 import { type ApplyBinding, bindApply, isApplying } from "./apply";
 import { ui } from "./elements";
@@ -79,13 +81,13 @@ function applyTheme(theme: Settings["theme"]): void {
 
 function renderPlanSummary(): void {
   const blocked = runBlockReason(settings, catalogue);
-  const repositories = 1 + (settings.additional_repos?.length ?? 0);
+  const repositories = repositoryList(settings).length;
   const units = unitCount(settings.models) * repositories;
   const rounds = batchCount(settings.models);
   const summary =
     units === 0 || blocked
       ? ""
-      : `${repositories} ${repositories === 1 ? "repository" : "repositories"} · ${units} sweep${units === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"} per repository`;
+      : `${repositories} ${repositories === 1 ? "repository" : "repositories"} · ${units} area review${units === 1 ? "" : "s"} · ${rounds} batch${rounds === 1 ? "" : "es"} per repository`;
   if (ui.planSummary.textContent !== summary)
     ui.planSummary.textContent = summary;
   const busy =
@@ -113,6 +115,8 @@ function renderPlanSummary(): void {
     ui.run.removeAttribute("aria-describedby");
   }
   ui.clearSaved.disabled = busy;
+  ui.repo.disabled = busy;
+  ui.addRepository.disabled = busy;
   (document.getElementById("repository-result") as HTMLSelectElement).disabled =
     isRunning() || isClearing() || isCloning() || isUpdating();
   (document.getElementById("clone-open") as HTMLButtonElement).disabled = busy;
@@ -330,9 +334,8 @@ async function boot(): Promise<void> {
 
   applyTheme(settings.theme);
   ui.theme.value = settings.theme;
-  ui.repo.value = settings.repo;
+  ui.repo.value = repositoryList(settings).join("\n");
   ui.scope.value = settings.scope;
-  ui.additionalRepos.value = (settings.additional_repos ?? []).join("\n");
   ui.reuseCompleted.checked = settings.reuse_completed;
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
   renderWithoutPersisting();
@@ -354,10 +357,6 @@ async function boot(): Promise<void> {
   // already-handled failure.
   renderPlanSummary();
 
-  // Filled before the status settles, so a failure here is part of what
-  // "Ready" means: the effort controls stay disabled and the model menus stay
-  // empty for the whole session if the catalogue cannot load. The window is
-  // already revealed by this point, so awaiting costs no visible delay.
   setStatus("Checking providers…", "running");
   const catalogueError = await loadCatalogue();
   try {
@@ -375,6 +374,7 @@ async function boot(): Promise<void> {
   } catch (error) {
     setStatus(String(error), "error");
   }
+  if (!loadFailed) await restoreReports(runDeps());
 }
 
 // A failure anywhere in boot must not leave an invisible window behind. Rust

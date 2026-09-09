@@ -29,7 +29,7 @@ export type RunEvent =
 export function describe(event: RunEvent): string {
   switch (event.kind) {
     case "batch_started":
-      return `Round ${event.index}/${event.total}: ${event.units.join(", ")}`;
+      return `Review batch ${event.index}/${event.total} (queued across providers): ${event.units.join(", ")}`;
     case "reused":
       return `  reused ${event.model} × ${event.lane} from an earlier run`;
     case "sweep_finished":

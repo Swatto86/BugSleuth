@@ -47,8 +47,10 @@ wait for repository operations to finish and settings to save before restarting.
 Development builds never check for or install updates.
 
 Repository cloning uses the installed Git CLI and existing credential helpers or
-SSH agent. Clone creates a new folder beneath a chosen parent, selects it only
-on success, and clears the previous path scope. Existing folders are refused;
+SSH agent. A newline-separated list clones sequentially beneath one parent,
+adding each successful checkout to Repositories to Scan and preserving scope.
+An optional folder override applies only to single clones. Stop/failure retains
+completed selections and leaves unattempted addresses in the dialog. Existing folders are refused;
 failed/cancelled destinations are retained. HTTPS, SSH and absolute local sources
 are supported; embedded HTTPS credentials are refused. Clones use the shared
 operation lock and cancellation, with a 30-minute timeout. Submodules are not
@@ -74,5 +76,11 @@ Live simultaneous Codex acceptance uses `BUGSLEUTH_E2E_LIVE_CODEX=1 npm run e2e:
 -- --spec e2e/specs/codex-live.spec.ts` after the debug build. It reviews two
 disposable repositories with a deterministic scan fixture, overlaps real Codex fixes,
 and runs an independent acceptance test outside both writable repositories.
-Additional folders are saved compatibly alongside the existing primary folder.
-Clear saved sweeps still targets only the primary folder.
+The single Repositories to Scan list maps compatibly to the existing primary
+folder and additional folders in settings. Clear saved sweeps explicitly targets
+the first folder. Progress groups completed, reused and failed reviews by repository;
+batch entries say reviewing/queued because provider slots are shared.
+Each finished repository saves last-report.json atomically beside its sweep cache.
+Startup restores reports without invoking providers; older runs reopen their saved
+fix-prompt.md with a historical-coverage notice. Viewing a saved report does not
+make its sweeps eligible for reuse or revalidate its findings against changed code.

@@ -101,7 +101,7 @@ export function bindGuardedActions(deps: ActionDeps): void {
     void confirmDialog({
       title: "Delete the saved sweeps?",
       message:
-        "This removes every stored sweep and fix prompt for this repository. " +
+        `This removes every stored sweep and fix prompt for ${deps.settings().repo} (the first repository in the list). ` +
         "They cost subscription quota and cannot be recovered — the next run " +
         "pays for them again, and reviews the code as it is now.",
       confirmLabel: "Delete them",

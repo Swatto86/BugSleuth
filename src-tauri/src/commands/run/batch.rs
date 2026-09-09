@@ -130,10 +130,14 @@ async fn run_one(
         .map_or(cancel.stopped(), |report| report.cancelled);
     let mut payload = crate::outcome::run_payload(report, cancelled, repo, output);
     payload["repo"] = json!(repo.display().to_string());
+    if let Err(error) = super::history::save(output, &payload) {
+        let previous = payload["saveError"].as_str().unwrap_or("");
+        payload["saveError"] = json!(format!("{previous} {error}").trim());
+    }
     payload
 }
 
-fn aggregate(results: Vec<Value>) -> Value {
+pub(super) fn aggregate(results: Vec<Value>) -> Value {
     if results.len() == 1 {
         return results.into_iter().next().unwrap_or(Value::Null);
     }

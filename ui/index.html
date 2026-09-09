@@ -86,22 +86,16 @@
         </section>
 
         <section class="panel">
-          <h2>Repositories</h2>
-          <p class="hint">The code to review. It is never modified.</p>
-          <div class="row">
-            <label class="field">
-              <span>Folder</span>
-              <input id="repo" type="text" spellcheck="false" placeholder="C:\\path\\to\\repo" />
-            </label>
-            <button id="clone-open" type="button" style="align-self: end">Clone…</button>
-            <button id="browse" type="button" style="align-self: end">Browse…</button>
-          </div>
-          <label class="field" style="margin-top: 12px">
-            <span>Additional repositories (optional, one folder per line)</span>
-            <textarea id="additional-repos" rows="3" spellcheck="false" placeholder="/path/to/another-repo"></textarea>
+          <h2>Repositories to Scan</h2>
+          <label class="field">
+            <span>Repository folders (one per line)</span>
+            <textarea id="repo" rows="4" spellcheck="false" placeholder="C:\path\to\repo"></textarea>
           </label>
-          <button id="add-repository" type="button" style="margin-top: 8px">Add folder…</button>
-          <p class="hint">Up to 16 repositories use the same review settings and relative path scope. Three reviews can be active; each provider runs one sweep at a time across the batch. Stop stops the whole batch. Clear saved sweeps affects only the Folder above.</p>
+          <div class="row" style="margin-top: 8px">
+            <button id="add-repository" type="button">Add local folder…</button>
+            <button id="clone-open" type="button">Clone repositories…</button>
+          </div>
+          <p class="hint">Add up to 16 separate repositories. Each uses the models, bug areas and path scope below. Three repositories can be active; each provider reviews one area at a time across the batch. Stop stops the whole batch. To remove a repository, delete its line.</p>
           <div class="row">
             <label class="field">
               <span>Limit to paths (optional)</span>
@@ -217,7 +211,7 @@
             </label>
           </div>
           <div class="row" style="margin-top: 8px">
-            <button id="clear-saved" type="button">Clear saved sweeps</button>
+            <button id="clear-saved" type="button">Clear saved sweeps (first repository)</button>
             <span class="hint" style="align-self: center">
               Deletes every stored sweep and fix prompt for this repository, so
               the next run reviews the code as it is now.
@@ -313,6 +307,7 @@
           </div>
 
           <div id="findings"></div>
+          <div id="scan-progress" class="hidden"></div>
           <pre class="output" id="output" tabindex="0" aria-live="polite">No run yet.</pre>
         </section>
       </main>
@@ -340,14 +335,14 @@
 
     <script type="module" src="/src/main.ts"></script>
   <dialog id="clone-dialog" aria-labelledby="clone-title">
-      <h2 id="clone-title">Clone repository</h2>
+      <h2 id="clone-title">Clone repositories</h2>
       <p class="hint">Use your existing Git credential helper or SSH agent for private repositories. Do not paste tokens or passwords into the address.</p>
-      <label class="field"><span>Repository address</span><input type="text" id="clone-source" required autocomplete="off" spellcheck="false" placeholder="https://github.com/owner/repo.git or git@host:owner/repo.git" /></label>
+      <label class="field"><span>Repository addresses (one per line)</span><textarea id="clone-source" rows="4" required autocomplete="off" spellcheck="false" placeholder="https://github.com/owner/repo.git or git@host:owner/repo.git"></textarea></label>
       <div class="row"><label class="field"><span>Destination parent folder</span><input type="text" id="clone-parent" required spellcheck="false" /></label><button id="clone-browse" type="button">Browse…</button></div>
-      <label class="field"><span>New folder name</span><input type="text" id="clone-name" required spellcheck="false" placeholder="my-repo" /></label>
+      <label class="field"><span>Folder name override (optional, single repository only)</span><input type="text" id="clone-name" spellcheck="false" placeholder="my-repo" /></label>
       <p class="hint">Creates a full checkout of the default branch. Existing folders are never overwritten. Submodules are not downloaded automatically.</p>
       <p id="clone-status" role="status" aria-live="polite"></p>
-      <div class="dialog-buttons"><button id="clone-close" type="button">Close</button><button id="clone-start" type="button">Clone and select</button></div>
+      <div class="dialog-buttons"><button id="clone-close" type="button">Close</button><button id="clone-start" type="button">Clone and add</button></div>
     </dialog>
   </body>
 </html>

@@ -1,3 +1,4 @@
+import { setRepositoryList } from "./repository-input.ts";
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
@@ -31,8 +32,7 @@ describe("multiple repository reviews", () => {
     const second = path.join(path.dirname(REPO), "second-repo");
     execFileSync("git", ["clone", "--", REPO, second], { stdio: "pipe" });
     const before = [treeDigest(REPO), treeDigest(second)];
-    await $("#repo").setValue(REPO);
-    await $("#additional-repos").setValue(second);
+    await setRepositoryList([REPO, second]);
     await configureOneSweep(MODEL);
     const settingsFile = path.join(
       process.env["APPDATA"]!,
@@ -45,11 +45,10 @@ describe("multiple repository reviews", () => {
       { timeout: 10_000 },
     );
     await browser.reloadSession();
-    await browser.waitUntil(
-      async () => await $("#additional-repos").isExisting(),
-      { timeout: 30_000 },
-    );
-    assert.equal(await $("#additional-repos").getValue(), second);
+    await browser.waitUntil(async () => await $("#repo").isExisting(), {
+      timeout: 30_000,
+    });
+    assert.equal(await $("#repo").getValue(), [REPO, second].join("\n"));
     await browser.waitUntil(async () => await $("#run").isEnabled(), {
       timeout: 30_000,
     });
@@ -58,6 +57,12 @@ describe("multiple repository reviews", () => {
       timeout: 600_000,
     });
     await expect($("#repository-result-label")).toBeDisplayed();
+    await expect($("#scan-progress")).toHaveText(/1\/1 reviews returned/);
+    await expect($("#scan-progress")).toHaveText(/second-repo/);
+    await $("#scan-progress").scrollIntoView();
+    await browser.saveScreenshot(
+      path.join(path.dirname(REPO), "scan-progress.png"),
+    );
     const options = await $$("#repository-result option");
     assert.equal(options.length, 3);
     await expect($("#output")).toHaveText(new RegExp("second-repo"));
@@ -82,18 +87,23 @@ describe("multiple repository reviews", () => {
     }
     assert.equal(new Set(promptPaths).size, 2);
     assert.deepEqual([treeDigest(REPO), treeDigest(second)], before);
+    await browser.reloadSession();
+    await browser.waitUntil(
+      async () =>
+        (await $("#status").getText()).startsWith("Saved reports restored"),
+      { timeout: 30_000 },
+    );
+    assert.equal((await $$("#repository-result option")).length, 3);
+    await $("#repository-result").selectByAttribute("value", "2");
+    await expect($("#findings")).toHaveText(
+      /Bulk discount|threshold|discount/i,
+    );
     // Later single-repository journeys must not inherit this batch selection.
-    await browser.execute(() => {
-      const input = document.getElementById(
-        "additional-repos",
-      ) as HTMLTextAreaElement;
-      input.value = "";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await setRepositoryList([REPO]);
   });
 
   it("refuses an invalid batch before running providers and preserves the last report", async () => {
-    await $("#additional-repos").setValue(path.join(REPO, "does-not-exist"));
+    await setRepositoryList([REPO, path.join(REPO, "does-not-exist")]);
     const previous = await $("#output").getText();
     await $("#run").click();
     await expect($("#status")).toHaveText(/cannot open/);
@@ -101,13 +111,7 @@ describe("multiple repository reviews", () => {
     await $("#repository-result").selectByAttribute("value", "0");
     await $("#repository-result").selectByAttribute("value", "2");
     assert.equal(await $("#output").getText(), previous);
-    await browser.execute(() => {
-      const input = document.getElementById(
-        "additional-repos",
-      ) as HTMLTextAreaElement;
-      input.value = "";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await setRepositoryList([REPO]);
   });
   it("stops active and queued repositories without leaving providers running", async () => {
     const extra = ["cancel-a", "cancel-b", "cancel-c"].map((name) =>
@@ -117,14 +121,8 @@ describe("multiple repository reviews", () => {
       execFileSync("git", ["clone", "--", REPO, repo], { stdio: "pipe" });
     // WebKitGTK WebDriver drops newline characters in setValue; emulate a
     // multiline paste, including the input event that updates saved settings.
-    await browser.execute((paths: string[]) => {
-      const input = document.getElementById(
-        "additional-repos",
-      ) as HTMLTextAreaElement;
-      input.value = paths.join("\n");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    }, extra);
-    assert.equal(await $("#additional-repos").getValue(), extra.join("\n"));
+    await setRepositoryList([REPO, ...extra]);
+    assert.equal(await $("#repo").getValue(), [REPO, ...extra].join("\n"));
     await $("#run").click();
     await browser.waitUntil(
       async () => (await $("#status").getText()).startsWith("Running"),
@@ -139,12 +137,6 @@ describe("multiple repository reviews", () => {
     await browser.waitUntil(() => providerCliProcesses().length === 0, {
       timeout: 15_000,
     });
-    await browser.execute(() => {
-      const input = document.getElementById(
-        "additional-repos",
-      ) as HTMLTextAreaElement;
-      input.value = "";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await setRepositoryList([REPO]);
   });
 });

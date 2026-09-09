@@ -265,7 +265,9 @@ timeout and process-tree cancellation code, with Git credential helpers and
 SSH agent/session environment preserved. Clone diagnostics are not forwarded
 because Git or helpers may include credentials. The destination must be new;
 failed or stopped destinations are retained rather than recursively deleted.
-Only a successful clone replaces the selected repository and clears its scope.
+The UI accepts multiple addresses and invokes the same command sequentially.
+Successful clones append to the unified repository list without clearing scope;
+failure or cancellation stops the queue and retains completed selections.
 Clone suppresses template hooks and automatic submodule initialization.
 
 ## Desktop repository batches
@@ -280,6 +282,14 @@ Progress carries the canonical repository path; handoffs and caches keep their
 existing per-repository locations. The UI offers an overview and individual
 reports, and Apply always uses the selected report's repository rather than the
 editable run inputs. This adds no automatic batch write or publication action.
+
+The unified repository textarea retains the compatible `repo`/`additional_repos`
+settings format. Progress groups engine events by repository and separates reused,
+completed and failed reviews; active batches are labeled reviewing/queued because
+vendor slots are shared. The coordinator atomically saves each final UI payload to
+`last-report.json`. Startup loads those reports without provider calls, falling back
+to historical `fix-prompt.md` handoffs from earlier releases. Restoration does not
+change sweep cache eligibility or claim that historical findings are still current.
 
 Apply reservations are keyed by canonical repository paths and shared Git
 metadata. Separate repositories can be fixed concurrently with different

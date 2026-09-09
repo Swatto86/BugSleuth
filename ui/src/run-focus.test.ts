@@ -173,7 +173,11 @@ test("a refused start restores the findings it cleared", () => {
   assert.ok(run, "run.ts is no longer a shipped frontend module");
   const catches: ts.CatchClause[] = [];
   walk(run, (node) => {
-    if (ts.isCatchClause(node)) catches.push(node);
+    if (
+      ts.isCatchClause(node) &&
+      enclosingFunction(node)?.name?.getText() === "startRun"
+    )
+      catches.push(node);
   });
   assert.equal(catches.length, 1, "startRun no longer has one refusal path");
 

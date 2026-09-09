@@ -16,6 +16,7 @@ use crate::settings::{self, Settings};
 
 mod batch;
 mod control;
+pub mod history;
 
 /// Re-exported so every caller keeps its existing path: the lock moved out of
 /// this file at the hard line cap, it did not change hands.

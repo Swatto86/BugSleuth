@@ -1,3 +1,4 @@
+import { repositories, repositoryLines, setRepositories } from "./repositories";
 /**
  * The settings controls, wired to state.
  *
@@ -21,13 +22,11 @@ import { signinPills } from "./view";
 export interface ControlDeps {
   ui: {
     theme: HTMLSelectElement;
-    repo: HTMLInputElement;
-    additionalRepos: HTMLTextAreaElement;
+    repo: HTMLTextAreaElement;
     addRepository: HTMLButtonElement;
     scope: HTMLInputElement;
     reuseCompleted: HTMLInputElement;
     triageSeverities: HTMLInputElement;
-    browse: HTMLButtonElement;
     checkSignin: HTMLButtonElement;
     vendors: HTMLDivElement;
     about: HTMLButtonElement;
@@ -110,28 +109,15 @@ export function bindControls(deps: ControlDeps): void {
   });
 
   ui.repo.addEventListener("input", () => {
-    settings().repo = ui.repo.value;
-    refresh();
-  });
-  ui.additionalRepos.addEventListener("input", () => {
-    settings().additional_repos = [
-      ...new Set(
-        ui.additionalRepos.value
-          .split(/\r?\n/)
-          .map((p) => p.trim())
-          .filter(Boolean),
-      ),
-    ];
+    setRepositories(settings(), repositoryLines(ui.repo.value));
     refresh();
   });
   ui.addRepository.addEventListener("click", () => {
     void invoke<string | null>("pick_directory")
       .then((picked) => {
         if (!picked) return;
-        settings().additional_repos = [
-          ...new Set([...(settings().additional_repos ?? []), picked]),
-        ];
-        ui.additionalRepos.value = settings().additional_repos!.join("\n");
+        setRepositories(settings(), [...repositories(settings()), picked]);
+        ui.repo.value = repositories(settings()).join("\n");
         refresh();
       })
       .catch((error: unknown) =>
@@ -156,26 +142,6 @@ export function bindControls(deps: ControlDeps): void {
       ? deps.triageModel
       : "";
     refresh();
-  });
-
-  ui.browse.addEventListener("click", () => {
-    // Not an `async` listener. addEventListener throws away the promise it gets
-    // back, so an `await` that rejects inside one has no caller to propagate to
-    // and reaches nobody: the folder picker did nothing, said nothing, and left
-    // someone clicking a button that appeared to be broken.
-    invoke<string | null>("pick_directory")
-      .then((picked) => {
-        if (!picked) return;
-        settings().repo = picked;
-        ui.repo.value = picked;
-        refresh();
-      })
-      .catch((error: unknown) => {
-        deps.setStatus(
-          `Could not open the folder picker: ${String(error)}`,
-          "error",
-        );
-      });
   });
 
   ui.checkSignin.addEventListener("click", () => {

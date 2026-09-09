@@ -1,3 +1,4 @@
+import { setRepositoryList } from "./repository-input.ts";
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
 import path from "node:path";
@@ -34,13 +35,7 @@ describe("parallel repository fixing", () => {
     );
     if (fs.existsSync(marker)) fs.unlinkSync(marker);
     await $("#repo").setValue(REPO);
-    await browser.execute(() => {
-      const input = document.getElementById(
-        "additional-repos",
-      ) as HTMLTextAreaElement;
-      input.value = "";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await setRepositoryList([REPO]);
   });
 
   for (const vendors of [
@@ -77,8 +72,7 @@ describe("parallel repository fixing", () => {
           "Fixture",
         );
       }
-      await $("#repo").setValue(repos[0]);
-      await $("#additional-repos").setValue(repos[1]);
+      await setRepositoryList(repos);
       await configureOneSweep(MODEL);
       await $("#run").click();
       await browser.waitUntil(async () => !(await $("#stop").isDisplayed()), {
