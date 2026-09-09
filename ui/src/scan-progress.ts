@@ -46,7 +46,10 @@ export function progressSummary(progress: Progress): string {
 }
 
 const key = (repo: string): string =>
-  repo.replaceAll("\\", "/").replace(/\/$/, "");
+  repo
+    .replaceAll("\\", "/")
+    .replace(/\/\.(?=\/|$)/g, "")
+    .replace(/\/$/, "");
 let states = new Map<string, Progress>();
 export function beginProgress(repos: string[], total: number): void {
   states = new Map(repos.map((repo) => [key(repo), initialProgress(total)]));

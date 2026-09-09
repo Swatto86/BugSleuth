@@ -92,10 +92,15 @@ async fn run_one(
     let (progress, mut events) = tokio::sync::mpsc::unbounded_channel();
     let forwarder = app.clone();
     let identity = repo.display().to_string();
+    let requested = std::iter::once(&settings.repo)
+        .chain(&settings.additional_repos)
+        .find(|raw| checked_repo(raw).is_ok_and(|path| path == repo))
+        .cloned();
     let forwarding = tauri::async_runtime::spawn(async move {
         while let Some(event) = events.recv().await {
             let mut payload = json!(event);
             payload["repo"] = json!(identity);
+            payload["requestedRepo"] = json!(requested);
             let _ = forwarder.emit("run-progress", payload);
         }
     });

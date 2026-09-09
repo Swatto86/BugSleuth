@@ -622,6 +622,7 @@ label.checkline input[type="checkbox"] {
 #clone-dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
 #clone-dialog .field { margin-bottom: 12px; }
 #clone-status { overflow-wrap: anywhere; }
+#scan-progress { overflow-wrap: anywhere; }
 /* Keep repository assignments readable at the desktop's minimum width. */
 .fix-repository { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin: 12px 0; }
 .fix-repository h3 { margin: 0 0 12px; overflow-wrap: anywhere; font-size: 14px; }

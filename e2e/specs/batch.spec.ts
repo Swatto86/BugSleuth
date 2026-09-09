@@ -32,23 +32,32 @@ describe("multiple repository reviews", () => {
     const second = path.join(path.dirname(REPO), "second-repo");
     execFileSync("git", ["clone", "--", REPO, second], { stdio: "pipe" });
     const before = [treeDigest(REPO), treeDigest(second)];
-    await setRepositoryList([REPO, second]);
+    const secondInput = second + path.sep + ".";
+    await setRepositoryList([REPO, secondInput]);
     await configureOneSweep(MODEL);
     const settingsFile = path.join(
       process.env["APPDATA"]!,
       "BugSleuth/settings.json",
     );
     await browser.waitUntil(
-      () =>
-        JSON.parse(fs.readFileSync(settingsFile, "utf8"))
-          .additional_repos?.[0] === second,
+      () => {
+        const saved = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+        return (
+          saved.additional_repos?.[0] === secondInput &&
+          saved.models.length === 1 &&
+          saved.models[0].id === MODEL &&
+          JSON.stringify(saved.models[0].lanes) === '["correctness"]' &&
+          saved.models[0].passes === 1 &&
+          saved.triage_model === ""
+        );
+      },
       { timeout: 10_000 },
     );
     await browser.reloadSession();
     await browser.waitUntil(async () => await $("#repo").isExisting(), {
       timeout: 30_000,
     });
-    assert.equal(await $("#repo").getValue(), [REPO, second].join("\n"));
+    assert.equal(await $("#repo").getValue(), [REPO, secondInput].join("\n"));
     await browser.waitUntil(async () => await $("#run").isEnabled(), {
       timeout: 30_000,
     });

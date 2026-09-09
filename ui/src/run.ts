@@ -126,38 +126,44 @@ let completionEventsReady = false;
 export const runEventsReady = (): boolean => completionEventsReady;
 
 export async function listenForRunEvents(deps: RunDeps): Promise<void> {
-  await listen<RunEvent & { repo?: string }>("run-progress", (event) => {
-    progressLog.push(
-      (event.payload.repo ? `[${event.payload.repo}] ` : "") +
-        describe(event.payload),
-    );
-    // Once the run has finished, the pane holds the report — the thing the
-    // whole run was for. A late progress event must not paint over it.
-    //
-    // This is not hypothetical: the last sweep's progress event and the
-    // finished event are emitted back to back, and on the first real run
-    // against a large repository the progress event arrived second and
-    // replaced twenty ranked defects with a log of what had just happened.
-    if (!running) return;
-    updateProgress(event.payload.repo ?? activeRunRepo, event.payload);
-    if (progressLog.length === 1) {
-      deps.setStatus("Running — this takes tens of minutes", "running");
-      deps.output.textContent = "Selected providers passed pre-checks.";
-    }
-    // Appended, not replaced. This element is `aria-live`, and replacing its
-    // whole text makes a screen reader announce the entire log again from the
-    // top on every event — by the end of a run that is a hundred lines read out
-    // to hear one new one. Appending announces only what is new, which is the
-    // whole point of a live region.
-    // The separator is decided by what is already on screen, not by how many
-    // events have arrived: the pane holds the provider-check result before the
-    // first one, so keying off the log's length would run that line into it.
-    const line = progressLog[progressLog.length - 1] ?? "";
-    const separator = deps.output.textContent === "" ? "" : NEWLINE;
-    deps.output.appendChild(document.createTextNode(separator + line));
-    // Keep the newest line in view without stealing focus.
-    deps.output.scrollTop = deps.output.scrollHeight;
-  });
+  await listen<RunEvent & { repo?: string; requestedRepo?: string }>(
+    "run-progress",
+    (event) => {
+      progressLog.push(
+        (event.payload.repo ? `[${event.payload.repo}] ` : "") +
+          describe(event.payload),
+      );
+      // Once the run has finished, the pane holds the report — the thing the
+      // whole run was for. A late progress event must not paint over it.
+      //
+      // This is not hypothetical: the last sweep's progress event and the
+      // finished event are emitted back to back, and on the first real run
+      // against a large repository the progress event arrived second and
+      // replaced twenty ranked defects with a log of what had just happened.
+      if (!running) return;
+      updateProgress(
+        event.payload.requestedRepo ?? event.payload.repo ?? activeRunRepo,
+        event.payload,
+      );
+      if (progressLog.length === 1) {
+        deps.setStatus("Running — this takes tens of minutes", "running");
+        deps.output.textContent = "Selected providers passed pre-checks.";
+      }
+      // Appended, not replaced. This element is `aria-live`, and replacing its
+      // whole text makes a screen reader announce the entire log again from the
+      // top on every event — by the end of a run that is a hundred lines read out
+      // to hear one new one. Appending announces only what is new, which is the
+      // whole point of a live region.
+      // The separator is decided by what is already on screen, not by how many
+      // events have arrived: the pane holds the provider-check result before the
+      // first one, so keying off the log's length would run that line into it.
+      const line = progressLog[progressLog.length - 1] ?? "";
+      const separator = deps.output.textContent === "" ? "" : NEWLINE;
+      deps.output.appendChild(document.createTextNode(separator + line));
+      // Keep the newest line in view without stealing focus.
+      deps.output.scrollTop = deps.output.scrollHeight;
+    },
+  );
 
   await listen<RepositoryResult>("run-finished", (event) => {
     finishProgress();

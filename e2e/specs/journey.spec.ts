@@ -13,6 +13,7 @@ const application =
 
 describe("native persistence and exit", () => {
   it("persists the chosen model and theme across a restart", async () => {
+    await browser.setWindowSize(1100, 760);
     if ((await $$("#matrix-body tr")).length === 0)
       await $("#add-model").click();
     await $("#repo").setValue(REPO);
@@ -39,6 +40,14 @@ describe("native persistence and exit", () => {
         width: main.clientWidth,
         content: main.scrollWidth,
         modelWidth: model.getBoundingClientRect().width,
+        overflowing: [...main.querySelectorAll("*")]
+          .filter(
+            (el) =>
+              el.getBoundingClientRect().right >
+              main.getBoundingClientRect().right + 1,
+          )
+          .map((el) => `${el.tagName}#${el.id}.${el.className}`)
+          .slice(0, 10),
       };
     });
     assert.ok(
