@@ -19,14 +19,6 @@ describe("native persistence and exit", () => {
     await $("#repo").setValue(REPO);
     await configureOneSweep(MODEL);
     await $("#theme").selectByAttribute("value", "light");
-    // Typed rather than set: the control commits on `change`, and the value
-    // that comes back is what Rust applied — which is the number the next run
-    // is planned around, so it is the one that must survive the restart.
-    const sessions = await $("#claude-sessions");
-    await sessions.click();
-    await browser.keys(["Control", "a"]);
-    await browser.keys("2");
-    await browser.keys("Tab");
     const settings = path.join(
       process.env["APPDATA"]!,
       "BugSleuth/settings.json",
@@ -34,11 +26,7 @@ describe("native persistence and exit", () => {
     await browser.waitUntil(
       async () => {
         const saved = JSON.parse(fs.readFileSync(settings, "utf8"));
-        return (
-          saved.theme === "light" &&
-          saved.models[0]?.id === MODEL &&
-          saved.claude_sessions === 2
-        );
+        return saved.theme === "light" && saved.models[0]?.id === MODEL;
       },
       {
         timeout: 10_000,
@@ -86,7 +74,6 @@ describe("native persistence and exit", () => {
     });
     assert.equal(await $("#repo").getValue(), REPO);
     assert.equal(await $("#theme").getValue(), "light");
-    assert.equal(await $("#claude-sessions").getValue(), "2");
     assert.equal(
       await $("#matrix-body tr:first-child td.model-id input").getValue(),
       MODEL.slice(MODEL.indexOf(":") + 1),

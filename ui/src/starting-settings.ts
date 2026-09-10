@@ -8,7 +8,7 @@
  * complete, harmless object.
  */
 
-import { DEFAULT_CLAUDE_SESSIONS, type Settings, preset } from "./model.ts";
+import { type Settings, preset } from "./model.ts";
 
 /**
  * Which model re-grades severities. Cheapest available: the pass compares
@@ -28,6 +28,5 @@ export function startingSettings(): Settings {
     apply_effort: "",
     push_after_apply: false,
     tag_release_after_push: false,
-    claude_sessions: DEFAULT_CLAUDE_SESSIONS,
   };
 }

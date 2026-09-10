@@ -66,7 +66,7 @@ function renderPlanSummary(): void {
   const blocked = runBlockReason(settings, catalogue);
   const repositories = repositoryList(settings).length;
   const units = unitCount(settings.models) * repositories;
-  const rounds = batchCount(settings.models, settings.claude_sessions);
+  const rounds = batchCount(settings.models, repositories);
   const summary =
     units === 0 || blocked
       ? ""
@@ -320,7 +320,6 @@ async function boot(): Promise<void> {
   ui.repo.value = repositoryList(settings).join("\n");
   ui.scope.value = settings.scope;
   ui.reuseCompleted.checked = settings.reuse_completed;
-  ui.claudeSessions.value = String(settings.claude_sessions);
   ui.triageSeverities.checked = settings.triage_model.trim() !== "";
   renderWithoutPersisting();
   applyBinding.redraw();

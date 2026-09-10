@@ -37,7 +37,6 @@ const ui = {
   runReason: el<HTMLDivElement>("run-block-reason"),
   reuseCompleted: el<HTMLInputElement>("reuse-completed"),
   clearSaved: el<HTMLButtonElement>("clear-saved"),
-  claudeSessions: el<HTMLInputElement>("claude-sessions"),
   triageSeverities: el<HTMLInputElement>("triage-severities"),
   output: el<HTMLPreElement>("output"),
   findings: el<HTMLDivElement>("findings"),

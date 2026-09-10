@@ -62,11 +62,13 @@ provider slots bound each vendor's sweeps and Claude triage across the batch.
 Different vendors can work concurrently. Claude runs several sessions at once
 because its invocations carry their own session id, exchange prompt and answer
 over pipes and load nothing from the machine or repository; the useful ceiling
-is the account's rate limit, which BugSleuth cannot see, so it is the
-`claude_sessions` setting (default 3, clamped 1-8) and the CLI's
-`--claude-sessions`. Every other vendor stays one-at-a-time because its CLI
-shares one signed-in session on disk — the retired `provider_concurrency`,
-which raised the limit for every vendor at once, is not what this is. The
+is the account's rate limit, which BugSleuth cannot see, so the pool is sized
+per run rather than asked for: one session per Claude sweep the batch has in
+flight (the plan's Claude sweeps times the repositories reviewed together, at
+most three), capped at 8. The CLI's `--claude-sessions` can lower that; the
+desktop has no control for it, and the retired `claude_sessions` setting is
+dropped on load like `provider_concurrency` before it. Every other vendor
+stays one-at-a-time because its CLI shares one signed-in session on disk. The
 planner groups a batch by the same number the slot gate hands out, and the
 window's round estimate divides Claude's units by it, so the count shown before
 paying matches the run. Stop cancels the entire batch,
@@ -96,8 +98,8 @@ Live simultaneous Codex acceptance uses `BUGSLEUTH_E2E_LIVE_CODEX=1 npm run e2e:
 disposable repositories with a deterministic scan fixture, overlaps real Codex fixes,
 and runs an independent acceptance test outside both writable repositories.
 The single Repositories to Scan list maps compatibly to the existing primary
-folder and additional folders in settings. Clear saved sweeps explicitly targets
-the first folder. Progress groups completed, reused and failed reviews by repository;
+folder and additional folders in settings. Clear saved sweeps clears every
+listed folder, resolving the whole list before deleting anything. Progress groups completed, reused and failed reviews by repository;
 batch entries say reviewing/queued because provider slots are shared.
 Each finished repository saves last-report.json atomically beside its sweep cache.
 A scan whose whole batch is refused by its provider stops rather than spending

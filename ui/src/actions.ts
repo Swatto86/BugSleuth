@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import { confirmDialog } from "./dialog";
+import { repositories as repositoryList } from "./repositories";
 import { type Preset, type Settings, preset } from "./model";
 import { type RunDeps, isRunning, startRun } from "./run";
 import { isApplying } from "./apply";
@@ -98,10 +99,15 @@ export function bindGuardedActions(deps: ActionDeps): void {
   // defects they described had been fixed, and produced a fix prompt for a
   // repository that no longer existed.
   ui.clearSaved.addEventListener("click", () => {
+    // Every listed repository, named in full. This is a multi-repository tool
+    // and the button once cleared only line one while reading as if it cleared
+    // everything; the dialog now says exactly which folders are about to lose
+    // their paid-for sweeps.
+    const listed = repositoryList(deps.settings());
     void confirmDialog({
       title: "Delete the saved sweeps?",
       message:
-        `This removes every stored sweep and fix prompt for ${deps.settings().repo} (the first repository in the list). ` +
+        `This removes every stored sweep and fix prompt for ${listed.length === 1 ? "this repository" : `all ${listed.length} listed repositories`}: ${listed.join(", ")}. ` +
         "They cost subscription quota and cannot be recovered — the next run " +
         "pays for them again, and reviews the code as it is now.",
       confirmLabel: "Delete them",
@@ -122,21 +128,29 @@ export function bindGuardedActions(deps: ActionDeps): void {
       if (document.activeElement === ui.clearSaved) deps.focusStatus();
       deps.activityChanged();
       ui.clearSaved.disabled = true;
-      invoke<{ removed: number; promptPath: string }>("clear_saved", {
+      invoke<{
+        removed: number;
+        repositories: number;
+        promptPaths: string[];
+      }>("clear_saved", {
         settings: deps.settings(),
       })
         .then((cleared) => {
           clearing = false;
           deps.activityChanged();
           ui.clearSaved.disabled = false;
-          if (cleared.promptPath === deps.currentPromptPath()) {
+          if (cleared.promptPaths.includes(deps.currentPromptPath())) {
             ui.applyPanel.classList.add("hidden");
             ui.promptPath.classList.add("hidden");
           }
+          const where =
+            cleared.repositories === 1
+              ? "this repository"
+              : `these ${cleared.repositories} repositories`;
           deps.setStatus(
             cleared.removed === 0
-              ? "Nothing was stored for this repository — the next run starts fresh either way"
-              : `Deleted ${cleared.removed} saved file${cleared.removed === 1 ? "" : "s"}. The next run sweeps from scratch.`,
+              ? `Nothing was stored for ${where} — the next run starts fresh either way`
+              : `Deleted ${cleared.removed} saved file${cleared.removed === 1 ? "" : "s"} across ${where}. The next run sweeps from scratch.`,
           );
         })
         .catch((error: unknown) => {

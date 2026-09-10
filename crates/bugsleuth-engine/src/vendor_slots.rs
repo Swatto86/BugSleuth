@@ -23,8 +23,9 @@ use tokio::sync::{AcquireError, Mutex, MutexGuard, Semaphore, SemaphorePermit};
 /// still costs the wait before it fails.
 pub const MAX_CLAUDE_SESSIONS: usize = 8;
 
-/// Sessions used when nothing has been configured — the command line, and a
-/// desktop settings file written before this existed.
+/// The pool's size before any run has sized it. Every run resizes the pool
+/// for its own plan through [`size_claude_sessions_for`], so this only
+/// governs a Claude apply started before the first review of the process.
 pub const DEFAULT_CLAUDE_SESSIONS: usize = 3;
 
 /// A resizable pool of interchangeable sessions.
@@ -84,6 +85,17 @@ impl Sessions {
     fn limit(&self) -> usize {
         self.limit.load(Ordering::SeqCst)
     }
+
+    /// The sizing rule behind [`size_claude_sessions_for`], on the pool so it
+    /// can be tested against one no other test is drawing from.
+    fn size_for(&self, plan: &crate::plan::Plan, repositories: usize) -> usize {
+        let claude_units = plan
+            .units
+            .iter()
+            .filter(|unit| matches!(Vendor::parse(&unit.model).0, Vendor::Claude))
+            .count();
+        self.resize(claude_units.saturating_mul(repositories).max(1))
+    }
 }
 
 static CLAUDE: Sessions = Sessions::new(DEFAULT_CLAUDE_SESSIONS);
@@ -99,6 +111,24 @@ pub fn set_claude_sessions(requested: usize) -> usize {
 #[must_use]
 pub fn claude_sessions() -> usize {
     CLAUDE.limit()
+}
+
+/// Size the pool for a run: one session per Claude sweep the run would have
+/// in flight together, so every Claude sweep in a batch starts at once.
+///
+/// Returns what was applied. `repositories` is how many repositories the run
+/// reviews together, each of which runs the whole plan. The product is capped
+/// at [`MAX_CLAUDE_SESSIONS`]: past that the account's rate limit is reached
+/// long before the machine's, and every rejected sweep still costs the wait
+/// before it fails. A plan with no Claude sweeps keeps one session, so a
+/// Claude apply started alongside it is not stalled.
+///
+/// This replaced a user-facing session count. The number was a guess at the
+/// account's rate limit, which nobody knows, and the honest default for "how
+/// many should run at once" is "all of them" — the same answer every other
+/// concurrency in this tool already gives.
+pub fn size_claude_sessions_for(plan: &crate::plan::Plan, repositories: usize) -> usize {
+    CLAUDE.size_for(plan, repositories)
 }
 
 /// How many sweeps of one vendor may be in flight together.
@@ -213,6 +243,40 @@ mod tests {
         // hand-edited settings file nor a zero can stall every Claude sweep.
         assert_eq!(POOL.resize(0), 1);
         assert_eq!(POOL.resize(1_000), MAX_CLAUDE_SESSIONS);
+    }
+
+    /// The pool is sized from the plan, so every Claude sweep in a batch
+    /// starts together, and never beyond the ceiling.
+    #[test]
+    fn a_run_sizes_the_pool_to_its_own_claude_sweeps() {
+        // Its own pool, for the reason given on the resize test above.
+        static POOL: Sessions = Sessions::new(DEFAULT_CLAUDE_SESSIONS);
+        let unit = |model: &str, lane| crate::plan::Unit {
+            model: model.to_string(),
+            lane,
+            effort: String::new(),
+            pass: 1,
+            use_agents: false,
+        };
+        let plan = crate::plan::Plan {
+            units: vec![
+                unit("sonnet", bugsleuth_domain::Lane::Correctness),
+                unit("sonnet", bugsleuth_domain::Lane::Security),
+                unit("codex:model", bugsleuth_domain::Lane::Correctness),
+            ],
+            uncovered: vec![],
+        };
+        // Two Claude sweeps, one repository: two sessions. Codex does not count.
+        assert_eq!(POOL.size_for(&plan, 1), 2);
+        // Three repositories reviewed together each run both sweeps.
+        assert_eq!(POOL.size_for(&plan, 3), 6);
+        // Never past the ceiling, and never zero.
+        assert_eq!(POOL.size_for(&plan, 16), MAX_CLAUDE_SESSIONS);
+        let none = crate::plan::Plan {
+            units: vec![unit("codex:model", bugsleuth_domain::Lane::Correctness)],
+            uncovered: vec![],
+        };
+        assert_eq!(POOL.size_for(&none, 3), 1);
     }
 
     /// Only Claude may overlap; the planner is told the same numbers.

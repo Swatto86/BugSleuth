@@ -8,7 +8,12 @@ use tauri::Emitter;
 use super::{checked_repo, non_empty, run_output_dir};
 use crate::settings::Settings;
 
-pub(super) fn prepare(settings: &Settings) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+/// How many repositories of one batch are reviewed at the same time. The
+/// Claude session pool is sized by this too, so the number the planner assumes
+/// and the number that actually run are the same number.
+pub(super) const ACTIVE_REPOSITORIES: usize = 3;
+
+pub(crate) fn prepare(settings: &Settings) -> Result<Vec<(PathBuf, PathBuf)>, String> {
     if settings.additional_repos.len() > 15 {
         return Err("Choose at most 16 repositories per batch.".into());
     }
@@ -41,7 +46,7 @@ pub(super) async fn execute(
         result = sweep::precheck_selected(&plan.units) => result,
         () = cancel.cancelled() => Err("Provider pre-check stopped; no lane started.".into()),
     };
-    let slots = Arc::new(tokio::sync::Semaphore::new(3));
+    let slots = Arc::new(tokio::sync::Semaphore::new(ACTIVE_REPOSITORIES));
     let mut tasks = tokio::task::JoinSet::new();
     let mut identities = HashMap::new();
     let count = repositories.len();

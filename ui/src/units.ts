@@ -10,8 +10,6 @@
  */
 
 import {
-  DEFAULT_CLAUDE_SESSIONS,
-  MAX_CLAUDE_SESSIONS,
   LANES,
   MAX_PASSES,
   type ModelSetting,
@@ -102,19 +100,47 @@ export function unitCount(models: ModelSetting[]): number {
  * `Plan::batches` in plan.rs, and has to: this is the number the window shows
  * before anyone commits to paying for the run.
  */
-export function batchCount(
-  models: ModelSetting[],
-  claudeSessions: number = DEFAULT_CLAUDE_SESSIONS,
-): number {
-  const sessions = Math.min(
-    Math.max(Math.trunc(claudeSessions) || 1, 1),
-    MAX_CLAUDE_SESSIONS,
-  );
+/**
+ * The most Claude sessions the engine will run at once, whatever the plan
+ * asks for. Mirrors `MAX_CLAUDE_SESSIONS` in vendor_slots.rs; past it the
+ * account's rate limit is reached long before the machine's.
+ */
+const MAX_CLAUDE_SESSIONS = 8;
+
+function unitsPerVendor(models: ModelSetting[]): Map<string, number> {
   const perVendor = new Map<string, number>();
   for (const key of unitKeys(models)) {
     const vendor = vendorOf(key.split("\0")[0] ?? "");
     perVendor.set(vendor, (perVendor.get(vendor) ?? 0) + 1);
   }
+  return perVendor;
+}
+
+/**
+ * How many Claude sessions a run of this configuration gets.
+ *
+ * Mirrors `size_claude_sessions_for` in vendor_slots.rs: one per Claude sweep
+ * the batch has in flight — the sweeps of one repository times the
+ * repositories reviewed together — capped at the ceiling and never below one.
+ */
+export function claudeSessionsFor(
+  models: ModelSetting[],
+  repositories = 1,
+): number {
+  const active = Math.max(Math.trunc(repositories) || 1, 1);
+  const claude = unitsPerVendor(models).get("claude") ?? 0;
+  return Math.min(Math.max(claude * active, 1), MAX_CLAUDE_SESSIONS);
+}
+
+/**
+ * How many rounds a run takes per repository.
+ *
+ * Mirrors `Plan::batches` in plan.rs: every vendor but Claude runs one sweep
+ * at a time, and Claude runs as many as the sessions the run is sized to.
+ */
+export function batchCount(models: ModelSetting[], repositories = 1): number {
+  const sessions = claudeSessionsFor(models, repositories);
+  const perVendor = unitsPerVendor(models);
   if (perVendor.size === 0) return 0;
   const rounds = [...perVendor].map(([vendor, units]) =>
     vendor === "claude" ? Math.ceil(units / sessions) : units,

@@ -6,11 +6,7 @@ import { test } from "node:test";
 import ts from "typescript";
 
 import { parse, walk } from "./ast.test.ts";
-import {
-  DEFAULT_CLAUDE_SESSIONS,
-  settingsForApply,
-  type Settings,
-} from "./model.ts";
+import { settingsForApply, type Settings } from "./model.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const read = (name: string) => fs.readFileSync(path.join(here, name), "utf8");
@@ -27,7 +23,6 @@ test("applying uses the repository that produced the displayed prompt", () => {
     apply_effort: "",
     push_after_apply: false,
     tag_release_after_push: false,
-    claude_sessions: DEFAULT_CLAUDE_SESSIONS,
   };
   const sent = settingsForApply(live, "C:/repo-a");
   assert.equal(sent.repo, "C:/repo-a");

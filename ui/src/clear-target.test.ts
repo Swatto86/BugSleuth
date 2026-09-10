@@ -49,7 +49,7 @@ test("clearing a different repository keeps the displayed Apply action", () => {
     if (
       ts.isIfStatement(node) &&
       node.expression.getText() ===
-        "cleared.promptPath === deps.currentPromptPath()"
+        "cleared.promptPaths.includes(deps.currentPromptPath())"
     ) {
       guard = node;
     }

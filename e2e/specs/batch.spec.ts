@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import {
   MODEL,
   REPO,
+  RUNS_ROOT,
   configureOneSweep,
   clickDialogButton,
   providerCliProcesses,
@@ -146,6 +147,46 @@ describe("multiple repository reviews", () => {
     await browser.waitUntil(() => providerCliProcesses().length === 0, {
       timeout: 15_000,
     });
+    await setRepositoryList([REPO]);
+  });
+
+  it("clears the saved sweeps of every listed repository", async () => {
+    // Both run directories were written by the batch review above. The
+    // button once cleared only the first line of the list, so the second
+    // repository's next review silently reused sweeps the user had been told
+    // were gone.
+    const second = path.join(path.dirname(REPO), "second-repo");
+    await setRepositoryList([REPO, second]);
+    const stored = (): string[] =>
+      fs
+        .readdirSync(RUNS_ROOT)
+        .filter(
+          (name) =>
+            name.startsWith("seeded-repo") || name.startsWith("second-repo"),
+        );
+    const before = stored();
+    assert.ok(
+      before.some((name) => name.startsWith("seeded-repo")) &&
+        before.some((name) => name.startsWith("second-repo")),
+      `expected run directories for both repositories under ${RUNS_ROOT}: ${before.join(", ")}`,
+    );
+
+    await $("#clear-saved").click();
+    await expect($(".dialog-overlay .dialog")).toBeDisplayed();
+    // The dialog names every folder about to lose its sweeps, not just one.
+    await expect($(".dialog-overlay .dialog")).toHaveText(/second-repo/);
+    await clickDialogButton("Delete them");
+    await browser.waitUntil(
+      async () =>
+        /^Deleted \d+ saved files across these 2 repositories/.test(
+          await $("#status").getText(),
+        ),
+      {
+        timeout: 15_000,
+        timeoutMsg: `the clear did not report both repositories: ${await $("#status").getText()}`,
+      },
+    );
+    assert.deepEqual(stored(), [], "run directories survived the clear");
     await setRepositoryList([REPO]);
   });
 });

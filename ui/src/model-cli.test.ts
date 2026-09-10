@@ -4,7 +4,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import { vendorCliPresent } from "./cli-offer.ts";
-import { DEFAULT_CLAUDE_SESSIONS, canRun, type Settings } from "./model.ts";
+import { canRun, type Settings } from "./model.ts";
 import type { Catalogue } from "./view.ts";
 
 const base = {
@@ -16,7 +16,6 @@ const base = {
   apply_effort: "",
   push_after_apply: false,
   tag_release_after_push: false,
-  claude_sessions: DEFAULT_CLAUDE_SESSIONS,
 } satisfies Omit<Settings, "repo" | "models">;
 
 test("Run refuses a model whose CLI is not installed", () => {

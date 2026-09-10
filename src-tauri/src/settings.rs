@@ -92,26 +92,8 @@ pub struct Settings {
     /// given a scheme it never chose.
     #[serde(default)]
     pub tag_release_after_push: bool,
-    /// How many Claude CLI sessions the app may run at once.
-    ///
-    /// Claude only. Its invocations carry their own session id, exchange the
-    /// prompt and answer over pipes and load nothing from the machine, so two
-    /// of them are two independent programs. The other CLIs share session
-    /// state on disk and stay one-at-a-time with nothing to configure — which
-    /// is why the retired `provider_concurrency`, which raised the limit for
-    /// every vendor at once, is not what this is.
-    ///
-    /// The useful ceiling is the Claude account's rate limit, which the app
-    /// cannot see, so the number is the user's. Clamped when applied.
-    #[serde(default = "default_claude_sessions")]
-    pub claude_sessions: usize,
     #[serde(flatten)]
     pub(crate) extra: BTreeMap<String, serde_json::Value>,
-}
-
-/// Serde needs a function; the engine owns the number.
-fn default_claude_sessions() -> usize {
-    bugsleuth_engine::DEFAULT_CLAUDE_SESSIONS
 }
 
 /// Serde needs a function; a bare string default is not expressible.
@@ -200,7 +182,6 @@ impl Default for Settings {
             apply_effort: String::new(),
             push_after_apply: false,
             tag_release_after_push: false,
-            claude_sessions: default_claude_sessions(),
             extra: BTreeMap::new(),
         }
     }
@@ -248,6 +229,11 @@ fn load_from(path: &Path) -> anyhow::Result<Settings> {
     // the next ordinary save completes the migration instead of preserving a
     // control that no longer does anything.
     settings.extra.remove("provider_concurrency");
+    // `claude_sessions` followed it: a Claude-only count the user had to guess
+    // at, replaced by sizing the pool from each run's own plan. Dropped for the
+    // same reason — a control that no longer does anything must not be
+    // preserved as if it did.
+    settings.extra.remove("claude_sessions");
     Ok(settings)
 }
 

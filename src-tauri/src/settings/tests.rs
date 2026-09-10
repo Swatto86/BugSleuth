@@ -75,32 +75,18 @@ fn theme_values_are_valid_before_crossing_to_the_window() {
 }
 
 #[test]
-fn a_settings_file_from_before_claude_sessions_existed_keeps_working() {
-    // The retired `provider_concurrency` raised the limit for every vendor
-    // at once and is dropped on load. A file written while it existed must
-    // still open, and must arrive with the shipped Claude default rather
-    // than the retired number or a zero that would stall every sweep.
-    let dir = scratch("legacy-claude-sessions");
+fn retired_claude_sessions_is_removed_when_settings_load() {
+    // The Claude session count was a number the user had to guess at and is
+    // now sized from each run's plan. A file that still carries it must open,
+    // and must not carry it forward as if the control still existed.
+    let dir = scratch("retired-claude-sessions");
     let path = dir.join("settings.json");
-    std::fs::write(&path, r#"{"provider_concurrency":10,"repo":"C:/x"}"#).expect("write settings");
+    std::fs::write(&path, r#"{"claude_sessions":6,"repo":"C:/x"}"#).expect("write settings");
 
     let loaded = load_from(&path).expect("load settings");
-    assert_eq!(
-        loaded.claude_sessions,
-        bugsleuth_engine::DEFAULT_CLAUDE_SESSIONS
-    );
-
-    // And a chosen value survives the round trip it will actually take.
-    let chosen = Settings {
-        claude_sessions: 6,
-        ..loaded
-    };
-    let text = serde_json::to_string(&chosen).expect("serialize settings");
-    std::fs::write(&path, text).expect("rewrite settings");
-    assert_eq!(
-        load_from(&path).expect("reload settings").claude_sessions,
-        6
-    );
+    assert_eq!(loaded.repo, "C:/x");
+    let saved = serde_json::to_value(loaded).expect("serialize settings");
+    assert!(saved.get("claude_sessions").is_none());
     let _ = std::fs::remove_dir_all(&dir);
 }
 

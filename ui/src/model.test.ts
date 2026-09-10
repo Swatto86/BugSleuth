@@ -19,7 +19,6 @@ import {
   type ModelSetting,
   LANES,
   LANE_TITLES,
-  MAX_CLAUDE_SESSIONS,
   applyStatus,
   isShippedConfiguration,
   joinId,
@@ -29,7 +28,7 @@ import {
   uncoveredLanes,
   vendorOf,
 } from "./model.ts";
-import { batchCount, unitCount } from "./units.ts";
+import { batchCount, claudeSessionsFor, unitCount } from "./units.ts";
 
 /**
  * A matrix row, with the fields every row really has.
@@ -100,7 +99,9 @@ test("agent and single-agent prompts are distinct sweeps", () => {
   const single = row("sonnet", ["correctness"]);
   const agents = { ...single, use_agents: true };
   assert.equal(unitCount([single, agents]), 2);
-  assert.equal(batchCount([single, agents], 1), 2);
+  // Two Claude sweeps get two sessions, so they are one round together.
+  assert.equal(claudeSessionsFor([single, agents]), 2);
+  assert.equal(batchCount([single, agents]), 1);
 });
 
 test("only a complete shipped preset bypasses replacement confirmation", () => {
@@ -153,25 +154,31 @@ test("one serial vendor doing everything is one round per lane", () => {
   assert.equal(batchCount([row("codex:", [...LANES])]), LANES.length);
 });
 
-test("Claude's rounds divide by the sessions it is allowed", () => {
+test("Claude's sweeps all start together, up to the eight-session ceiling", () => {
   // The window shows this number before anyone pays for the run, so it has to
-  // be the number of rounds the engine will actually take. Claude's sweeps run
-  // several at a time; every other vendor's do not, and a mixed run waits for
-  // whichever vendor needs the most rounds.
+  // be the number of rounds the engine will actually take. The engine sizes
+  // Claude's sessions to the sweeps in flight, so one repository's Claude
+  // sweeps are one round until there are more of them than the ceiling.
   const claude = [row("sonnet", [...LANES])];
-  assert.equal(batchCount(claude, 1), LANES.length);
-  assert.equal(batchCount(claude, 2), Math.ceil(LANES.length / 2));
-  assert.equal(batchCount(claude, LANES.length), 1);
-  // More sessions than there is work for does not go below one round.
-  assert.equal(batchCount(claude, MAX_CLAUDE_SESSIONS), 1);
+  assert.equal(claudeSessionsFor(claude), LANES.length);
+  assert.equal(batchCount(claude), 1);
+  // Repositories reviewed together each get their own sessions, capped.
+  assert.equal(claudeSessionsFor(claude, 3), 8);
+  assert.equal(batchCount(claude, 3), 1);
+  // Past the ceiling the sweeps take a second round.
+  const two = [row("sonnet", [...LANES]), row("opus", [...LANES])];
+  assert.equal(claudeSessionsFor(two), 8);
+  assert.equal(batchCount(two), Math.ceil((2 * LANES.length) / 8));
   // A serial vendor is unaffected, and sets the floor for the run.
   assert.equal(
-    batchCount([...claude, row("codex:", [...LANES])], MAX_CLAUDE_SESSIONS),
+    batchCount([...claude, row("codex:", [...LANES])]),
     LANES.length,
   );
-  // A nonsense stored value falls back to one rather than to no rounds.
-  assert.equal(batchCount(claude, 0), LANES.length);
-  assert.equal(batchCount(claude, Number.NaN), LANES.length);
+  // No Claude sweeps still leaves one session, and a nonsense repository
+  // count reads as one repository rather than as no rounds.
+  assert.equal(claudeSessionsFor([row("codex:", ["ux"])]), 1);
+  assert.equal(batchCount(claude, 0), 1);
+  assert.equal(batchCount(claude, Number.NaN), 1);
 });
 
 test("an empty configuration needs no rounds", () => {
@@ -312,12 +319,17 @@ test("an unknown prefix is treated as a Claude model, colon and all", () => {
   });
 });
 
-test("a repeated pass is a whole extra sweep, and an extra round", () => {
-  // Two passes of one model is two invocations of one vendor, which the engine
-  // will never run at once — so it costs a round as well as a sweep.
+test("a repeated pass is a whole extra sweep, and an extra session", () => {
+  // Two passes of one model is two invocations, each paid for. For Claude they
+  // get a session each and run together; for a serial vendor the second pass
+  // is a second round.
   const models = [{ ...row("sonnet", ["correctness"]), passes: 2 }];
   assert.equal(unitCount(models), 2);
-  assert.equal(batchCount(models, 1), 2);
+  assert.equal(claudeSessionsFor(models), 2);
+  assert.equal(batchCount(models), 1);
+  const serial = [{ ...row("codex:", ["correctness"]), passes: 2 }];
+  assert.equal(unitCount(serial), 2);
+  assert.equal(batchCount(serial), 2);
 });
 
 test("settings saved before passes existed still estimate as one pass each", () => {
@@ -347,7 +359,7 @@ test("a model listed twice with different passes counts like the engine: max, no
     { ...row("sonnet", ["correctness"]), passes: 3 },
   ];
   assert.equal(unitCount(models), 3);
-  assert.equal(batchCount(models, 1), 3);
+  assert.equal(claudeSessionsFor(models), 3);
 });
 
 test("an identical duplicate row adds nothing, exactly like the engine", () => {
@@ -358,13 +370,9 @@ test("an identical duplicate row adds nothing, exactly like the engine", () => {
   assert.equal(unitCount(models), 1);
 });
 
-test("every provider but Claude stays serial whatever Claude is allowed", () => {
+test("every provider but Claude stays serial however many repositories run", () => {
   for (const model of ["codex:model", "opencode:model", "cursor:model"]) {
-    assert.equal(
-      batchCount([row(model, ["security", "ux"])], MAX_CLAUDE_SESSIONS),
-      2,
-      model,
-    );
+    assert.equal(batchCount([row(model, ["security", "ux"])], 3), 2, model);
   }
 });
 

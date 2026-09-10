@@ -1,5 +1,5 @@
 platform windows
-node Claude's rounds divide by the sessions it is allowed
+node Claude's sweeps all start together, up to the eight-session ceiling
 node OpenCode local model tags survive selection and storage
 node Run refuses a model whose CLI is not installed
 node Tab with focus outside the dialog's buttons re-enters the trap
@@ -61,7 +61,7 @@ node a partly-failed handoff save is surfaced, not swallowed
 node a passes count above the backend cap is not runnable and is clamped in the picker
 node a progress event carries the fields the window renders from
 node a refused start restores the findings it cleared
-node a repeated pass is a whole extra sweep, and an extra round
+node a repeated pass is a whole extra sweep, and an extra session
 node a reused sweep says it was reused rather than pretending to be fresh
 node a round names what is about to run and where it sits in the sequence
 node a run needs both a repository and at least one sweep
@@ -150,7 +150,7 @@ node every event has both an emitter and a listener
 node every external workflow action is pinned to an immutable revision
 node every lane header explains what that lane hunts
 node every platform the release builds for is offered in the README
-node every provider but Claude stays serial whatever Claude is allowed
+node every provider but Claude stays serial however many repositories run
 node every quit into Rust reports its failure rather than looking broken
 node every shipped preset covers every lane
 node every silent-failure opt-out gives a reason
@@ -505,6 +505,8 @@ rust commands::run::tests::unc_verbatim_path
 rust commands::saved::tests::a_repository_that_does_not_exist_is_refused_rather_than_guessed_at
 rust commands::saved::tests::clearing_really_deletes_the_stored_sweeps_and_says_how_many
 rust commands::saved::tests::counting_a_directory_that_is_not_there_is_zero_rather_than_a_panic
+rust commands::saved::tests::every_listed_repository_is_cleared_not_only_the_first
+rust commands::saved::tests::one_unresolvable_line_refuses_the_clear_before_anything_is_deleted
 rust commands::saved::tests::only_files_are_counted_so_a_subdirectory_does_not_inflate_the_number
 rust commands::saved::tests::what_gets_cleared_is_inside_the_apps_own_data_directory
 rust commands::tests::a_path_that_does_not_exist_is_refused_rather_than_used
@@ -751,9 +753,9 @@ rust report::tests::findings_rank_most_severe_first
 rust report::tests::rejected_finding_fields_are_stripped_of_terminal_control_characters
 rust settings::tests::a_missing_settings_file_is_first_launch_and_yields_defaults
 rust settings::tests::a_read_error_that_is_not_a_missing_file_is_surfaced
-rust settings::tests::a_settings_file_from_before_claude_sessions_existed_keeps_working
 rust settings::tests::known_lane_spellings_are_canonical_on_the_wire
 rust settings::tests::malformed_settings_are_reported_and_left_in_place
+rust settings::tests::retired_claude_sessions_is_removed_when_settings_load
 rust settings::tests::retired_provider_concurrency_is_removed_when_settings_load
 rust settings::tests::the_default_covers_every_lane_so_a_first_run_has_no_silent_holes
 rust settings::tests::theme_values_are_valid_before_crossing_to_the_window
@@ -854,6 +856,7 @@ rust triage::tests::the_prompt_says_what_each_defect_was_already_graded
 rust triage::tests::the_rubric_the_sweep_is_given_is_the_rubric_triage_applies
 rust unrelated_defects_in_the_same_real_crate_stay_separate
 rust update::tests::the_updater_is_configured_against_this_repository_and_a_real_key
+rust vendor_slots::tests::a_run_sizes_the_pool_to_its_own_claude_sweeps
 rust vendor_slots::tests::capacity_matches_the_gate_each_vendor_is_actually_given
 rust vendor_slots::tests::codex_applies_overlap_with_a_bound_and_release_cancelled_waiters
 rust vendor_slots::tests::different_vendors_overlap_but_same_vendor_waits_and_cancellation_releases

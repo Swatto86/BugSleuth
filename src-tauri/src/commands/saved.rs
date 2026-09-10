@@ -18,23 +18,31 @@
 use std::path::Path;
 
 use super::RunControl;
-use super::run::{checked_repo, run_output_dir};
+use super::run::listed_repositories;
 use crate::settings::{self, Settings};
 
-/// What was thrown away, so the window can invalidate only that run's prompt.
+/// What was thrown away, so the window can invalidate only those runs' prompts.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Cleared {
-    /// Files removed. Zero is a normal answer, not a failure.
+    /// Files removed, across every repository. Zero is a normal answer, not a
+    /// failure.
     pub removed: usize,
-    /// The prompt invalidated by this delete, whether or not it existed.
-    pub prompt_path: String,
+    /// How many repositories were cleared, so the window can say "across N
+    /// repositories" rather than leave the user wondering which were included.
+    pub repositories: usize,
+    /// The prompts invalidated by this delete, whether or not they existed.
+    pub prompt_paths: Vec<String>,
 }
 
-/// Delete every stored sweep and fix prompt for the chosen repository.
+/// Delete every stored sweep and fix prompt for every listed repository.
 ///
-/// Refused while a run or an apply is in flight: a review writes into this
-/// directory as it goes, and deleting underneath it would throw away sweeps
+/// The whole list, not the first line: this became a multi-repository tool and
+/// a clear that quietly left the other folders' sweeps in place meant their
+/// next review reused stale sweeps while the button said it had wiped them.
+///
+/// Refused while a run or an apply is in flight: a review writes into these
+/// directories as it goes, and deleting underneath it would throw away sweeps
 /// that had just been paid for.
 #[tauri::command]
 pub async fn clear_saved(
@@ -57,36 +65,54 @@ pub async fn clear_saved(
 /// a command that removes files should not be shipped having only ever been
 /// checked by reading it.
 fn clear(settings: &Settings) -> Result<Cleared, String> {
-    let repo = checked_repo(&settings.repo)?;
-    let dir = run_output_dir(&repo)?;
-    let prompt_path = dir.join("fix-prompt.md").display().to_string();
+    // The same resolution a run uses, so a folder that would be refused for a
+    // review (missing, or nested inside another) is refused here too — before
+    // anything is deleted, since one bad line must not cost the good ones
+    // their sweeps or leave the list half cleared.
+    let repositories = listed_repositories(settings)?;
 
-    // Belt and braces on a delete. `run_output_dir` builds this path itself, so
-    // it is already inside the app's own data directory — but a future change to
-    // how it is built must not turn this into a command that removes an
-    // arbitrary directory chosen by a webview.
+    // Belt and braces on a delete. `run_output_dir` builds these paths itself,
+    // so they are already inside the app's own data directory — but a future
+    // change to how it is built must not turn this into a command that removes
+    // an arbitrary directory chosen by a webview.
     let root = settings::data_dir().join("runs");
-    if !dir.starts_with(&root) {
-        return Err(format!(
-            "refusing to delete {}: it is not inside {}",
-            dir.display(),
-            root.display()
-        ));
+    for (_, dir) in &repositories {
+        if !dir.starts_with(&root) {
+            return Err(format!(
+                "refusing to delete {}: it is not inside {}",
+                dir.display(),
+                root.display()
+            ));
+        }
     }
 
-    let removed = count_files(&dir);
-    match std::fs::remove_dir_all(&dir) {
-        Ok(()) => Ok(Cleared {
-            removed,
-            prompt_path,
-        }),
+    let mut removed = 0;
+    let mut prompt_paths = Vec::with_capacity(repositories.len());
+    for (cleared, (_, dir)) in repositories.iter().enumerate() {
+        prompt_paths.push(dir.join("fix-prompt.md").display().to_string());
+        removed += remove_run_dir(dir).map_err(|error| {
+            format!(
+                "{error}. {cleared} of {} repositories had already been cleared",
+                repositories.len()
+            )
+        })?;
+    }
+    Ok(Cleared {
+        removed,
+        repositories: repositories.len(),
+        prompt_paths,
+    })
+}
+
+/// Remove one repository's run directory, answering how many files went.
+fn remove_run_dir(dir: &Path) -> Result<usize, String> {
+    let removed = count_files(dir);
+    match std::fs::remove_dir_all(dir) {
+        Ok(()) => Ok(removed),
         // Nothing stored for this repository yet. Reported as an ordinary zero
         // rather than as an error: "there was nothing to delete" is the same
         // outcome the user asked for.
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Cleared {
-            removed: 0,
-            prompt_path,
-        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
         Err(error) => Err(format!("could not clear {}: {error}", dir.display())),
     }
 }
@@ -105,6 +131,8 @@ fn count_files(dir: &Path) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::run::{checked_repo, run_output_dir};
+    use std::path::PathBuf;
 
     #[test]
     fn what_gets_cleared_is_inside_the_apps_own_data_directory() {
@@ -118,28 +146,38 @@ mod tests {
         );
     }
 
+    /// A repository folder plus the run directory the app would use for it,
+    /// seeded with `files` so there is something to watch being deleted.
+    ///
+    /// Through `checked_repo`, exactly as the command does. Canonicalizing by
+    /// hand here seeded a *different* directory and the delete found nothing:
+    /// the run directory is keyed by a hash of the path string, so `\\?\C:\…`
+    /// and `C:\…` are two different repositories as far as this is concerned.
+    /// Both sides going through one function is what makes them agree.
+    fn seeded(name: &str, files: &[&str]) -> (PathBuf, PathBuf) {
+        let repo = std::env::temp_dir().join(format!("bugsleuth-{name}-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&repo);
+        let resolved = checked_repo(&repo.display().to_string()).unwrap_or_else(|e| panic!("{e}"));
+        let stored = run_output_dir(&resolved).unwrap_or_else(|e| panic!("{e}"));
+        let _ = std::fs::create_dir_all(&stored);
+        for file in files {
+            let _ = std::fs::write(stored.join(file), "x");
+        }
+        (repo, stored)
+    }
+
     #[test]
     fn clearing_really_deletes_the_stored_sweeps_and_says_how_many() {
         // Against the real filesystem, through the real path builder. A command
         // that deletes files must have been watched deleting them.
-        let repo = std::env::temp_dir().join(format!("bugsleuth-clear-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&repo);
-        // Through `checked_repo`, exactly as the command does. Canonicalizing
-        // by hand here seeded a *different* directory and the delete found
-        // nothing: the run directory is keyed by a hash of the path string, so
-        // `\\?\C:\…` and `C:\…` are two different repositories as far as this
-        // is concerned. Both sides going through one function is what makes
-        // them agree.
-        let resolved = checked_repo(&repo.display().to_string()).unwrap_or_else(|e| panic!("{e}"));
-        let stored = run_output_dir(&resolved).unwrap_or_else(|e| panic!("{e}"));
-        let _ = std::fs::create_dir_all(&stored);
-        for name in [
-            "correctness-haiku.json",
-            "fix-prompt.md",
-            "fix-prompt-01.md",
-        ] {
-            let _ = std::fs::write(stored.join(name), "x");
-        }
+        let (repo, stored) = seeded(
+            "clear",
+            &[
+                "correctness-haiku.json",
+                "fix-prompt.md",
+                "fix-prompt-01.md",
+            ],
+        );
 
         let settings = Settings {
             repo: repo.display().to_string(),
@@ -148,9 +186,10 @@ mod tests {
         let cleared = clear(&settings).unwrap_or_else(|e| panic!("{e}"));
 
         assert_eq!(cleared.removed, 3);
+        assert_eq!(cleared.repositories, 1);
         assert_eq!(
-            cleared.prompt_path,
-            stored.join("fix-prompt.md").display().to_string()
+            cleared.prompt_paths,
+            [stored.join("fix-prompt.md").display().to_string()]
         );
         assert!(!stored.exists(), "the directory is still there: {stored:?}");
 
@@ -163,6 +202,41 @@ mod tests {
     }
 
     #[test]
+    fn every_listed_repository_is_cleared_not_only_the_first() {
+        // The defect: the list grew to sixteen folders and the button kept
+        // clearing line one, so the others' next review reused sweeps the user
+        // believed were gone.
+        let (first, first_stored) = seeded("clear-first", &["correctness-haiku.json"]);
+        let (second, second_stored) =
+            seeded("clear-second", &["security-haiku.json", "fix-prompt.md"]);
+        // A folder with nothing stored yet is an ordinary zero, not a reason to
+        // stop before the ones after it.
+        let (third, third_stored) = seeded("clear-third", &[]);
+        let _ = std::fs::remove_dir_all(&third_stored);
+
+        let settings = Settings {
+            repo: first.display().to_string(),
+            additional_repos: vec![second.display().to_string(), third.display().to_string()],
+            ..Default::default()
+        };
+        let cleared = clear(&settings).unwrap_or_else(|e| panic!("{e}"));
+
+        assert_eq!(cleared.removed, 3);
+        assert_eq!(cleared.repositories, 3);
+        assert_eq!(
+            cleared.prompt_paths,
+            [&first_stored, &second_stored, &third_stored]
+                .map(|dir| dir.join("fix-prompt.md").display().to_string())
+        );
+        assert!(!first_stored.exists(), "still there: {first_stored:?}");
+        assert!(!second_stored.exists(), "still there: {second_stored:?}");
+
+        for repo in [first, second, third] {
+            let _ = std::fs::remove_dir_all(repo);
+        }
+    }
+
+    #[test]
     fn a_repository_that_does_not_exist_is_refused_rather_than_guessed_at() {
         // Otherwise a typo'd path hashes to some other directory, and this
         // deletes a different repository's sweeps.
@@ -171,6 +245,25 @@ mod tests {
             ..Default::default()
         };
         assert!(clear(&settings).is_err());
+    }
+
+    #[test]
+    fn one_unresolvable_line_refuses_the_clear_before_anything_is_deleted() {
+        // Every line is resolved first. Deleting the good ones and then failing
+        // on the bad one would report an error over a list that was half
+        // cleared, with no way to tell which half.
+        let (repo, stored) = seeded("clear-partial", &["correctness-haiku.json"]);
+        let settings = Settings {
+            repo: repo.display().to_string(),
+            additional_repos: vec!["Z:/definitely/not/here".to_string()],
+            ..Default::default()
+        };
+        assert!(clear(&settings).is_err());
+        assert!(
+            stored.exists(),
+            "the valid repository's sweeps were deleted anyway"
+        );
+        let _ = std::fs::remove_dir_all(&repo);
     }
 
     #[test]

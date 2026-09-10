@@ -43,11 +43,12 @@ mod vendor_slots;
 
 /// How many Claude CLI sessions the whole application may run at once.
 ///
-/// Exposed rather than left internal because the number is the user's to
-/// choose: it is bounded by their Claude account's rate limit, which this tool
-/// cannot see. The desktop shell applies the saved value at startup and again
-/// whenever settings are saved, and the CLI applies its flag before planning.
-/// Every other vendor stays one-at-a-time and has nothing to configure.
+/// Sized per run from the plan: one session per Claude sweep the run has in
+/// flight together, capped at the ceiling. The desktop shell sizes it as a
+/// batch starts and the CLI as it loads its plan; `set_claude_sessions` is
+/// the CLI's explicit override. Every other vendor stays one-at-a-time and
+/// has nothing to configure.
 pub use vendor_slots::{
     DEFAULT_CLAUDE_SESSIONS, MAX_CLAUDE_SESSIONS, claude_sessions, set_claude_sessions,
+    size_claude_sessions_for,
 };

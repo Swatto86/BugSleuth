@@ -15,6 +15,10 @@ use super::CommandResult;
 use crate::settings::{self, Settings};
 
 mod batch;
+/// Every repository the list names, resolved and de-duplicated, with where each
+/// one's sweeps are stored. Shared with clearing, so what a run would review
+/// and what a clear would delete can never be two different lists.
+pub(super) use batch::prepare as listed_repositories;
 mod control;
 pub mod history;
 
@@ -39,6 +43,14 @@ pub async fn start_run(
 ) -> CommandResult<()> {
     let repositories = batch::prepare(&settings)?;
     let plan = plan::plan(&to_config(&settings)).map_err(|e| e.to_string())?;
+    // Before the plan is grouped into batches: one Claude session per sweep
+    // the batch has in flight, so every Claude sweep of every active
+    // repository starts together rather than queueing behind a number the
+    // user once had to guess at.
+    bugsleuth_engine::size_claude_sessions_for(
+        &plan,
+        repositories.len().min(batch::ACTIVE_REPOSITORIES),
+    );
     let cancel = bugsleuth_engine::cancel::Cancel::new();
     control.try_start_run(cancel.clone())?;
     crate::tray::work_started(&app, crate::tray::BackgroundWork::Review);

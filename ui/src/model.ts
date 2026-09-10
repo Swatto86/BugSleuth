@@ -91,19 +91,6 @@ export function joinId(vendor: Vendor, model: string): string {
   return vendor === "claude" ? trimmed : `${vendor}:${trimmed}`;
 }
 
-/**
- * The most Claude sessions the app will run at once, matching Rust's own
- * ceiling. Kept here so the control clamps to the same number Rust would, and
- * the box never accepts a value that comes back changed.
- */
-export const MAX_CLAUDE_SESSIONS = 8;
-
-/**
- * What Rust uses when nothing has been saved. Only a fallback for the object
- * the window starts with; the real value arrives from Rust with the settings.
- */
-export const DEFAULT_CLAUDE_SESSIONS = 3;
-
 export interface Settings {
   repo: string;
   additional_repos?: string[];
@@ -159,16 +146,6 @@ export interface Settings {
    * such tag or names its releases some other way.
    */
   tag_release_after_push: boolean;
-  /**
-   * How many Claude CLI sessions may run at once.
-   *
-   * Claude only. Its invocations carry their own session id and load nothing
-   * from the machine, so two of them are two independent programs; the other
-   * CLIs share one signed-in session on disk and stay serial. The useful
-   * ceiling is the account's rate limit, which the app cannot see — so this is
-   * the user's number, clamped to 1..=8 by Rust, which returns what it applied.
-   */
-  claude_sessions: number;
 }
 
 export function settingsForApply(settings: Settings, repo: string): Settings {
