@@ -619,11 +619,14 @@ rust models::verbose_catalogue::tests::each_model_gets_its_own_efforts_rather_th
 rust models::verbose_catalogue::tests::the_banner_is_not_mistaken_for_a_model
 rust models::verbose_catalogue::tests::unknown_effort_names_sort_after_known_ones_rather_than_at_random
 rust one_defect_anchored_five_lines_apart_by_two_vendors_still_merges
+rust opencode::tests::a_cold_local_model_reports_as_signed_in
+rust opencode::tests::a_slow_first_answer_is_signed_in_not_timed_out
 rust opencode::tests::error_after_text_never_becomes_a_successful_review
 rust opencode::tests::local_model_tags_and_variants_are_forwarded_verbatim
 rust opencode::tests::real_subprocess_receives_workspace_stdin_and_local_model
 rust opencode::tests::repeated_parts_are_replaced_and_distinct_parts_are_retained
 rust opencode::tests::review_and_apply_have_distinct_permissions
+rust opencode::tests::the_signin_check_outlasts_a_cold_local_model_load
 rust orchestrate::batch::tests::a_panicking_sweep_reports_its_own_lane_and_model
 rust orchestrate::batch::tests::a_sweep_that_finishes_during_cancellation_is_still_collected
 rust orchestrate::batch::tests::cancellation_awaits_joinset_results_after_abort

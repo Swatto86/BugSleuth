@@ -135,6 +135,15 @@ fn environment(agent: &str, write: bool) -> Vec<(String, String)> {
     ]
 }
 
+/// How long a sign-in check waits for OpenCode.
+///
+/// OpenCode is the vendor that routes to local models, so its first call of a
+/// session is the one that loads the weights. See
+/// [`signin::COLD_START_TIMEOUT`] for why that gets its own allowance.
+fn signin_timeout() -> Duration {
+    signin::COLD_START_TIMEOUT
+}
+
 pub async fn signin_for(model: &str, effort: &str, binary: Option<&str>) -> signin::SignIn {
     let session = match session::Session::new().await {
         Ok(session) => session,
@@ -147,13 +156,13 @@ pub async fn signin_for(model: &str, effort: &str, binary: Option<&str>) -> sign
             model,
             effort,
             brief: signin::PROMPT,
-            timeout: signin::TIMEOUT,
+            timeout: signin_timeout(),
             binary,
         },
         false,
     )
     .await;
-    signin::classify(result, signin::TIMEOUT.as_secs())
+    signin::classify(result, signin_timeout().as_secs())
 }
 
 #[cfg(test)]

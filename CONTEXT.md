@@ -13,6 +13,12 @@ Anthropic's documented model IDs because Claude Code has no non-interactive
 catalogue command.
 OpenCode providers must be configured globally because reviewed project
 configuration is excluded from disposable review checkouts.
+The sign-in pre-check gives OpenCode five minutes rather than the one minute
+the hosted vendors get: a local model's first call of a session loads the
+weights before it can answer, so the shared allowance killed the working
+invocation and failed the whole run. It is a ceiling for a hang, not an
+expected wait; later calls in the session find the model resident. The model
+catalogue keeps the shorter allowance because it starts no model.
 
 The release target for the current work is Windows and Omarchy, including local
 OpenCode models. A release requires real webview acceptance, provider integration

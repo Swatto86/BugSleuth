@@ -75,6 +75,27 @@ pub(crate) const PROMPT: &str = "Reply with exactly OK and nothing else.";
 /// forty-minute sweep against.
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(60);
 
+/// The allowance for a vendor whose *first* call of the session includes
+/// starting the model, not just talking to one.
+///
+/// A hosted CLI answers a one-word prompt in seconds because the model is
+/// already running somewhere else. A local model is not: the first call loads
+/// tens of gigabytes of weights into memory, and on a first-ever run the CLI
+/// also installs its provider package. Measured cold on an 18 GB local model
+/// through OpenCode: 95s, against 12s once resident — so the one-minute
+/// allowance failed the check, and with it the whole run, on precisely the
+/// invocation that was working correctly.
+///
+/// This is a *ceiling for a hang*, not an expected wait: the check still
+/// returns the moment an answer arrives, and every later call in the session
+/// finds the model already loaded. Being signed out or misconfigured still
+/// fails fast, because those exit non-zero rather than going quiet.
+///
+/// Deliberately not stopping the process at one minute and retrying: killing
+/// the CLI mid-load aborts the load with it, so a retry can pay the same cost
+/// again instead of finding a warm model.
+pub(crate) const COLD_START_TIMEOUT: Duration = Duration::from_secs(300);
+
 fn answer_from(
     out: CliOutput,
     vendor: &'static str,
