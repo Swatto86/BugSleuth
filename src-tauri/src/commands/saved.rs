@@ -373,6 +373,8 @@ mod tests {
             stored.exists(),
             "the valid repository's sweeps were deleted anyway"
         );
+        // Its own debris: the refusal is the point, so nothing cleared it.
+        let _ = std::fs::remove_dir_all(&stored);
         let _ = std::fs::remove_dir_all(&repo);
     }
 
