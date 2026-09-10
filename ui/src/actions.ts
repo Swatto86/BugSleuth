@@ -15,7 +15,7 @@ import { listen } from "@tauri-apps/api/event";
 import { confirmDialog } from "./dialog";
 import { repositories as repositoryList } from "./repositories";
 import { type Preset, type Settings, preset } from "./model";
-import { type RunDeps, isRunning, startRun } from "./run";
+import { type RunDeps, forgetReports, isRunning, startRun } from "./run";
 import { isApplying } from "./apply";
 
 let clearing = false;
@@ -27,6 +27,7 @@ export interface ActionDeps {
     stop: HTMLButtonElement;
     quit: HTMLButtonElement;
     clearSaved: HTMLButtonElement;
+    resetSaved: HTMLButtonElement;
     /** Hidden when the prompt it would apply is deleted. */
     applyPanel: HTMLDivElement;
     promptPath: HTMLParagraphElement;
@@ -173,6 +174,50 @@ export function bindGuardedActions(deps: ActionDeps): void {
   // Guarded while a run is in flight: a sweep is tens of minutes of paid
   // subscription quota, and quitting throws away every lane not yet written to
   // disk. One misplaced click should not be able to do that silently.
+  // The clear above is scoped to the list. This is for the other question —
+  // "what is this report at the bottom of my window?" — where the answer has
+  // to be a window showing nothing until something is run, on disk and in
+  // memory both. Same in-flight state as the clear: it is the same kind of
+  // delete, and a quit during it must be warned about the same way.
+  ui.resetSaved.addEventListener("click", () => {
+    void confirmDialog({
+      title: "Reset BugSleuth?",
+      message:
+        "This deletes every saved report, sweep and fix prompt for every " +
+        "repository BugSleuth has ever reviewed — not only the ones listed — " +
+        "and empties the result pane, as if nothing had been run. Your " +
+        "repository list, models and other settings are kept. Sweeps cost " +
+        "subscription quota and cannot be recovered.",
+      confirmLabel: "Reset",
+      destructive: true,
+    }).then((yes) => {
+      if (!yes) return;
+      clearing = true;
+      deps.setStatus("Resetting…", "running");
+      if (document.activeElement === ui.resetSaved) deps.focusStatus();
+      deps.activityChanged();
+      ui.resetSaved.disabled = true;
+      invoke<{ removed: number; repositories: number }>("reset_saved")
+        .then((reset) => {
+          clearing = false;
+          forgetReports(deps.runDeps());
+          deps.activityChanged();
+          ui.resetSaved.disabled = false;
+          deps.setStatus(
+            reset.repositories === 0
+              ? "Reset: nothing was stored — the window is as it was before any run"
+              : `Reset: deleted ${reset.removed} saved file${reset.removed === 1 ? "" : "s"} for ${reset.repositories} repositor${reset.repositories === 1 ? "y" : "ies"}. Nothing has been run.`,
+          );
+        })
+        .catch((error: unknown) => {
+          clearing = false;
+          deps.activityChanged();
+          ui.resetSaved.disabled = false;
+          deps.setStatus(`Could not reset: ${String(error)}`, "error");
+        });
+    });
+  });
+
   ui.stop.addEventListener("click", () => {
     const applying = isApplying();
     void confirmDialog({

@@ -12,6 +12,7 @@ import { clearApplyReports } from "./apply-repositories";
  */
 
 import {
+  forgetRepositoryResults,
   offerRepositoryResults,
   type RepositoryResult,
 } from "./repository-results";
@@ -268,6 +269,26 @@ function showReport(
     ? `Also saved to ${fixPromptPath}`
     : "";
   document.dispatchEvent(new Event("repository-report-shown"));
+}
+
+/**
+ * Empty the window of every report, as if nothing had been run.
+ *
+ * The on-disk half is Rust's reset; this is the in-memory half, and it has to
+ * be as complete: a fix prompt still held here would let Copy hand over a
+ * prompt whose file was just deleted, and a report still listed would offer an
+ * Apply against it.
+ */
+export function forgetReports(deps: RunDeps): void {
+  forgetRepositoryResults();
+  clearApplyReports();
+  progressLog = [];
+  activeRunRepo = "";
+  showReport(
+    { ok: false, complete: false, cancelled: false, text: "" },
+    "",
+    deps,
+  );
 }
 
 /** Saved reports are historical; reopening them never invokes a provider. */

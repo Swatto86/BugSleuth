@@ -24,6 +24,20 @@ export interface RepositoryResult {
 
 export let repositoryReports: RepositoryResult[] = [];
 
+/** Forget every report: the selector empties and the fix board has nothing to draw. */
+export function forgetRepositoryResults(): void {
+  repositoryReports = [];
+  const label = document.getElementById("repository-result-label");
+  const select = document.getElementById(
+    "repository-result",
+  ) as HTMLSelectElement | null;
+  label?.classList.add("hidden");
+  if (select) {
+    select.replaceChildren();
+    select.onchange = null;
+  }
+}
+
 /** Keep the overview and every report available without changing the run inputs. */
 export function offerRepositoryResults(
   payload: RepositoryResult,

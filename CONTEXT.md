@@ -99,7 +99,9 @@ disposable repositories with a deterministic scan fixture, overlaps real Codex f
 and runs an independent acceptance test outside both writable repositories.
 The single Repositories to Scan list maps compatibly to the existing primary
 folder and additional folders in settings. Clear saved sweeps clears every
-listed folder, resolving the whole list before deleting anything. Progress groups completed, reused and failed reviews by repository;
+listed folder, resolving the whole list before deleting anything; Reset deletes
+every run directory whether listed or not and empties the window, leaving
+settings intact. Progress groups completed, reused and failed reviews by repository;
 batch entries say reviewing/queued because provider slots are shared.
 Each finished repository saves last-report.json atomically beside its sweep cache.
 A scan whose whole batch is refused by its provider stops rather than spending

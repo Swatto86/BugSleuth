@@ -497,6 +497,7 @@ rust commands::run::tests::a_directory_under_the_old_hash_is_migrated_to_the_sta
 rust commands::run::tests::the_stable_hash_is_a_fixed_contract_that_a_toolchain_bump_cannot_move
 rust commands::run::tests::unc_verbatim_path
 rust commands::saved::tests::a_repository_that_does_not_exist_is_refused_rather_than_guessed_at
+rust commands::saved::tests::a_reset_forgets_every_run_whether_or_not_it_is_listed
 rust commands::saved::tests::clearing_really_deletes_the_stored_sweeps_and_says_how_many
 rust commands::saved::tests::counting_a_directory_that_is_not_there_is_zero_rather_than_a_panic
 rust commands::saved::tests::every_listed_repository_is_cleared_not_only_the_first

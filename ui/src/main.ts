@@ -98,6 +98,7 @@ function renderPlanSummary(): void {
     ui.run.removeAttribute("aria-describedby");
   }
   ui.clearSaved.disabled = busy;
+  ui.resetSaved.disabled = busy;
   ui.repo.disabled = busy;
   ui.addRepository.disabled = busy;
   (document.getElementById("repository-result") as HTMLSelectElement).disabled =

@@ -122,6 +122,7 @@ test("every active control hands focus off before it disables or hides itself", 
     [
       "actions.ts:ui.clearSaved.disabled",
       "actions.ts:ui.quit.disabled",
+      "actions.ts:ui.resetSaved.disabled",
       "actions.ts:ui.stop.disabled",
       "apply.ts:deps.ui.button.disabled",
       "clone.ts:control.disabled",

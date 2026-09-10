@@ -189,4 +189,53 @@ describe("multiple repository reviews", () => {
     assert.deepEqual(stored(), [], "run directories survived the clear");
     await setRepositoryList([REPO]);
   });
+
+  it("resets the window and the disk to nothing having been run", async () => {
+    // A fresh review first, so there is a report on screen and a run
+    // directory on disk to forget.
+    await setRepositoryList([REPO]);
+    await configureOneSweep(MODEL);
+    await browser.waitUntil(async () => await $("#run").isEnabled(), {
+      timeout: 30_000,
+    });
+    await $("#run").click();
+    await browser.waitUntil(async () => !(await $("#stop").isDisplayed()), {
+      timeout: 600_000,
+    });
+    await expect($("#fix-board")).toBeDisplayed();
+    assert.ok(
+      fs.readdirSync(RUNS_ROOT).length > 0,
+      "the review left no run directory to reset",
+    );
+
+    await $("#reset-saved").click();
+    await expect($(".dialog-overlay .dialog")).toBeDisplayed();
+    await clickDialogButton("Reset");
+    await browser.waitUntil(
+      async () => (await $("#status").getText()).startsWith("Reset: deleted"),
+      {
+        timeout: 15_000,
+        timeoutMsg: `the reset did not report what it deleted: ${await $("#status").getText()}`,
+      },
+    );
+    assert.deepEqual(
+      fs.existsSync(RUNS_ROOT) ? fs.readdirSync(RUNS_ROOT) : [],
+      [],
+      "run directories survived the reset",
+    );
+    // The window forgets too: no report, no prompt, nothing to fix.
+    await expect($("#fix-board")).not.toBeDisplayed();
+    await expect($("#apply-panel")).not.toBeDisplayed();
+    await expect($("#repository-result-label")).not.toBeDisplayed();
+    await expect($("#copy-report")).not.toBeDisplayed();
+    assert.equal(await $("#output").getText(), "");
+
+    // And a restart finds nothing to restore.
+    await browser.reloadSession();
+    await browser.waitUntil(async () => await $("#repo").isExisting(), {
+      timeout: 30_000,
+    });
+    await expect($("#fix-board")).not.toBeDisplayed();
+    await expect($("#apply-panel")).not.toBeDisplayed();
+  });
 });

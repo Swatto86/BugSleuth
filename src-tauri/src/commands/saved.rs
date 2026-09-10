@@ -117,6 +117,73 @@ fn remove_run_dir(dir: &Path) -> Result<usize, String> {
     }
 }
 
+/// What a reset threw away.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Reset {
+    /// Files removed across every run directory.
+    pub removed: usize,
+    /// Run directories removed — one per repository ever reviewed.
+    pub repositories: usize,
+}
+
+/// Forget every run: delete every stored sweep, report and fix prompt for
+/// every repository BugSleuth has ever reviewed, listed or not.
+///
+/// The clear above is scoped to the list, which is the right tool while the
+/// list is the thing being worked on. This answers a different question —
+/// "what is this report at the bottom of my window?" — where the honest
+/// answer is a window that shows nothing until something is run. Settings are
+/// untouched: the repository list, the model matrix and the theme are choices,
+/// not results.
+///
+/// Refused while a run or an apply is in flight, for the reason given on
+/// [`clear_saved`].
+#[tauri::command]
+pub async fn reset_saved(control: tauri::State<'_, RunControl>) -> Result<Reset, String> {
+    control.try_start_clear()?;
+    let outcome = reset(&settings::data_dir().join("runs"));
+    control.finish_clear();
+    outcome
+}
+
+/// The whole of what the reset does, minus the guard, against `runs`.
+///
+/// Takes the root rather than reading it from settings so the test can point
+/// it at a scratch directory: a test that reset the real one would delete the
+/// developer's own reports every time the suite ran.
+fn reset(runs: &Path) -> Result<Reset, String> {
+    let entries = match std::fs::read_dir(runs) {
+        Ok(entries) => entries,
+        // Nothing has ever been run. The outcome the user asked for.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Reset {
+                removed: 0,
+                repositories: 0,
+            });
+        }
+        Err(error) => return Err(format!("could not list {}: {error}", runs.display())),
+    };
+    let mut removed = 0;
+    let mut repositories = 0;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("could not list {}: {error}", runs.display()))?;
+        let path = entry.path();
+        if path.is_dir() {
+            repositories += 1;
+            removed += remove_run_dir(&path)?;
+        } else {
+            std::fs::remove_file(&path)
+                .map_err(|error| format!("could not remove {}: {error}", path.display()))?;
+            removed += 1;
+        }
+    }
+    Ok(Reset {
+        removed,
+        repositories,
+    })
+}
+
 /// How many files are in `dir`, counted before it is removed.
 fn count_files(dir: &Path) -> usize {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -234,6 +301,49 @@ mod tests {
         for repo in [first, second, third] {
             let _ = std::fs::remove_dir_all(repo);
         }
+    }
+
+    #[test]
+    fn a_reset_forgets_every_run_whether_or_not_it_is_listed() {
+        // Against a scratch root, never the real one: this deletes everything
+        // under it, and the other tests here seed the real run directory.
+        let runs = std::env::temp_dir().join(format!("bugsleuth-reset-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&runs);
+        for (name, files) in [
+            (
+                "listed-repo-1111",
+                &["correctness-haiku.json", "last-report.json"][..],
+            ),
+            (
+                "forgotten-repo-2222",
+                &["security-haiku.json", "fix-prompt.md", "fix-prompt-01.md"][..],
+            ),
+        ] {
+            let dir = runs.join(name);
+            std::fs::create_dir_all(&dir).expect("seed run dir");
+            for file in files {
+                std::fs::write(dir.join(file), "x").expect("seed file");
+            }
+        }
+
+        let done = reset(&runs).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(done.repositories, 2);
+        assert_eq!(done.removed, 5);
+        assert_eq!(
+            std::fs::read_dir(&runs)
+                .map(|entries| entries.count())
+                .unwrap_or(0),
+            0,
+            "a run directory survived the reset"
+        );
+
+        // Again with nothing left, and again with no root at all: both are the
+        // outcome that was asked for, not errors.
+        let again = reset(&runs).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!((again.removed, again.repositories), (0, 0));
+        let _ = std::fs::remove_dir_all(&runs);
+        let never = reset(&runs).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!((never.removed, never.repositories), (0, 0));
     }
 
     #[test]
