@@ -305,7 +305,16 @@ async fn cancelled_codex_invocation_removes_scratch() {
         assert!(!created.is_empty(), "no scratch directory was created");
         created
     };
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    // Wait for the cleanup rather than assuming a duration for it. Killing the
+    // process tree and removing the directory happens after the future is
+    // dropped, and a fixed 300ms was enough on an idle machine and not enough
+    // on a busy one — which failed this gate once with nothing wrong with the
+    // cleanup. Polling to a deadline still fails when the directory genuinely
+    // survives; it just stops reporting a loaded machine as that.
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while created.iter().any(|d| d.exists()) && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 
     assert!(
         created.iter().all(|d| !d.exists()),
