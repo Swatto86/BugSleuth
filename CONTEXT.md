@@ -63,7 +63,12 @@ operation lock and cancellation, with a 30-minute timeout. Submodules are not
 initialized automatically. No credentials are stored by BugSleuth.
 
 Desktop reviews accept up to 16 separate repository folders using one model
-matrix and relative scope. Three repository reviews can be active; shared
+matrix and relative scope. Before any provider pre-check or scan, the whole
+desktop batch must pass Apply's repository identity, clean-tree and HEAD checks.
+A refusal names the repository and retains the previous saved report. Apply
+rechecks because files can change after a scan. The read-only CLI review remains
+available independently of the desktop scan-and-fix workflow.
+Three repository reviews can be active; shared
 provider slots bound each vendor's sweeps and Claude triage across the batch.
 Different vendors can work concurrently. Claude runs several sessions at once
 because its invocations carry their own session id, exchange prompt and answer

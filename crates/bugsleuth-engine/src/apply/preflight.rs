@@ -11,6 +11,23 @@ use std::path::Path;
 use super::Baseline;
 use super::observed::{dirty_files, git, summarise, theirs};
 
+/// Repository requirements shared by desktop scans and Apply.
+/// Run on a blocking thread: Git inspects the working tree here.
+pub fn check_repository(repo: &Path) -> anyhow::Result<()> {
+    bugsleuth_verify::validate_repository_identity(repo).map_err(|error| {
+        anyhow::anyhow!(
+            "{} is not an independent git repository or worktree ({}). Applying fixes edits your \
+             files in place, and git is the only thing that makes that reversible — so it is \
+             refused without one.",
+            repo.display(),
+            error
+        )
+    })?;
+    refuse_if_dirty(repo)?;
+    baseline(repo)?;
+    Ok(())
+}
+
 /// Refuse before spending anything if the user has uncommitted work.
 ///
 /// Their work and the model's would be mixed together with no way to revert one

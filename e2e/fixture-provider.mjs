@@ -8,6 +8,7 @@ if (args.includes("--version")) {
 } else if (args.includes("models")) {
   console.log('local-fixture/reviewer:latest\n{"variants":{"thinking":{}}}');
 } else if (args[0] === "run") {
+  fs.appendFileSync(path.join(path.dirname(process.env.APPDATA), "reviews.jsonl"), JSON.stringify({ repo: process.cwd(), args }) + "\n");
   let prompt = "";
   for await (const chunk of process.stdin) prompt += chunk;
   await new Promise((resolve) => setTimeout(resolve, 2000));

@@ -153,6 +153,7 @@ export const config: WebdriverIO.Config = {
   specs: [
     [
       "review",
+      "preflight",
       "batch",
       "parallel-apply",
       "clone",

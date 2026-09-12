@@ -71,13 +71,13 @@ export async function startRun(deps: RunDeps): Promise<void> {
     unitCount(deps.settings().models),
   );
   deps.renderPlanSummary();
-  deps.setStatus("Checking selected providers…", "running");
+  deps.setStatus("Checking repositories and selected providers…", "running");
   const previousCards = [...deps.findings.children];
   const applyWasOffered = !deps.applyPanel.classList.contains("hidden");
   const reportWasOffered = !deps.copyReport.classList.contains("hidden");
   const copyWasOffered = !deps.copyPrompt.classList.contains("hidden");
   const pathWasShown = !deps.promptPath.classList.contains("hidden");
-  deps.output.textContent = "Checking selected providers…";
+  deps.output.textContent = "Checking repositories and selected providers…";
   deps.findings.replaceChildren();
   // The panel applies *the last run's* prompt, and that file is about to be
   // rewritten. Offering it during a run would apply a report the pane is no
@@ -103,7 +103,7 @@ export async function startRun(deps: RunDeps): Promise<void> {
     if (resultsWereShown) resultLabel?.classList.remove("hidden");
     running = false;
     deps.setStatus(String(error), "error");
-    deps.output.textContent = String(error);
+    deps.output.textContent = currentReport || String(error);
     deps.findings.replaceChildren(...previousCards);
     if (applyWasOffered) deps.applyPanel.classList.remove("hidden");
     if (reportWasOffered) deps.copyReport.classList.remove("hidden");

@@ -53,6 +53,27 @@ pub async fn start_run(
     );
     let cancel = bugsleuth_engine::cancel::Cancel::new();
     control.try_start_run(cancel.clone())?;
+    // Refuse the whole batch before provider pre-checks spend quota. Return a
+    // command error so the window retains its previous paid report.
+    let checking = repositories.clone();
+    let checked = tauri::async_runtime::spawn_blocking(move || {
+        for (repo, _) in checking {
+            bugsleuth_engine::apply::check_repository(&repo).map_err(|error| {
+                format!(
+                    "Scan refused for {} before any provider calls: {error:#}",
+                    repo.display()
+                )
+            })?;
+        }
+        Ok::<_, String>(())
+    })
+    .await
+    .map_err(|error| format!("Repository pre-check failed: {error}"))
+    .and_then(|result| result);
+    if let Err(error) = checked {
+        control.finish_run();
+        return Err(error);
+    }
     crate::tray::work_started(&app, crate::tray::BackgroundWork::Review);
     tauri::async_runtime::spawn(async move {
         let payload = batch::execute(&app, repositories, plan, settings, cancel).await;

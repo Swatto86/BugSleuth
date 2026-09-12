@@ -217,6 +217,9 @@ Beyond that the guarantee is git:
 
 - **The working tree must be clean**, or it is refused. Your uncommitted work
   and the model's changes would otherwise be one indistinguishable pile.
+  The desktop checks every selected repository before any provider calls,
+  sharing Apply's identity, clean-tree and HEAD checks. Apply checks again
+  after waiting for its provider slot, because the tree may have changed.
 - **What changed is reported from git, never from the model.** Compared against
   the commit the repository started on, so a fix the model *committed* still
   counts — `git status` alone would show a clean tree and read as "nothing

@@ -40,7 +40,8 @@ use fixing::fix_each;
 pub use journal::unfinished;
 use messages::cancelled_message;
 use observed::{changed_since, commits_since, summarise};
-use preflight::{baseline, refuse_if_dirty};
+use preflight::baseline;
+pub use preflight::check_repository;
 pub use push::PushOutcome;
 pub use tag::TagOutcome;
 
@@ -151,17 +152,8 @@ pub async fn apply(request: ApplyRequest<'_>) -> anyhow::Result<ApplyReport> {
         slot = crate::vendor_slots::acquire_apply(vendor) => slot?,
     };
     let repo = request.repo;
-    bugsleuth_verify::validate_repository_identity(repo).map_err(|error| {
-        anyhow::anyhow!(
-            "{} is not an independent git repository or worktree ({}). Applying fixes edits your \
-             files in place, and git is the only thing that makes that reversible — so it is \
-             refused without one.",
-            repo.display(),
-            error
-        )
-    })?;
-
-    refuse_if_dirty(repo)?;
+    let checking = repo.to_path_buf();
+    tokio::task::spawn_blocking(move || check_repository(&checking)).await??;
 
     // One work order per defect, so an interruption costs the defect in flight
     // and nothing already finished.
