@@ -114,14 +114,18 @@ describe("cloning repositories", () => {
     );
     const address = server.address() as net.AddressInfo;
     try {
+      const transport = `ssh://git@127.0.0.1:${address.port}/waiting.git`;
       await $("#clone-open").click();
-      await $("#clone-source").setValue(
-        `ssh://git@127.0.0.1:${address.port}/waiting.git`,
+      await $("#clone-source").setValue(transport);
+      await browser.waitUntil(
+        async () => (await $("#clone-source").getValue()) === transport,
+        { timeout: 5_000 },
       );
       await $("#clone-name").setValue("stopped-clone");
       await $("#clone-start").click();
+      // Windows CI sometimes spends the old 15s just starting ssh.exe.
       await browser.waitUntil(async () => sockets.size > 0, {
-        timeout: 15_000,
+        timeout: 60_000,
       });
       assert.equal(
         await browser.execute(() => document.activeElement?.id),
