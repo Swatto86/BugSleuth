@@ -1,7 +1,7 @@
 {
   "_comment": [
-    "Models are the primary entity: configure one, then tick the lanes it covers.",
-    "Two models on the same lane is the point, not a mistake - lanes buy coverage,",
+    "Models are the primary entity: configure one, then list the lanes it covers.",
+    "Two models on the same lane is the point, not a mistake — lanes buy coverage,",
     "doubling up within a lane buys depth.",
     "",
     "Any lane (correctness, security, contract, ux, gate) with no model",
@@ -9,25 +9,27 @@
     "silently omitted, because a missing lane reads exactly like a clean one.",
     "",
     "Model ids are 'vendor:model'. A bare name means Claude. An empty model after",
-    "the colon means that CLI's own default. Note gpt-5.6-codex is not available on",
-    "a ChatGPT subscription.",
+    "the colon means that CLI's own default. Supported vendors are claude, codex,",
+    "cursor, and opencode. The Cursor binary on PATH is 'agent'. kilo: and kimi:",
+    "are refused.",
+    "",
+    "This file is the Balanced preset: one Claude model on every lane, which is",
+    "enough for a first run when the claude CLI is installed and signed in.",
+    "Add another object for a second vendor, for example",
+    "{ \"id\": \"codex:\", \"lanes\": [\"correctness\", \"security\"] } or",
+    "{ \"id\": \"opencode:ollama/qwen3:8b\", \"lanes\": [\"correctness\"] }.",
+    "Remove any row whose CLI is not installed. A row that cannot run is",
+    "NOT SWEPT and the command exits non-zero, even when another model covered",
+    "the same lane.",
     "",
     "Set use_agents to true on a Claude or Codex model to ask it to delegate",
     "independent lane work in parallel. Claude uses two foreground Ultracode agents;",
-    "Codex chooses its fan-out. Kilo's read-only Ask agent cannot delegate."
+    "Codex chooses its fan-out. Cursor and OpenCode cannot delegate."
   ],
   "models": [
     {
       "id": "sonnet",
       "lanes": ["correctness", "security", "contract", "ux", "gate"]
-    },
-    {
-      "id": "codex:",
-      "lanes": ["correctness", "security"]
-    },
-    {
-      "id": "kilo:",
-      "lanes": ["correctness"]
     }
   ]
 }

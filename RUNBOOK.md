@@ -1,7 +1,8 @@
 # Release acceptance runbook
 
 The journey to drive before shipping a change to the app, the provider adapters,
-the run lifecycle, or packaging. The routine suite uses subprocess fixtures and
+the run lifecycle, or packaging. Installing a published build is covered in
+`README.md`. The routine suite uses subprocess fixtures and
 spends no provider quota. Live mode performs real reviews and Apply, which can
 take several minutes and uses the selected provider account.
 
@@ -36,17 +37,24 @@ use an unsigned local configuration when the signing key is unavailable.
 
 ## Install it
 
+On Windows, install the NSIS bundle you just built. It installs for the current
+user to `%LOCALAPPDATA%\BugSleuth\bugsleuth-app.exe`:
+
 ```powershell
 $version = (Get-Content .\src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
 & ".\target\release\bundle\nsis\BugSleuth_${version}_x64-setup.exe" /S
 ```
 
-Test the installed copy, not the one in `target/`. It is what people get.
+On Linux, install the `.deb` under `target/release/bundle/deb/` or launch the
+AppImage under `target/release/bundle/appimage/`. The file names use the same
+version as `src-tauri/tauri.conf.json`. Test that copy, not the one in
+`target/debug` or `target/release`. It is what people get.
 
 ## The journey
 
-Start `%LOCALAPPDATA%\BugSleuth\bugsleuth-app.exe` and check each of these by
-looking, not by inference:
+Start the installed app: `%LOCALAPPDATA%\BugSleuth\bugsleuth-app.exe` on
+Windows, `bugsleuth-app` from the Debian package, or the AppImage on Linux.
+Check each of these by looking, not by inference:
 
 | # | Step | What must be true |
 |---|---|---|
@@ -56,7 +64,7 @@ looking, not by inference:
 | 4 | Set a repository, one model, one lane; Untick **Re-grade every severity** | Footer shows one sweep and one round; Run enables; triage is off so this journey remains one pre-check and one sweep |
 | 5 | **Run review** | The selected-provider pre-check finishes before lane progress streams into the result pane |
 | 6 | Wait for it | Status reports the review is incomplete because only one lane was swept, and findings are listed |
-| 7 | Check disk | `%APPDATA%\BugSleuth\runs\<repo>-<16-hex-path-hash>\<lane>-<model>.json` exists, `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
+| 7 | Check disk | The sweep file exists under the app config directory: `%APPDATA%\BugSleuth\runs\<repo>-<16-hex-path-hash>\<lane>-<model>.json` on Windows, or `$XDG_CONFIG_HOME/BugSleuth/runs/<repo>-<16-hex-path-hash>/` (`~/.config/BugSleuth/runs/` when `XDG_CONFIG_HOME` is unset) on Linux. `status.state` is `swept`, and `findings` is non-empty with real `file:line` anchors |
 | 7b | Check a finding's `fix` | It has an approach, at least one edit naming a symbol, a verification command, and risks. An empty plan renders as "no fix plan" rather than as nothing |
 | 7c | **Copy fix prompt** | The button appears when the run ends, copies, and briefly says "Copied". The path under it points at a real `fix-prompt.md` in the run directory |
 | 7d | **Copy report** | The button appears when the run ends, copies the complete report, and briefly says "Copied" |
@@ -83,10 +91,9 @@ check alone would not catch.
 
 Model: `haiku` is enough. The journey is about the app, not the model.
 
-**If you point it at a real repository instead**, give Kilo a large-context
-model — `kilo/kimi-coding/kimi-for-coding` works on Alder. Its configured
-default cannot hold one, and the run will tell you so in those words rather
-than failing vaguely.
+A model that cannot hold the repository says so in the run, in those words.
+Pick one the selected provider can actually run. Claude, Codex, Cursor, and
+OpenCode are the supported providers; `kilo:` and `kimi:` are refused.
 
 ## Afterwards
 
@@ -94,9 +101,13 @@ than failing vaguely.
 pwsh -File scripts/verify.ps1 -Package
 ```
 
-And confirm the portable executable is still self-contained — it must import
-nothing outside `System32`:
+On Windows, confirm the portable executable is still self-contained — it must
+import nothing outside `System32`:
 
 ```bash
 dumpbin /dependents target/release/bugsleuth-app.exe
 ```
+
+On Linux, the portable file `target/release/bugsleuth-app` still needs
+WebKitGTK 4.1 and the AppIndicator libraries. The AppImage is the bundled
+desktop file.

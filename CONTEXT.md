@@ -20,10 +20,12 @@ invocation and failed the whole run. It is a ceiling for a hang, not an
 expected wait; later calls in the session find the model resident. The model
 catalogue keeps the shorter allowance because it starts no model.
 
-The release target for the current work is Windows and Omarchy, including local
-OpenCode models. A release requires real webview acceptance, provider integration
-evidence, installation through the active OS launcher and observed published
-artifacts. Unit tests or a successful compile alone do not establish this.
+Published releases are Windows x64 and Linux x64, including local OpenCode
+models. macOS arm64 is built only when the release workflow is dispatched on
+the tag with platforms set to `all`. A release requires real webview acceptance,
+provider integration evidence, installation through the active OS launcher and
+observed published artifacts. Unit tests or a successful compile alone do not
+establish this.
 
 The routine full gate uses debug builds and native WebDriver on Windows/Linux.
 E2E runs in a disposable repository with isolated app settings and deterministic
