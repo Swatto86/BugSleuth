@@ -36,6 +36,7 @@ Cursor specs look like `cursor:composer-2.5`. The CLI binary users type is `agen
 
 ## Recent Context & Decisions
 
+- 2026-09-25: User docs (`README.md`, `RUNBOOK.md`, `bugsleuth.example.json`) describe install from GitHub Releases. Tagged releases publish Windows x64 and Linux x64 (`BugSleuth-portable-*`, `bugsleuth-cli-*`, NSIS/MSI, deb, AppImage, `SHA256SUMS-*`). macOS arm64 names exist in the release workflow only when `platforms=all`. Settings live in `%APPDATA%\BugSleuth` or `$XDG_CONFIG_HOME/BugSleuth` (`~/.config/BugSleuth`). Example config is Claude `sonnet` on every lane; `kilo:`/`kimi:` are refused.
 - 2026-09-25: Linux desktop e2e failed because provider children do not inherit `APPDATA` (Windows allowlist only) and `e2e/fixture-provider.mjs` records reviews via `path.dirname(APPDATA)`. The Unix shim in `e2e/workspace.ts` exports that path before exec.
 - 2026-08-13: Released **0.2.52** — fixed review/apply cancellation and reporting, hardened path and process-output handling, constrained saved settings, and made verification/release gates fail closed.
 - 2026-08-13: Released **0.2.51** — Codex is a review provider again. The sweep-matrix dropdown lists it whenever the CLI is installed; `plan` accepts `codex:` rows; sweeps run `--sandbox read-only`.
