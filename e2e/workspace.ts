@@ -42,9 +42,12 @@ export function prepareWorkspace(root: string): void {
     fs.mkdirSync(bin);
     const fixture = path.join(root, "e2e/fixture-provider.mjs");
     const windows = process.platform === "win32";
+    // Provider children keep APPDATA on Windows only. The fixture writes call
+    // evidence beside that directory, so the Unix shim puts the same path back.
+    const appdata = path.join(dir, "appdata").replaceAll("'", "'\\''");
     const script = windows
       ? `@echo off\r\n"${process.execPath}" "${fixture}" %*\r\n`
-      : `#!/bin/sh\nexec '${process.execPath.replaceAll("'", "'\\''")}' '${fixture.replaceAll("'", "'\\''")}' "$@"\n`;
+      : `#!/bin/sh\nexport APPDATA='${appdata}'\nexec '${process.execPath.replaceAll("'", "'\\''")}' '${fixture.replaceAll("'", "'\\''")}' "$@"\n`;
     for (const vendor of liveCodex
       ? ["opencode"]
       : ["opencode", "claude", "codex", "agent"]) {

@@ -264,6 +264,7 @@ node toggling a lane leaves other models untouched
 node toggling a lane off removes exactly it, and twice on is idempotent
 node turning pushing off redraws the tag control before the settings are saved
 node two models on one lane is two sweeps, because that is the point
+node unix provider shims restore APPDATA after the child allowlist strips it
 node unknown lane names are ignored rather than counted
 node vendor parsing matches the engine, including bare and colon-containing names
 node version agreement reads only root manifest versions
